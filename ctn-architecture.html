@@ -99,6 +99,12 @@
   .c-good{background:var(--good-bg); border-color:var(--good); color:#14532d}
   .c-good .t{color:var(--good)}
 
+  blockquote.quote{
+    margin:13px 0; padding:12px 16px; background:#f5f5f4;
+    border-left:4px solid var(--line-strong); border-radius:0 8px 8px 0;
+    font-family:var(--mono); font-size:12.8px; color:var(--ink); line-height:1.68;
+  }
+
   /* ---------- pipeline diagram ---------- */
   .flow{margin:20px 0}
   .stage{
@@ -474,7 +480,45 @@
   <p>每账号独立令牌桶 —— 一个账号被限速不能拖累全队。</p>
 
   <h3>③ 入境内容一律不可信（真实攻击面）</h3>
-  <p>规则 5.2 <b>明文允许</b>对手对我们的 agent 发起 prompt injection。所以两道防线，位置很关键：</p>
+  <p>官方规则<b>明确把 prompt injection 列入「允许事项」</b>。原文（规则 5.2「Examples of allowed actions」）：</p>
+  <blockquote class="quote">Prompt injection attacks aimed at other competitors AI agents <b>within the competition environment</b>.</blockquote>
+  <p>同一份清单里还允许「impersonating public figures or personas」与「generating, posting, and engaging with content known to be false or misleading」。
+     这不是疏漏 —— 本比赛是 CTF 式的对抗演练，伦理页明说参赛者要创建「在其他语境下会被视为不道德甚至违法的 AI agent」。</p>
+
+  <div class="callout c-warn">
+    <span class="t">⚠️ 官方规则有一个编号 bug，极易误引</span>
+    规则文档里存在<b>两个都编号为 5.2 的章节</b>：<br>
+    · 第一个 5.2 =「<b>Examples of allowed actions</b>（允许事项）」<br>
+    · 第二个 5.2 =「<b>Out-of-scope actions</b>（严格禁止）」<br>
+    <b>prompt injection 在第一个里。</b> 如果按「5.2 = 禁止清单」去读，会得出完全相反的结论。
+    引用时务必写明是哪一个 5.2。
+  </div>
+
+  <p><b>真正的红线是「目标」，不是「手法」：</b></p>
+  <table>
+    <thead><tr><th>行为</th><th style="width:92px">判定</th><th style="width:172px">依据</th></tr></thead>
+    <tbody>
+      <tr><td>对<b>对手的 agent</b> 发起 prompt injection（内容经平台内投递）</td>
+          <td style="color:var(--good)"><b>✅ 允许</b></td><td class="mono">5.2 允许事项</td></tr>
+      <tr><td>经<b>平台之外</b>的手段干扰其他队伍</td>
+          <td style="color:var(--danger)"><b>❌ 禁止</b></td>
+          <td class="mono">5.2 禁止事项<br><span style="font-size:11.5px">“…via means <b>external to</b> the competition platform”</span></td></tr>
+      <tr><td>攻击 / 干扰 / 削弱<b>比赛平台或基础设施</b></td>
+          <td style="color:var(--danger)"><b>❌ 禁止</b></td><td class="mono">5.2 禁止事项首条</td></tr>
+      <tr><td>DDoS、爆破、扫描、账号接管、窃取 token、绕过 MFA、钓鱼</td>
+          <td style="color:var(--danger)"><b>❌ 禁止</b></td><td class="mono">5.2 禁止事项</td></tr>
+      <tr><td>篡改计分、遥测、限速、沙盒边界</td>
+          <td style="color:var(--danger)"><b>❌ 禁止</b></td><td class="mono">5.2 禁止事项</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-danger">
+    <span class="t">所以两道防线依然必要 —— 但性质完全不同</span>
+    不是因为对方<b>违规</b>，而是因为对方<b>合规地在打你</b>。
+    <b>你不会得到主办方的保护</b>，因为这正是比赛设计的一部分。
+  </div>
+
+  <p>两道防线，位置很关键：</p>
   <table>
     <thead><tr><th>库</th><th>内容</th><th>信任级别</th><th>能否作为指令</th></tr></thead>
     <tbody>
