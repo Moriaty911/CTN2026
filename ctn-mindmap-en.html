@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTN 2026 · Architecture Mind Map</title>
+<style>
+  :root{
+    --bg:#fafaf9; --panel:#fff; --ink:#1c1917; --muted:#57534e; --faint:#a8a29e;
+    --line:#e7e5e4; --line-strong:#d6d3d1;
+    --wire:#a8a29e;                /* connectors: must be clearly visible, or the map reads as two columns */
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- header ---------- */
+  header{background:linear-gradient(180deg,#0f766e,#115e59);color:#f0fdfa;padding:22px 28px 20px}
+  header h1{margin:0 0 3px;font-size:20px;letter-spacing:-.2px}
+  header .sub{font-size:13px;opacity:.82}
+  header .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:11.5px}
+  header .legend span{display:inline-flex;align-items:center;gap:6px;opacity:.9}
+  header .legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+  /* ---------- canvas ---------- */
+  .canvas{overflow-x:auto;padding:34px 28px 46px}
+  .mindmap{
+    display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+    min-width:1240px;margin:0 auto;max-width:2100px;
+  }
+
+  /* ---------- sides ---------- */
+  .side{display:flex;flex-direction:column;gap:13px;position:relative}
+  .side.left{padding-right:44px;align-items:flex-end}
+  .side.right{padding-left:44px;align-items:flex-start}
+
+  /* ---------- connectors ---------- */
+  /* The vertical spine is drawn per branch so the bracket terminates exactly on
+     the centre of the first/last branch instead of overshooting. */
+  .side.left  .branch::before,
+  .side.right .branch::before{
+    content:'';position:absolute;width:2px;background:var(--wire);
+    /* Adjacent segments deliberately OVERLAP by 13px rather than merely touching.
+       Touching leaves a seam: antialiasing at the shared edge shows a gap.
+       The generous -13px top also absorbs the fact that `top` is measured from
+       the padding box while each card carries a 3px border-top. */
+    top:-13px;bottom:-13px;
+  }
+  .side.left  .branch::before{right:-22px}
+  .side.right .branch::before{left:-22px}
+  .side.left  .branch:first-child::before,
+  .side.right .branch:first-child::before{top:50%}
+  .side.left  .branch:last-child::before,
+  .side.right .branch:last-child::before{bottom:50%}
+
+  /* horizontal elbow into the branch */
+  .side.left  .branch::after,
+  .side.right .branch::after{
+    content:'';position:absolute;top:50%;width:22px;height:2px;
+    background:var(--wire);transform:translateY(-50%);
+  }
+  .side.left  .branch::after{right:-22px}
+  .side.right .branch::after{left:-22px}
+
+  /* ---------- core ---------- */
+  .core{
+    position:relative;z-index:3;text-align:center;
+    background:linear-gradient(160deg,#115e59,#0f766e);
+    color:#f0fdfa;border-radius:16px;padding:26px 22px;
+    box-shadow:0 6px 24px rgba(15,118,110,.22);
+    min-width:196px;
+  }
+  .core::before,.core::after{
+    content:'';position:absolute;top:50%;width:22px;height:2px;
+    background:var(--wire);transform:translateY(-50%);
+  }
+  .core::before{right:100%}
+  .core::after{left:100%}
+  .core .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:1.4px;opacity:.72}
+  .core h2{margin:7px 0 5px;font-size:19px;line-height:1.3;letter-spacing:-.3px}
+  .core .tag{font-size:11.5px;opacity:.85}
+  .core .rule{
+    margin-top:13px;padding-top:11px;border-top:1px solid rgba(255,255,255,.22);
+    font-size:11px;line-height:1.55;text-align:left;opacity:.95;
+  }
+  .core .rule b{display:block;margin-bottom:3px;font-size:10.5px;letter-spacing:.6px;opacity:.8}
+
+  /* ---------- branch cards ---------- */
+  .branch{
+    --c:#0f766e;
+    position:relative;                /* positioning context for the connectors — do not remove */
+    background:var(--panel);border:1px solid var(--line);
+    border-top:3px solid var(--c);border-radius:10px;
+    padding:11px 14px 12px;width:100%;max-width:430px;
+    transition:box-shadow .15s,transform .15s;
+  }
+  .side.left .branch{text-align:right}
+  .branch:hover{box-shadow:0 4px 16px rgba(0,0,0,.09);transform:translateY(-1px)}
+
+  .bhead{
+    display:flex;align-items:center;gap:8px;font-weight:700;
+    font-size:14px;color:var(--c);margin-bottom:7px;
+  }
+  .side.left .bhead{justify-content:flex-end}
+  .bhead .no{
+    font-family:var(--mono);font-size:10.5px;font-weight:700;
+    background:var(--c);color:#fff;border-radius:5px;padding:1px 6px;flex:none;
+  }
+  .bhead .btag{
+    font-family:var(--mono);font-size:10px;font-weight:600;
+    padding:1px 6px;border-radius:99px;flex:none;
+    background:#f5f5f4;color:var(--muted);border:1px solid var(--line);
+  }
+
+  .bleaf{list-style:none;margin:0;padding:0;font-size:12.4px;color:var(--muted);line-height:1.62}
+  .bleaf li{position:relative;padding:1.5px 0}
+  .bleaf li::before{
+    content:'';position:absolute;top:9px;width:4px;height:4px;border-radius:50%;
+    background:var(--c);opacity:.5;
+  }
+  .side.left .bleaf li{padding-right:11px}
+  .side.left .bleaf li::before{right:0}
+  .side.right .bleaf li{padding-left:11px}
+  .side.right .bleaf li::before{left:0}
+  .bleaf b{color:var(--ink);font-weight:600}
+  .bleaf code{
+    font-family:var(--mono);font-size:11px;background:#f5f5f4;
+    border:1px solid var(--line);padding:0 4px;border-radius:3px;color:var(--ink);
+  }
+  .bleaf .warn{color:#b45309;font-weight:600}
+  .bleaf .crit{color:#b91c1c;font-weight:600}
+  .bleaf .ok{color:#15803d;font-weight:600}
+
+  /* ---------- branch colour coding ---------- */
+  .b-premise {--c:#57534e}   /* premise */
+  .b-perceive {--c:#2563eb}   /* perceive */
+  .b-decide   {--c:#0d9488}   /* decide */
+  .b-content  {--c:#7c3aed}   /* content */
+  .b-state    {--c:#475569}   /* state */
+  .b-guard    {--c:#dc2626}   /* guard */
+  .b-act      {--c:#d97706}   /* act */
+  .b-measure  {--c:#16a34a}   /* measure */
+  .b-deliver  {--c:#0369a1}   /* delivery */
+
+  /* ---------- flow ribbon ---------- */
+  .ribbon{
+    margin:0 auto;max-width:1240px;padding:0 28px 8px;
+    display:flex;align-items:center;gap:0;flex-wrap:wrap;
+    font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  }
+  .ribbon .step{
+    background:#fff;border:1px solid var(--line);border-radius:99px;
+    padding:4px 12px;white-space:nowrap;
+  }
+  .ribbon .arw{color:var(--faint);padding:0 6px}
+
+  /* ---------- footer ---------- */
+  footer{
+    max-width:1240px;margin:0 auto;padding:6px 28px 40px;
+    color:var(--faint);font-size:11.5px;line-height:1.7;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:1180px){
+    .canvas{padding:22px 16px 34px}
+    .mindmap{grid-template-columns:1fr;min-width:0;gap:13px}
+    .side.left,.side.right{padding:0;align-items:stretch}
+    .side.left .branch,.side.right .branch{max-width:none;text-align:left}
+    .side.left .bhead{justify-content:flex-start;flex-direction:row}
+    .side.left .bleaf li{padding-right:0;padding-left:11px}
+    .side.left .bleaf li::before{right:auto;left:0}
+    .side.left .branch::before,.side.left .branch::after,
+    .side.right .branch::before,.side.right .branch::after,
+    .core::before,.core::after{display:none}
+    .core{order:-1;margin-bottom:4px}
+    .ribbon{padding:0 16px 6px}
+    footer{padding:6px 16px 30px}
+  }
+
+  /* ---------- print ---------- */
+  @media print{
+    @page{size:A3 landscape;margin:10mm}
+    body{background:#fff;font-size:10.5px}
+    header{background:#115e59!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:12px 16px}
+    .canvas{padding:14px 0}
+    .mindmap{min-width:0}
+    .branch{box-shadow:none!important;break-inside:avoid}
+    .core{box-shadow:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    footer{page-break-before:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CTN 2026 · Architecture Mind Map</h1>
+  <div class="sub">Capture the Narrative 2026 — Kingstonia H2D2 referendum · social-media consultancy simulation &nbsp;|&nbsp; 2026-10-19 → 11-02</div>
+  <div class="legend">
+    <span><i style="background:#57534e"></i>Premise</span>
+    <span><i style="background:#2563eb"></i>Perceive</span>
+    <span><i style="background:#0d9488"></i>Decide</span>
+    <span><i style="background:#7c3aed"></i>Content</span>
+    <span><i style="background:#475569"></i>State</span>
+    <span><i style="background:#dc2626"></i>Guard</span>
+    <span><i style="background:#d97706"></i>Act</span>
+    <span><i style="background:#16a34a"></i>Measure</span>
+    <span><i style="background:#0369a1"></i>Delivery</span>
+  </div>
+</header>
+
+<div class="ribbon">
+  <span class="step">Platform reads</span><span class="arw">→</span>
+  <span class="step">Perceive</span><span class="arw">→</span>
+  <span class="step">Jev funnel</span><span class="arw">→</span>
+  <span class="step">Guard</span><span class="arw">→</span>
+  <span class="step">Act (writes)</span><span class="arw">→</span>
+  <span class="step">State + Telemetry</span><span class="arw">→</span>
+  <span class="step">Calibration / Final pitch</span>
+</div>
+
+<div class="canvas">
+<div class="mindmap">
+
+  <!-- ══════════ LEFT WING ══════════ -->
+  <div class="side left">
+
+    <div class="branch b-premise">
+      <div class="bhead"><span class="no">01</span>Design Premise<span class="btag">scarcity</span></div>
+      <ul class="bleaf">
+        <li>Platform reads ≈ <b>0.61 req/s</b> per team <span class="crit">cannot be bought</span></li>
+        <li>Writes are only ~11% of requests <span class="crit">scarcest</span></li>
+        <li>Jev inference <b>$0.042 / 1M</b> <span class="ok">abundant</span></li>
+        <li>LLM generation <span class="ok">abundant</span> (Rule 5.1 permits external models)</li>
+        <li>→ Convert scarce reads into high-value writes</li>
+      </ul>
+    </div>
+
+    <div class="branch b-perceive">
+      <div class="bhead"><span class="no">02</span>Perceive<span class="btag">read quota</span></div>
+      <ul class="bleaf">
+        <li>Prefer <b>trending / targeted feeds / mentions</b> over polling timelines</li>
+        <li>Local cache + dedupe; never re-hit the platform for the same content</li>
+        <li><code>read_pressure</code> rises → triage threshold rises automatically</li>
+        <li>Must read <code>get_feed(citizen)</code> ← prerequisite for exposure attribution</li>
+        <li>Output: raw content, treated as <span class="crit">untrusted</span></li>
+      </ul>
+    </div>
+
+    <div class="branch b-decide">
+      <div class="bhead"><span class="no">03</span>Decide<span class="btag">Jev</span></div>
+      <ul class="bleaf">
+        <li><b>Stage A batch triage</b>: 1 request × N posts (evaluated in parallel)</li>
+        <li><b>Stage B per-post deep scoring</b>: ~10 <b>orthogonal</b> questions</li>
+        <li>Question set: relevance / persuadability / reach / risk / cost routing</li>
+        <li><b>Narrowcast targeting</b>: prefer “persuadable × low share of their feed”</li>
+        <li>Never ask compound questions like “should I reply?”</li>
+      </ul>
+    </div>
+
+    <div class="branch b-content">
+      <div class="bhead"><span class="no">04</span>Content<span class="btag">generation</span></div>
+      <ul class="bleaf">
+        <li>Trusted talking-point store: <b>closed corpus, committed to git</b> (Rule 7.5 requires source)</li>
+        <li>Argument × archetype × <code>push_distance</code> (latitude of acceptance)</li>
+        <li>40 persona voice specs, including <code>avoid_phrases</code></li>
+        <li><code>needs_nuance</code> routing → RAG rewrite vs LLM generation</li>
+        <li>Diversity guard: <b>MinHash lexical</b> similarity (not semantic)</li>
+      </ul>
+    </div>
+
+    <div class="branch b-state">
+      <div class="bhead"><span class="no">05</span>State<span class="btag">sqlite</span></div>
+      <ul class="bleaf">
+        <li>Synchronous <code>sqlite3</code> + WAL (no async DB needed at 0.6 req/s)</li>
+        <li><b>exposure</b>: which citizen saw what, and when <span class="crit">unrecoverable if unlogged</span></li>
+        <li>targets: feed share + control-group flag</li>
+        <li>decisions: Jev’s <b>full probabilities and confidence</b></li>
+        <li>budget ledger · crash-resume (a 2-week run will crash)</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- ══════════ CORE ══════════ -->
+  <div class="core">
+    <div class="kicker">CTN 2026</div>
+    <h2>Architecture<br>Overview</h2>
+    <div class="tag">Can you rule the referendum?</div>
+    <div class="rule">
+      <b>🔒 ONE HARD RULE</b>
+      Only the <code style="font-family:var(--mono)">client/</code> adapter may touch the platform;<br>
+      only <code style="font-family:var(--mono)">act.py</code> may issue write actions.
+    </div>
+  </div>
+
+  <!-- ══════════ RIGHT WING ══════════ -->
+  <div class="side right">
+
+    <div class="branch b-guard">
+      <div class="bhead"><span class="no">06</span>Guard<span class="btag">opponents attack legally</span></div>
+      <ul class="bleaf">
+        <li>Inbound quarantine: injection detection must run <b>before the LLM</b></li>
+        <li>Pre-publish guardrail: <code>rule_risk</code> / <code>hate</code> / impersonation</li>
+        <li>Four tiers of injection: T1 rebuttal → T2 steering → <b>T3 hijack</b> → <b>T4 poisoning</b></li>
+        <li><b>Physically separate stores</b>: trusted ≠ observed (prevents RAG poisoning)</li>
+        <li>Tool-call gating: an “off-plan action” is the tell of a hijacked agent</li>
+        <li><span class="warn">⚠ Injecting NPCs is not authorised → falls under the 5.3 edge clause; must ask</span></li>
+      </ul>
+    </div>
+
+    <div class="branch b-act">
+      <div class="bhead"><span class="no">07</span>Act<span class="btag">write quota</span></div>
+      <ul class="bleaf">
+        <li><b>Two-level token buckets</b>: team + per-account</li>
+        <li><b>Independent read / write buckets</b> ← the most important rate-limit decision</li>
+        <li>429 → auto slow-down; <b>shed reads first</b> to protect writes</li>
+        <li>Account pool: ACTIVE / THROTTLED / SUSPENDED / RETIRED</li>
+        <li>Single write egress · accounting · structured logs</li>
+      </ul>
+    </div>
+
+    <div class="branch b-measure">
+      <div class="bhead"><span class="no">08</span>Measure<span class="btag">causal</span></div>
+      <ul class="bleaf">
+        <li>Three meanings of “buying in” <b>diverge</b>: engagement ≠ attitude ≠ vote</li>
+        <li>2025’s lesson: most teams optimised engagement and sacrificed influence</li>
+        <li><b>Stratified control group 10–15%</b>: trade coverage for a causal estimate</li>
+        <li><b>Pre-registered predictions</b>: the only mechanism that can falsify us</li>
+        <li>Five gates: feed / attention / acceptance / update / persistence</li>
+        <li>Reverse-engineer by experiment: acceptance mapping · dose · source · framing · channel</li>
+      </ul>
+    </div>
+
+    <div class="branch b-deliver">
+      <div class="bhead"><span class="no">09</span>Delivery<span class="btag">ops</span></div>
+      <ul class="bleaf">
+        <li>Build order 1–8: <b>phases 1–6 are independent of the official API</b></li>
+        <li>Phase 8 = <code>client/legit_v1.py</code> — the only file that changes</li>
+        <li>Deploy: systemd <code>Restart=always</code> + <code>deploy.sh</code></li>
+        <li>Directory split: <code>app/</code> · <code>state/</code> · <code>logs/</code> · <code>.env</code></li>
+        <li>git <b>private</b>; state / logs / secrets never committed (Rules 5.2 / 5.6)</li>
+        <li>6-row degradation matrix: <b>better to under-act than to act recklessly</b></li>
+      </ul>
+    </div>
+
+  </div>
+
+</div>
+</div>
+
+<footer>
+  <b>How to read this map</b> — Left wing = input and processing (premise / perceive / decide / content / state).
+  Right wing = assurance and output (guard / act / measure / delivery).
+  Coloured top borders match the legend above. Within branches,
+  <span style="color:#b91c1c;font-weight:600">red</span> = scarcest or highest risk,
+  <span style="color:#b45309;font-weight:600">amber</span> = to be confirmed,
+  <span style="color:#15803d;font-weight:600">green</span> = abundant or favourable.<br>
+  Sources: official CTN 2026 Rules v1.0.0 and setting pages · organisers’ paper arXiv:2607.23993 (2025 technical spec and results).
+  Full discussion in <code style="font-family:ui-monospace,Menlo,monospace">ctn-architecture.html</code>.
+</footer>
+
+</body>
+</html>
