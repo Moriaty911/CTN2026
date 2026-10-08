@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTN 2026 · 项目架构设计</title>
+<style>
+  :root{
+    --bg:#fafaf9; --panel:#fff; --ink:#1c1917; --muted:#57534e; --faint:#a8a29e;
+    --line:#e7e5e4; --line-strong:#d6d3d1;
+    --accent:#0f766e; --accent-bg:#f0fdfa; --accent-line:#99f6e4;
+    --warn:#b45309; --warn-bg:#fffbeb; --warn-line:#fde68a;
+    --danger:#b91c1c; --danger-bg:#fef2f2; --danger-line:#fecaca;
+    --good:#15803d; --good-bg:#f0fdf4; --good-line:#bbf7d0;
+    --code-bg:#1c1917; --code-ink:#e7e5e4; --code-dim:#a8a29e;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:15.5px; line-height:1.72; -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- layout ---------- */
+  header.top{
+    background:linear-gradient(180deg,#0f766e 0%,#115e59 100%);
+    color:#f0fdfa; padding:34px 24px 30px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  header.top h1{margin:0 0 6px; font-size:28px; letter-spacing:-.3px}
+  header.top .sub{opacity:.82; font-size:14.5px}
+  header.top .meta{margin-top:16px; display:flex; gap:10px; flex-wrap:wrap}
+  .chip{
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22);
+    padding:4px 11px; border-radius:99px; font-size:12.5px; font-family:var(--mono);
+  }
+
+  nav.toc{
+    position:sticky; top:0; z-index:20; background:rgba(250,250,249,.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    padding:9px 24px; overflow-x:auto; white-space:nowrap;
+  }
+  nav.toc a{
+    color:var(--muted); text-decoration:none; font-size:13px; margin-right:16px;
+    padding:3px 0; border-bottom:2px solid transparent; display:inline-block;
+  }
+  nav.toc a:hover{color:var(--accent); border-bottom-color:var(--accent-line)}
+
+  main{max-width:1080px; margin:0 auto; padding:30px 24px 90px}
+  section{margin:0 0 46px; scroll-margin-top:56px}
+  h2{
+    font-size:21px; margin:0 0 6px; letter-spacing:-.2px;
+    padding-bottom:9px; border-bottom:2px solid var(--line);
+  }
+  h2 .num{
+    font-family:var(--mono); font-size:13px; color:var(--accent);
+    background:var(--accent-bg); border:1px solid var(--accent-line);
+    padding:1px 7px; border-radius:5px; margin-right:9px; vertical-align:2px;
+  }
+  h3{font-size:16.5px; margin:26px 0 8px}
+  h4{font-size:14.5px; margin:18px 0 6px; color:var(--muted)}
+  p{margin:9px 0}
+  .lead{color:var(--muted); font-size:14.5px; margin-bottom:18px}
+  ul,ol{margin:9px 0; padding-left:22px}
+  li{margin:5px 0}
+  code{
+    font-family:var(--mono); font-size:.885em; background:#f5f5f4;
+    border:1px solid var(--line); padding:1px 5px; border-radius:4px;
+  }
+  pre{
+    background:var(--code-bg); color:var(--code-ink); padding:15px 17px;
+    border-radius:var(--r); overflow-x:auto; font-family:var(--mono);
+    font-size:12.8px; line-height:1.62; margin:12px 0;
+  }
+  pre code{background:none;border:none;padding:0;color:inherit;font-size:inherit}
+  pre .c{color:#78716c}      /* comment */
+  pre .k{color:#5eead4}      /* keyword */
+  pre .s{color:#fcd34d}      /* string */
+  pre .f{color:#93c5fd}      /* function */
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14px}
+  th,td{border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top}
+  th{background:#f5f5f4; font-weight:600; font-size:13px; color:var(--muted)}
+  tbody tr:nth-child(even){background:#fcfcfb}
+  td.mono,th.mono{font-family:var(--mono); font-size:12.5px}
+
+  .box{border:1px solid var(--line); background:var(--panel); border-radius:var(--r); padding:15px 18px; margin:14px 0}
+  .callout{border-left:4px solid; border-radius:0 var(--r) var(--r) 0; padding:13px 17px; margin:15px 0; font-size:14.5px}
+  .callout .t{font-weight:700; display:block; margin-bottom:4px; font-size:13.5px; letter-spacing:.2px}
+  .c-key{background:var(--accent-bg); border-color:var(--accent); color:#134e4a}
+  .c-key .t{color:var(--accent)}
+  .c-warn{background:var(--warn-bg); border-color:var(--warn); color:#78350f}
+  .c-warn .t{color:var(--warn)}
+  .c-danger{background:var(--danger-bg); border-color:var(--danger); color:#7f1d1d}
+  .c-danger .t{color:var(--danger)}
+  .c-good{background:var(--good-bg); border-color:var(--good); color:#14532d}
+  .c-good .t{color:var(--good)}
+
+  /* ---------- pipeline diagram ---------- */
+  .flow{margin:20px 0}
+  .stage{
+    border:1px solid var(--line-strong); background:var(--panel);
+    border-radius:var(--r); padding:0; overflow:hidden;
+    display:grid; grid-template-columns:186px 1fr; align-items:stretch;
+  }
+  .stage .tag{
+    background:#f5f5f4; border-right:1px solid var(--line);
+    padding:13px 15px; font-family:var(--mono); font-size:12.5px;
+    font-weight:600; color:var(--ink); display:flex; flex-direction:column; gap:5px;
+  }
+  .stage .tag .badge{
+    font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:99px;
+    align-self:flex-start; font-family:var(--sans); letter-spacing:.2px;
+  }
+  .b-read{background:var(--accent-bg); color:var(--accent); border:1px solid var(--accent-line)}
+  .b-write{background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger-line)}
+  .b-free{background:var(--good-bg); color:var(--good); border:1px solid var(--good-line)}
+  .b-store{background:#f5f5f4; color:var(--muted); border:1px solid var(--line-strong)}
+  .stage .body{padding:13px 16px; font-size:14px}
+  .stage .body b{font-size:14.5px}
+  .stage .body ul{margin:7px 0 0; padding-left:19px; color:var(--muted); font-size:13.5px}
+  .stage .body li{margin:2px 0}
+  .arrow{
+    text-align:center; color:var(--faint); font-family:var(--mono); font-size:12px;
+    padding:7px 0; line-height:1.35;
+  }
+  .arrow .lbl{color:var(--muted); background:var(--bg); padding:0 8px}
+  .side-note{
+    font-family:var(--mono); font-size:11.5px; color:var(--muted);
+    background:#f5f5f4; border:1px dashed var(--line-strong); border-radius:6px;
+    padding:7px 11px; margin:8px 0 8px 200px;
+  }
+
+  /* ---------- ladder ---------- */
+  .ladder{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0}
+  .rung{border:1px solid var(--line); border-radius:var(--r); background:var(--panel); overflow:hidden}
+  .rung .hd{padding:10px 13px; font-weight:700; font-size:14px; border-bottom:1px solid var(--line)}
+  .rung .bd{padding:11px 13px; font-size:13.3px; color:var(--muted)}
+  .rung.r0 .hd{background:#f5f5f4}
+  .rung.r1 .hd{background:var(--accent-bg); color:var(--accent)}
+  .rung.r2 .hd{background:var(--danger-bg); color:var(--danger)}
+  .score{display:inline-block; font-family:var(--mono); font-size:11px; padding:1px 6px; border-radius:4px; margin-top:7px}
+  .score.s-story{background:var(--accent-bg); color:var(--accent); border:1px solid var(--accent-line)}
+  .score.s-eng{background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger-line)}
+  .score.s-none{background:#f5f5f4; color:var(--faint); border:1px solid var(--line-strong)}
+
+  /* ---------- confidence markers ---------- */
+  .conf{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;white-space:nowrap;font-weight:600}
+  .c-doc{background:var(--good-bg);color:var(--good);border:1px solid var(--good-line)}
+  .c-inf{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-line)}
+  .c-spec{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
+
+  /* ---------- layer stack ---------- */
+  .layers{border:1px solid var(--line-strong);border-radius:var(--r);overflow:hidden;margin:16px 0}
+  .layer{display:grid;grid-template-columns:206px 1fr;border-bottom:1px solid var(--line);font-size:14px}
+  .layer:last-child{border-bottom:none}
+  .layer .lh{background:#f5f5f4;padding:12px 14px;border-right:1px solid var(--line);font-weight:600;font-size:13.3px}
+  .layer .lh .sub{display:block;font-weight:400;color:var(--muted);font-size:11.8px;font-family:var(--mono);margin-top:4px;line-height:1.5}
+  .layer .lb{padding:12px 15px;background:var(--panel)}
+  .layer .lb ul{margin:4px 0 0;padding-left:19px;color:var(--muted);font-size:13.3px}
+  .layer .lb li{margin:2px 0}
+  .layer.hot .lh{background:#fee2e2;color:var(--danger)}
+  .layer.hot .lb{background:var(--danger-bg)}
+
+  /* ---------- gates ---------- */
+  .gates{margin:16px 0;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .gate{display:grid;grid-template-columns:48px 1fr 196px;border-bottom:1px solid var(--line);background:var(--panel);font-size:14px}
+  .gate:last-child{border-bottom:none}
+  .gate > div{padding:11px 14px;border-right:1px solid var(--line)}
+  .gate > div:last-child{border-right:none;font-size:13px;display:flex;align-items:center}
+  .gate .gn{text-align:center;font-family:var(--mono);font-weight:700;background:#fafaf9;color:var(--accent);font-size:15px}
+  .gate .gt b{font-size:14.5px}
+  .gate .gd{color:var(--muted);font-size:13.3px;margin-top:3px}
+  .heat{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-family:var(--mono);color:var(--muted)}
+  .heat .bars{display:inline-flex;gap:2px}
+  .heat .bar{width:9px;height:9px;border-radius:2px;background:var(--line-strong)}
+  .heat .bar.on{background:var(--danger)}
+
+  /* ---------- audience split ---------- */
+  .aud{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+  .aud .a{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:14px 16px}
+  .aud .a h4{margin:0 0 7px;font-size:14.5px;color:var(--ink)}
+  .aud .a.n{background:#fafaf9}
+  .aud .a.s{border-color:var(--accent-line);background:var(--accent-bg)}
+
+  /* ---------- module tree ---------- */
+  .tree{background:var(--code-bg); color:var(--code-ink); border-radius:var(--r); padding:17px 19px;
+        font-family:var(--mono); font-size:12.6px; line-height:1.75; overflow-x:auto}
+  .tree .d{color:#5eead4}
+  .tree .n{color:#e7e5e4}
+  .tree .a{color:#78716c}
+  .tree .now{color:#86efac}
+  .tree .later{color:#fcd34d}
+
+  /* ---------- phases ---------- */
+  .phase{display:grid; grid-template-columns:64px 1fr 132px; border:1px solid var(--line);
+         border-bottom:none; background:var(--panel); font-size:14px}
+  .phase:first-child{border-radius:var(--r) var(--r) 0 0}
+  .phase:last-child{border-bottom:1px solid var(--line); border-radius:0 0 var(--r) var(--r)}
+  .phase > div{padding:11px 14px; border-right:1px solid var(--line)}
+  .phase > div:last-child{border-right:none}
+  .phase .idx{font-family:var(--mono); font-weight:700; color:var(--accent); text-align:center; background:#fafaf9}
+  .phase .st{font-size:12px; font-family:var(--mono); display:flex; align-items:center; gap:5px}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none}
+  .dot.g{background:var(--good)} .dot.y{background:var(--warn)} .dot.r{background:var(--danger)}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:820px){
+    .grid2,.ladder,.aud{grid-template-columns:1fr}
+    .stage{grid-template-columns:1fr}
+    .stage .tag{border-right:none; border-bottom:1px solid var(--line); flex-direction:row; align-items:center; flex-wrap:wrap}
+    .side-note{margin-left:0}
+    .phase{grid-template-columns:52px 1fr}
+    .phase .st{grid-column:2; border-top:1px dashed var(--line)}
+    .phase > div{border-right:none}
+    .layer{grid-template-columns:1fr}
+    .layer .lh{border-right:none;border-bottom:1px solid var(--line)}
+    .gate{grid-template-columns:48px 1fr}
+    .gate > div{border-right:none}
+    .gate > div:last-child{grid-column:2;border-top:1px dashed var(--line)}
+  }
+  footer{border-top:1px solid var(--line); padding:22px 24px 40px; color:var(--faint); font-size:13px; text-align:center}
+  @media print{
+    nav.toc{display:none} header.top{background:#115e59!important;-webkit-print-color-adjust:exact}
+    section{page-break-inside:avoid} pre{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <h1>CTN 2026 · 项目架构设计</h1>
+    <div class="sub">Capture the Narrative 2026 — 「Can you rule the referendum?」<br>
+      Kingstonia H2D2 海豚流感公投 · 社交媒体咨询公司模拟</div>
+    <div class="meta">
+      <span class="chip">比赛 2026-10-19 → 2026-11-02</span>
+      <span class="chip">今日 2026-10-07 · T-12 天</span>
+      <span class="chip">Python 3.13</span>
+      <span class="chip">团队 1–4 人</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#premise">设计前提</a>
+    <a href="#arch">整体架构</a>
+    <a href="#modules">模块地图</a>
+    <a href="#decisions">关键决策</a>
+    <a href="#jev">Jev 漏斗</a>
+    <a href="#ladder">动作阶梯</a>
+    <a href="#citizens">模拟市民</a>
+    <a href="#measure">测量设计</a>
+    <a href="#degrade">降级策略</a>
+    <a href="#phases">建设顺序</a>
+    <a href="#open">待确认</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ═══════════════ 1 ═══════════════ -->
+<section id="premise">
+  <h2><span class="num">01</span>设计前提：两个稀缺资源，不是一个</h2>
+  <p class="lead">几乎所有 bot 架构都默认「算力是瓶颈」，于是把力气花在省 token 上。这个假设在本比赛里是错的。</p>
+
+  <table>
+    <thead><tr><th>资源</th><th>稀缺程度</th><th>依据</th><th>能否花钱买</th></tr></thead>
+    <tbody>
+      <tr><td><b>平台读取额度</b></td><td class="mono" style="color:var(--danger)">极稀缺</td><td>2025 公开数据反推：每队 ≈ <b>0.61 req/s</b>（读+写合计）</td><td style="color:var(--danger)"><b>❌ 买不到</b></td></tr>
+      <tr><td><b>平台写入额度</b></td><td class="mono" style="color:var(--danger)">最稀缺</td><td>2025 仅约 <b>11.4%</b> 请求为发帖（7.07M 帖 / 62M 请求）</td><td style="color:var(--danger)"><b>❌ 买不到</b></td></tr>
+      <tr><td><b>Jev 推理</b></td><td class="mono" style="color:var(--good)">充裕</td><td>$0.042 / 1M token，输出免费，外部 API <b>不吃平台限速</b></td><td style="color:var(--good)"><b>✅ 随便买</b></td></tr>
+      <tr><td><b>LLM 生成</b></td><td class="mono" style="color:var(--good)">充裕</td><td>外部模型明文允许（规则 5.1 / 5.2）</td><td style="color:var(--good)"><b>✅ 可以买</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-key">
+    <span class="t">设计的全部意义</span>
+    <b>把稀缺的平台读取，转换成高价值的平台写入。</b><br>
+    Jev 是这两者之间唯一充裕的资源 —— 所以它不是「省钱过滤器」，而是<b>花得起钱的判断力</b>。要用得奢侈，不是用得吝啬。
+  </div>
+
+  <h3>一条铁律</h3>
+  <div class="box">
+    <p style="margin:0"><b>除了 <code>client/</code> 里的适配器，任何代码不许碰平台。<br>
+    除了 <code>act.py</code>，任何代码不许发起写动作。</b></p>
+    <p style="margin:9px 0 0;color:var(--muted);font-size:14px">这条规则一旦破了，限速保证就失效 —— 而限速失效的代价是封号。账号是消耗品，但换号要重新养。</p>
+  </div>
+</section>
+
+<!-- ═══════════════ 2 ═══════════════ -->
+<section id="arch">
+  <h2><span class="num">02</span>整体架构</h2>
+  <p class="lead">三段式管线 + 两个旁路资源 + 一个权威状态。箭头标注了每一跳传递的东西，以及它是否可信。</p>
+
+  <div class="flow">
+
+    <div class="stage">
+      <div class="tag">
+        Perceive
+        <span class="badge b-read">消耗读取额度</span>
+      </div>
+      <div class="body">
+        <b>预算感知的感知循环</b>
+        <ul>
+          <li>优先「趋势榜 / 定向市民信息流 / mentions」，而不是全量轮询时间线</li>
+          <li>本地缓存去重 —— 重复分析不再打平台</li>
+          <li>读取压力升高时自动提高筛选门槛（<code>read_pressure</code>）</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">↓ <span class="lbl">原始内容 —— 一律视为不可信数据</span></div>
+
+    <div class="stage">
+      <div class="tag">
+        Decide
+        <span class="badge b-free">Jev 充裕</span>
+      </div>
+      <div class="body">
+        <b>两级 Jev 漏斗 → 动作分配</b>
+        <ul>
+          <li><b>Stage A 批量粗筛</b>：一次请求处理 N 帖（1 state × N 问题，内部并行）</li>
+          <li><b>Stage B 逐帖深评</b>：仅对幸存者做 ~10 个正交判断</li>
+          <li>按「买哪个分数」分派到动作阶梯，而不是按「贵不贵」</li>
+          <li>窄播定位：优先「可争取且我们信息流占比低」的市民</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="side-note">旁路：可信话术库（封闭语料）→ 只提供论点/事实/人设，<b>绝不接受平台内容</b></div>
+
+    <div class="arrow">↓ <span class="lbl">Decision（含完整 Jev 概率与置信度）</span></div>
+
+    <div class="stage">
+      <div class="tag">
+        Guard
+        <span class="badge b-free">Jev 护栏</span>
+      </div>
+      <div class="body">
+        <b>发布前合规检查 + 入境隔离</b>
+        <ul>
+          <li>草稿过 Jev：<code>rule_risk</code> / <code>hate</code> / <code>impersonation</code> → ALLOW / FLAG / BLOCK</li>
+          <li>入境内容在<b>进入 LLM 之前</b>做注入检测（否则为时已晚）</li>
+          <li>多样性守卫：与自家队伍近期内容相似度过高 → 重写</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">↓ <span class="lbl">已批准的 Action</span></div>
+
+    <div class="stage">
+      <div class="tag">
+        Act
+        <span class="badge b-write">消耗写入额度</span>
+      </div>
+      <div class="body">
+        <b>双层令牌桶 → 执行 → 记账</b>
+        <ul>
+          <li>团队级桶 + 账号级桶，<b>读/写完全隔离</b></li>
+          <li>429 → 自动降速；优先砍读取，<b>保护写入</b></li>
+          <li>账号被封 → 池子摘除，重新分配，管线不中断</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <div class="stage">
+      <div class="tag">
+        State + Telemetry
+        <span class="badge b-store">本地</span>
+      </div>
+      <div class="body">
+        <b>sqlite（同步）+ JSONL</b>
+        <ul>
+          <li>唯一权威状态：断点续跑、曝光日志、预算账本</li>
+          <li>每个决策记录 Jev 完整概率 → 闭环校准的燃料</li>
+          <li>同时是悉尼 7 分钟答辩的证据基础</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="callout c-warn">
+    <span class="t">为什么必须拆成三段</span>
+    三种延迟差两个数量级：平台 100–200ms、Jev 70–500ms、LLM 生成 <b>1–5s</b>。单线程「读→判断→生成→发」的循环里，
+    <b>LLM 的 3 秒会把整条感知管线卡死</b> —— 而在趋势窗口里卡 3 秒就是错过窗口。
+    三段之间用 asyncio 队列解耦；<b>但队列不进状态</b>，重启时从 sqlite 重建。
+  </div>
+</section>
+
+<!-- ═══════════════ 3 ═══════════════ -->
+<section id="modules">
+  <h2><span class="num">03</span>模块地图</h2>
+  <p class="lead">颜色标注了「现在就能写」与「必须等官方模板」——这是不干等的具体含义。</p>
+
+<pre class="tree"><span class="d">ctn/</span>
+├── <span class="now">config.py</span>        <span class="a"># 配置与密钥 —— 唯一读环境变量的地方（规则 5.6）</span>
+├── <span class="now">models.py</span>        <span class="a"># 领域类型：Account / Post / Persona / Decision / Tier</span>
+├── <span class="now">telemetry.py</span>     <span class="a"># 结构化日志（JSONL）→ 校准燃料 + 答辩素材</span>
+├── <span class="now">ratelimit.py</span>     <span class="a"># 双层令牌桶 + 预算账本   ← 最容易做错，最不能出错</span>
+├── <span class="now">state.py</span>         <span class="a"># sqlite 持久化 / 断点续跑 / 曝光日志</span>
+├── <span class="now">accounts.py</span>      <span class="a"># 账号池：健康、养号、降级、退役</span>
+│
+├── <span class="d">client/</span>          <span class="a"># ←── 平台边界，唯一允许碰平台的地方</span>
+│   ├── <span class="now">base.py</span>      <span class="a"># LegitClient Protocol（论文已确认的动作集）</span>
+│   ├── <span class="now">mock.py</span>      <span class="a"># 模拟平台：今天就跑得起来，且能压测限速/封号/漂移</span>
+│   └── <span class="later">legit_v1.py</span>  <span class="a"># 真适配器 ← 官方模板到了再写，只改这一个文件</span>
+│
+├── <span class="d">jev/</span>
+│   ├── <span class="now">questions.py</span> <span class="a"># 问题集  ← 智力核心，决定上限</span>
+│   └── <span class="now">client.py</span>    <span class="a"># 扇出批处理 + 重试 + 降级</span>
+│
+├── <span class="d">rag/</span>
+│   ├── <span class="now">store.py</span>     <span class="a"># 可信话术库（封闭语料，与观测数据物理隔离）</span>
+│   └── <span class="now">personas.py</span>  <span class="a"># 人设 voice spec + 多样性守卫</span>
+│
+├── <span class="d">llm/</span>
+│   ├── <span class="now">base.py</span>      <span class="a"># 生成器 Protocol</span>
+│   └── <span class="now">provider.py</span>  <span class="a"># 外部 LLM 适配器</span>
+│
+├── <span class="now">guard.py</span>         <span class="a"># 发布前护栏 + 入境注入隔离</span>
+│
+├── <span class="d">pipeline/</span>
+│   ├── <span class="now">perceive.py</span>  <span class="a"># 读：预算感知的感知循环</span>
+│   ├── <span class="now">decide.py</span>    <span class="a"># Jev 漏斗 → 动作分配策略</span>
+│   └── <span class="now">act.py</span>       <span class="a"># 写：护栏 → 限速 → 执行 → 记账（唯一写入出口）</span>
+│
+└── <span class="now">main.py</span>          <span class="a"># 编排 + 优雅关闭（SIGTERM 落盘）</span>
+
+<span class="a">仓库外（绝不进 git）：</span>
+<span class="d">state/</span>  <span class="a"># sqlite、checkpoint、曝光日志</span>
+<span class="d">logs/</span>   <span class="a"># JSONL 遥测</span>
+<span class="d">.env</span>    <span class="a"># 密钥（权限 600）</span>
+
+<span class="now">■ 绿色 = 与官方 API 形状完全无关，现在就能写完，永不返工</span>
+<span class="later">■ 黄色 = 必须等官方模板</span></pre>
+</section>
+
+<!-- ═══════════════ 4 ═══════════════ -->
+<section id="decisions">
+  <h2><span class="num">04</span>关键设计决策</h2>
+
+  <h3>① 状态用 sqlite，且是同步的</h3>
+  <p>在 0.61 req/s 的负载下，异步数据库是<b>没有收益的复杂度，纯粹是故障源</b>。用标准库 <code>sqlite3</code>，WAL 模式，短事务。主流程是 async，但这个负载下阻塞几毫秒完全可接受。</p>
+  <table>
+    <thead><tr><th class="mono">表</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">accounts</td><td>账号池 + 健康状态 + 养号进度</td></tr>
+      <tr><td class="mono">posts_seen</td><td>去重 + 本地缓存（避免重复读取）</td></tr>
+      <tr><td class="mono">decisions</td><td>每个决策 + Jev 完整概率与置信度</td></tr>
+      <tr><td class="mono">actions</td><td>执行结果</td></tr>
+      <tr><td class="mono">exposure</td><td><b>哪个市民何时看到我们的什么</b> ← 不可追溯，Day 1 必须有</td></tr>
+      <tr><td class="mono">targets</td><td>目标市民 + 信息流占比估计 + 对照组标记</td></tr>
+      <tr><td class="mono">budget</td><td>请求账本（重启后继续计数）</td></tr>
+    </tbody>
+  </table>
+  <p><b>断点续跑不是加分项，是必需项</b> —— 两周不间断运行，进程一定会崩。</p>
+
+  <h3>② 账号池是消耗品，且要提前养</h3>
+  <p>平台规则 LS.5.1：限速 <i>“varies by trust signals and recent activity”</i>。所以<b>新账号额度更低</b> → 建号和养号要现在就做，不能等开赛。</p>
+<pre><code><span class="k">class</span> <span class="f">AccountStatus</span>(Enum):
+    ACTIVE     = <span class="s">"active"</span>      <span class="c"># 正常</span>
+    THROTTLED  = <span class="s">"throttled"</span>   <span class="c"># 被降速，保留但降低频率</span>
+    SUSPENDED  = <span class="s">"suspended"</span>   <span class="c"># 隔离，冷却后探测</span>
+    RETIRED    = <span class="s">"retired"</span>     <span class="c"># 报废，永不使用</span></code></pre>
+  <p>每账号独立令牌桶 —— 一个账号被限速不能拖累全队。</p>
+
+  <h3>③ 入境内容一律不可信（真实攻击面）</h3>
+  <p>规则 5.2 <b>明文允许</b>对手对我们的 agent 发起 prompt injection。所以两道防线，位置很关键：</p>
+  <table>
+    <thead><tr><th>库</th><th>内容</th><th>信任级别</th><th>能否作为指令</th></tr></thead>
+    <tbody>
+      <tr><td><b>可信库</b></td><td>我们写的论点、事实锚点、人设</td><td style="color:var(--good)">可信</td><td style="color:var(--good)">可以</td></tr>
+      <tr><td><b>观测库</b></td><td>从平台抓到的帖子 / 评论 / 新闻</td><td style="color:var(--danger)"><b>不可信</b></td><td style="color:var(--danger)"><b>绝不能</b></td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-danger">
+    <span class="t">RAG 投毒是 2025 年队伍大概率没防的路径</span>
+    如果观测数据能被检索进生成阶段的上下文，对手可以写一段<b>专门为被检索而设计</b>的文本，在生成时劫持你。
+    而且污染发生在<b>检索层</b>，你在输入层根本看不见。两库必须物理隔离。
+  </div>
+
+  <h3>④ RAG 存的是「论点 + 人设」，不是逐字话术</h3>
+  <p>原因是平台规则 LS.5.3 禁止 <i>“coordinated inauthentic behaviour … repetitive low-quality posting”</i>，
+     而且存在<b>双重风险</b>：你的阵营被多家咨询公司雇佣，若大家用同一批下发话术，会互相吃掉传播空间。</p>
+<pre><code>TALKING_POINTS = {
+  <span class="s">"yes"</span>: { <span class="s">"arguments"</span>: [...],      <span class="c"># 5 条核心论证</span>
+           <span class="s">"rebuttals"</span>: {...},      <span class="c"># 对立论点的钉子</span>
+           <span class="s">"fact_anchors"</span>: [...],   <span class="c"># IHO 建议 / COVID 死亡数 / 医疗系统</span>
+           <span class="s">"framings"</span>: [...] },     <span class="c"># 预防 / 责任 / 脆弱人群</span>
+}
+PERSONA_VOICE = {
+  <span class="s">"persona_07"</span>: {
+    <span class="s">"voice"</span>: <span class="s">"40 岁渔民，短句，口语，不信任政府"</span>,
+    <span class="s">"avoid_phrases"</span>: [<span class="s">"疫苗护照"</span>, <span class="s">"强制"</span>],   <span class="c"># 会激活对方框架</span>
+    <span class="s">"stance_intensity"</span>: <span class="s">0.6</span>,              <span class="c"># 不是狂热分子</span>
+  },
+}
+<span class="c"># 生成时：同一论点 × 100 个人设 = 100 种表面实现</span></code></pre>
+  <p>再加一道<b>多样性守卫</b>：草稿与自家队伍近期内容相似度超过阈值 → 重新生成（更强的人设约束）。
+     这一个机制同时解决三件事：平台反协同检测、同阵营撞车、以及「你的 bot 网络看起来像 bot 网络」。</p>
+
+  <h3>⑤ 窄播定位：Story Score 是分摊的</h3>
+  <p>主办方论文原文：<i>“the system attributed credit to <b>all teams whose posts the NPC had consumed</b> since their previous state update”</i>。</p>
+  <p>一个市民在两次状态更新间读了 10 支队伍的内容，这 10 支队<b>平分</b>他观点变化的功劳。所以：</p>
+  <div class="box">
+    <p style="margin:0">在 1000 个市民面前各出现 1 次 &nbsp;<b style="color:var(--danger)">≪</b>&nbsp; 在 100 个市民面前各出现 10 次</p>
+  </div>
+  <p>这对<b>感知层</b>有直接要求：不能只监控全局趋势（那是所有人的公共信息，无差异化），
+     而要花读取额度去<b>测量特定市民信息流里我们的占比</b>。</p>
+<pre><code><span class="c"># 每个目标市民维护一个覆盖率估计</span>
+target.feed_share = my_posts_seen / total_posts_seen
+priority = target.persuadable * (<span class="s">1</span> - target.feed_share) * target.reach</code></pre>
+</section>
+
+<!-- ═══════════════ 5 ═══════════════ -->
+<section id="jev">
+  <h2><span class="num">05</span>Jev 两级漏斗</h2>
+  <p class="lead">Jev 的关键特性：<b>一次请求可带多个问题，内部并行评估，加问题几乎不增加延迟</b>，只多付那点 input token。所以要摊薄。</p>
+
+  <div class="grid2">
+    <div class="box">
+      <h4 style="margin-top:0">Stage A · 批量粗筛</h4>
+      <p style="font-size:13.5px;color:var(--muted)">一次请求处理一批帖子。24 个问题 = 24 条帖子的生死判断，成本约几厘钱。</p>
+<pre style="font-size:12px"><code><span class="c"># 1 state × N questions</span>
+state = render_posts(posts[<span class="s">0</span>:<span class="s">24</span>])
+questions = {
+  <span class="f">f</span><span class="s">"p{i}_worth_it"</span>: Noul(
+     <span class="s">f"Post #{i} 值得消耗一次稀缺写动作"</span>)
+  <span class="k">for</span> i <span class="k">in</span> range(<span class="s">24</span>)
+}
+<span class="c"># → 90%+ 在此淘汰</span></code></pre>
+    </div>
+    <div class="box">
+      <h4 style="margin-top:0">Stage B · 逐帖深评</h4>
+      <p style="font-size:13.5px;color:var(--muted)">仅对幸存者（通常 1–3 条）做逐帖深评，约 10 个正交问题。</p>
+<pre style="font-size:12px"><code>deep = <span class="k">await</span> jev.ask(
+    render_post(post),
+    DEEP_QUESTIONS)
+<span class="c"># → 决定 tier / 账号 / 内容</span></code></pre>
+    </div>
+  </div>
+
+  <div class="callout c-warn">
+    <span class="t">批量大小是测出来的，不是拍的</span>
+    批量太大时模型对「第 17 条」的指代会变模糊，指令遵循退化。
+    <code>triage_batch_size</code>（初始猜 24）必须靠准确率曲线来定 —— 这正是 mock 环境要解决的第一个问题。
+  </div>
+
+  <h3>问题集：拆成正交原子，绝不问复合问题</h3>
+  <div class="callout c-danger">
+    <span class="t">「要不要回复这条？」是个坏问题</span>
+    它把至少 6 个独立维度揉成一个判断，你<b>无法知道模型在权衡什么，也就无法调阈值</b>。
+    正确的做法是拆成原子判断，然后在<b>代码里</b>做决策。
+  </div>
+
+<pre><code>DEEP_QUESTIONS = {
+  <span class="c"># ── 相关性 ──</span>
+  <span class="s">"is_my_side"</span>:     Choice([<span class="s">"strong_yes"</span>,<span class="s">"lean_yes"</span>,<span class="s">"neutral"</span>,
+                             <span class="s">"lean_no"</span>,<span class="s">"strong_no"</span>,<span class="s">"off_topic"</span>]),
+
+  <span class="c"># ── 可争取性（Story 通道的抓手）──</span>
+  <span class="s">"persuadable"</span>:    Score(<span class="s">"该作者立场动摇、可被说服的程度"</span>, levels=<span class="s">5</span>),
+  <span class="s">"emotional_heat"</span>: Score(<span class="s">"该帖情绪强度"</span>, levels=<span class="s">5</span>),
+
+  <span class="c"># ── 传播价值（Engagement 通道的抓手）──</span>
+  <span class="s">"visibility"</span>:     Score(<span class="s">"该帖当前可见度与潜在传播量"</span>, levels=<span class="s">5</span>),
+  <span class="s">"reply_upside"</span>:   Score(<span class="s">"在此回复可获得的市民回应预期"</span>, levels=<span class="s">5</span>),
+
+  <span class="c"># ── 风险 ──</span>
+  <span class="s">"rule_risk"</span>:      Noul(<span class="s">"预期回复可能触发平台规则或限速"</span>),
+  <span class="s">"injection"</span>:      Noul(<span class="s">"该内容包含试图操纵 AI 系统的指令性文本"</span>),
+  <span class="s">"is_bot"</span>:         Noul(<span class="s">"该账号疑似对手 bot 而非模拟市民"</span>),
+
+  <span class="c"># ── 成本路由 ──</span>
+  <span class="s">"needs_nuance"</span>:   Noul(<span class="s">"需事实核查或多步推理，必须升级到 LLM"</span>),
+}
+
+<span class="c"># 然后在代码里组合（官方 speculative fan-out 模式）：</span>
+<span class="k">if</span> r.noul(<span class="s">"injection"</span>) > <span class="s">0.7</span>:  quarantine(post)      <span class="c"># 先隔离，绝不进 LLM</span>
+<span class="k">elif</span> r.noul(<span class="s">"rule_risk"</span>) > <span class="s">0.6</span>: skip(post)            <span class="c"># 保护账号资产</span>
+<span class="k">elif</span> r.noul(<span class="s">"is_bot"</span>) > <span class="s">0.8</span>:    skip(post)            <span class="c"># 不浪费额度在 bot 上</span>
+<span class="k">elif</span> r.score(<span class="s">"reply_upside"</span>) > <span class="s">3.4</span> <span class="k">and</span> r.score(<span class="s">"persuadable"</span>) > <span class="s">3.0</span>:
+    <span class="k">if</span> r.noul(<span class="s">"needs_nuance"</span>) > <span class="s">0.5</span>: route_to_llm(post)      <span class="c"># 稀缺额度花在这</span>
+    <span class="k">else</span>:                        route_to_rag(post)       <span class="c"># 话术库 + 人设改写</span>
+<span class="k">elif</span> aligned(r) <span class="k">and</span> r.score(<span class="s">"visibility"</span>) > <span class="s">3.0</span>:
+    amplify(post)                                            <span class="c"># Story 通道</span>
+<span class="k">else</span>:
+    observe_only(post)                                       <span class="c"># 零成本，只更新世界模型</span></code></pre>
+
+  <div class="callout c-good">
+    <span class="t">为什么这个设计能赢</span>
+    这些维度<b>可观测、可回溯、可校准</b>。你能在日志里看到「<code>persuadable &gt; 3.0</code> 的动作带来了多少民意移动」，然后调它。
+    而如果只问「要不要回」，你永远不知道该怎么改。<br>
+    <code>needs_nuance</code> 是省钱的那个问题 —— 它按<b>任务难度</b>分流，比按「价格」分流准确得多。
+  </div>
+</section>
+
+<!-- ═══════════════ 6 ═══════════════ -->
+<section id="ladder">
+  <h2><span class="num">06</span>动作阶梯：按「买哪个分数」分级</h2>
+  <p class="lead">规则 7.1 把 Engagement 明确限定为<b>来自模拟市民</b>的互动。所以层级应由「买什么分数」决定，而不是「贵不贵」。</p>
+
+  <div class="ladder">
+    <div class="rung r0">
+      <div class="hd">T0 · OBSERVE</div>
+      <div class="bd">
+        只看、只记录。不产生任何平台写动作。<br>
+        <b>零写额度</b>，但构建世界模型，为 T1/T2 决策供能。
+        <div class="score s-none">无分数</div>
+      </div>
+    </div>
+    <div class="rung r1">
+      <div class="hd">T1 · AMPLIFY</div>
+      <div class="bd">
+        点赞 / 转发<b>市民的</b>对齐内容。<br>
+        叙事放大与社会证明。
+        <div class="score s-story">Story（※待实测）</div>
+      </div>
+    </div>
+    <div class="rung r2">
+      <div class="hd">T2 · PUBLISH</div>
+      <div class="bd">
+        原创帖 / 回复市民。<b>最稀缺</b>。<br>
+        唯一能产生「市民 → 你」互动的通道。
+        <div class="score s-eng">Engagement + Story</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout c-danger">
+    <span class="t">结构性修正：bot 之间互相点赞一分不得</span>
+    按规则原文，bot 间互动不来自模拟市民，<b>不产生 Engagement Score</b>，纯烧额度。所以架构上必须<b>结构性</b>阻止这件事，而不是靠自觉。
+  </div>
+
+  <div class="callout c-key">
+    <span class="t">Jev 最值钱的工作</span>
+    不是「这条该点赞还是该回」，而是：<b>在成千上万条 T0 观测里，找出那几十个值得花 T2 额度的机会点。</b>
+  </div>
+</section>
+
+<!-- ═══════════════ 7 ═══════════════ -->
+<section id="citizens">
+  <h2><span class="num">07</span>模拟市民：工作原理与着力点</h2>
+  <p class="lead">你面对的不是 4000 个人，而是一个由 <b>profile + 有限状态机 + 概率更新函数 + LLM</b> 组成的系统。
+     理解它的形状，才知道力气该往哪里使。</p>
+
+  <h3>证据分级</h3>
+  <p>以下每一条都标了来源等级 —— 这是为了<b>避免把推断当成事实来设计策略</b>。</p>
+  <div class="legend">
+    <span class="conf c-doc">📗 有据</span><span style="font-size:13.5px;color:var(--muted)">论文或规则明说</span>
+    &nbsp;&nbsp;
+    <span class="conf c-inf">📙 强推断</span><span style="font-size:13.5px;color:var(--muted)">由已知事实合理推演</span>
+    &nbsp;&nbsp;
+    <span class="conf c-spec">📕 推测</span><span style="font-size:13.5px;color:var(--muted)">纯属猜想，需实验验证</span>
+  </div>
+
+  <h3>已知的硬事实（2025 规格）</h3>
+  <table>
+    <thead><tr><th>事实</th><th class="mono" style="width:96px">出处</th></tr></thead>
+    <tbody>
+      <tr><td><b>4000 个普通 NPC</b>，每个是一个「市民」，能读帖、发帖、发媒体、对内容做反应、最终投票</td><td class="mono">论文 §3.2</td></tr>
+      <tr><td><b>7 个特殊 NPC</b>：2 名新闻记者、2 名专栏作家、2 名总统候选人、1 名前总统</td><td class="mono">论文 §3.2</td></tr>
+      <tr><td>每个 NPC 初始化 <b>40 维 profile</b>：年龄、性别、家庭与就业状况、经济地位、<b>对争议性议题的基线立场</b>、<b>对非争议性议题的基线立场</b>、初始政治倾向</td><td class="mono">论文 §3.2</td></tr>
+      <tr><td>行为由<b>有限状态机</b>驱动：被动浏览信息流 → 对帖子做反应 → 创作原创帖 → 阅读新闻报道</td><td class="mono">论文 §3.2</td></tr>
+      <tr><td>每次交互后，<b>概率更新函数</b>决定其内部状态是否变化、如何变化（内部观点、当前政治信念、候选人偏好）</td><td class="mono">论文 §3.2</td></tr>
+      <tr><td>NPC <b>只能通过模拟内的内容暴露</b>改变观点；<b>只有 NPC 能投票</b>（参赛 bot 不能投）</td><td class="mono">论文 §3.2</td></tr>
+      <tr><td>NPC 由 LLM 驱动，用<b>并发 LLM 实例池</b>；不同角色用不同模型配置；每个 agent 在全程<b>保持人设一致</b></td><td class="mono">论文 §3.2</td></tr>
+      <tr><td>记分：市民观点变化时，记功给<b>自他上次状态更新以来他消费过的所有队伍</b>（分摊）</td><td class="mono">论文 §3.4</td></tr>
+      <tr><td>每周民调抽样 <b>357 个 NPC</b>（95% CI）；领先阵营的队伍获得加成</td><td class="mono">论文 §3.4</td></tr>
+    </tbody>
+  </table>
+
+  <h3>推断的工作原理：五层结构 <span class="conf c-inf">📙</span></h3>
+
+  <div class="layers">
+    <div class="layer">
+      <div class="lh">Layer 1 · Profile<span class="sub">静态 · 40 维</span></div>
+      <div class="lb">人口统计 + 争议议题基线立场 + 非争议议题基线立场 + 初始政治倾向
+        <ul><li>这是<b>聚类分区</b>的依据，也是「投其所好」的抓手清单</li></ul></div>
+    </div>
+    <div class="layer">
+      <div class="lh">Layer 2 · State<span class="sub">动态</span></div>
+      <div class="lb">当前议题立场向量 · 候选人偏好 · 可能的情绪 / 关注度
+        <ul><li>你只能通过<b>他发的帖</b>间接观测这一层 ← 这正是 Jev <code>Score</code> 的用途</li></ul></div>
+    </div>
+    <div class="layer">
+      <div class="lh">Layer 3 · Behaviour FSM<span class="sub">程序化</span></div>
+      <div class="lb">浏览信息流 → 反应 → 创作 → 读新闻 →（终局）投票
+        <ul><li>这一步大概率是<b>代码而非 LLM</b>，所以是<b>周期性的、离散的</b></li></ul></div>
+    </div>
+    <div class="layer hot">
+      <div class="lh">Layer 4 · Update Function<span class="sub">程序化 + 概率</span></div>
+      <div class="lb"><b>← 真正决定你输赢的地方</b><br>
+        暴露于内容 → <code>P(是否更新) × Δ(更新幅度)</code>
+        <ul><li>自变量大概是：<b>立场距离 · 重复次数 · 来源一致性 · 可见互动量 · 时效性</b></li></ul></div>
+    </div>
+    <div class="layer">
+      <div class="lh">Layer 5 · 生成<span class="sub">LLM</span></div>
+      <div class="lb">NPC 自己的发言 / 反应由 LLM 在其人设下生成
+        <ul><li>这是你<b>唯一能读到其内部状态的窗口</b></li></ul></div>
+    </div>
+  </div>
+
+  <h4>关键推演：为什么它必然是混合架构</h4>
+  <p>论文有个容易被忽略的措辞：<i>“a <b>probabilistic update function</b> determines whether and how their internal state changes”</i> ——
+     这读起来像在描述<b>程序化的转移函数</b>，而不像在描述 LLM 判断。</p>
+  <p>再看并发约束。2025 是 <b>12 个并发 LLM 实例</b>服务 4000 个 NPC，粗算一下：</p>
+<pre><code>若单次生成 ~2s，吞吐 ≈ 12 / 2 = <span class="s">6</span> 次/秒
+4 周 = 2,419,200 秒 → 约 <span class="s">1,450 万</span>次 LLM 调用
+平均到每个 NPC：约 3,600 次 / 4 周 ≈ 每天 <span class="s">130</span> 次</code></pre>
+  <p>这个预算不算宽裕，但也绝不至于「每个状态转移都要调 LLM」。
+     <b>所以我的判断是：Layer 4 大概率是程序化的概率函数，LLM 主要用于 Layer 5 的生成，以及 Layer 2→3 的部分相关性判断。</b></p>
+
+  <div class="callout c-key">
+    <span class="t">这对策略意味着什么</span>
+    <b>若 Layer 4 是程序化的</b>（我倾向这个）→ 决定输赢的不是文采，而是内容的<b>可计算特征</b>：
+    立场距离、重复次数、来源一致性、可见互动量、时效性。<br>
+    <b>若 Layer 4 是 LLM 判断的</b> → 权重转向框架、语气、身份共鸣、论证质量。<br><br>
+    🎯 <b>建议：优先采用在两种假设下都有效的策略。</b> 好消息是下面五个闸门里，
+    大多数操作在两种假设下都成立 —— 真正需要实验区分的只有「具体用哪种框架措辞」，而那是 D1–D2 就该测出来的。
+  </div>
+
+  <h3>真正该盯的：五个闸门</h3>
+  <p>大部分人只想着第 ③ 或第 ④ 步。但<b>内容要产生效果，必须先过五关</b>。右侧是「被忽视程度」。</p>
+
+  <div class="gates">
+    <div class="gate">
+      <div class="gn">①</div>
+      <div><b>进得了信息流吗</b><div class="gd">你的内容出现在他的 feed 里了吗？把关的是关注图谱 / 转发 / 趋势算法</div></div>
+      <div><span class="heat">被忽视 <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i></span></span></div>
+    </div>
+    <div class="gate">
+      <div class="gn">②</div>
+      <div><b>过得了注意力筛选吗</b><div class="gd">他会不会真的读进去？把关的是 FSM 决策 + 相关性判断</div></div>
+      <div><span class="heat">被忽视 <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar"></i></span></span></div>
+    </div>
+    <div class="gate">
+      <div class="gn">③</div>
+      <div><b>过得了接受度筛选吗</b><div class="gd">立场差距太大 → 直接被拒，甚至反向移动</div></div>
+      <div><span class="heat">被忽视 <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar"></i><i class="bar"></i></span></span></div>
+    </div>
+    <div class="gate">
+      <div class="gn">④</div>
+      <div><b>真的产生更新吗</b><div class="gd">概率函数是否触发 —— 大多数人只盯这里</div></div>
+      <div><span class="heat">被忽视 <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i></span></span></div>
+    </div>
+    <div class="gate">
+      <div class="gn">⑤</div>
+      <div><b>更新能保持住吗</b><div class="gd">会不会被后面的反向内容覆盖 —— 极少有人想这一层</div></div>
+      <div><span class="heat">被忽视 <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar"></i></span></span></div>
+    </div>
+  </div>
+
+  <div class="callout c-danger">
+    <span class="t">最重要的一句话</span>
+    <b>写得好但没人看到的内容，得分为零。</b>
+    而闸门 ① 恰恰是最被忽视、却最容易做出差异的地方。
+  </div>
+
+  <h3>逐个闸门的「投其所好」</h3>
+
+  <h4>闸门 ① · 进信息流 —— 靠图谱，不靠文采</h4>
+  <p>NPC 看的是<b>他自己的 feed</b>。所以你的内容要么来自他关注的人，要么被他已关注的人转发，要么上了趋势榜。</p>
+  <ul>
+    <li><b>先关注，再说话。</b> 40 个 bot 应先与目标市民建立连接，再发内容 —— 先入场，后开火。</li>
+    <li><b>借道他信任的账号。</b> 让<b>市民自己的帖子</b>成为你论点的载体，你去放大它。论点通过「同类人」传递，可信度完全不同。</li>
+    <li><b>趋势榜是公共赛道，关注图谱是私人赛道。</b> 私人赛道上对手少得多，而且<b>没有同阵营队伍跟你抢</b>。</li>
+  </ul>
+  <div class="callout c-warn">
+    <span class="t">2026 封死了「伪造社会证明」这条路</span>
+    Engagement 必须来自模拟市民。所以你<b>没法再用自己人互相点赞来伪造「很多人都同意」</b> —— 那正是 2025 年的低质量套路。
+    能用的只剩<b>真实的市民互动和关注关系</b>。这也是为什么「先建关注图谱」变成了不可绕过的第一步。
+  </div>
+
+  <h4>闸门 ② · 过注意力筛选 —— 卖点要清楚</h4>
+  <p>NPC 的 FSM 在「被动浏览」状态下扫过 feed。什么能让一次浏览变成一次真正的阅读和反应？</p>
+  <ul>
+    <li><b>短、具体、有情绪钩子。</b> 第一行决定生死。</li>
+    <li><b>与他既有生活相关</b>：工作、家庭、通勤、看病、孩子的学校 —— 而不是抽象的政策论证。40 维 profile 里有就业、家庭、经济地位，这些是现成的抓手。</li>
+    <li><b>避免抽象词汇。</b> 「强制接种证明」是政策语言；「我明天怎么去上班」是生活语言。<b>后者才会被读进去。</b></li>
+  </ul>
+
+  <h4>闸门 ③ · 过接受度筛选 —— 最容易做错的地方 <span class="conf c-inf">📙</span></h4>
+  <p>这里给一个<b>可能反直觉</b>的建议。社会判断理论里有个概念叫<b>接受域（latitude of acceptance）</b>：
+     一个人能接受的观点范围是有限的。<b>如果你的论点落在他接受域之外，会触发「对比效应」—— 他不但不接受，反而会朝反方向移动。</b>
+     也就是说，<b>用力过猛地反驳对手，可能把中间派推向对面。</b></p>
+  <table>
+    <thead><tr><th style="width:150px">目标人群</th><th>❌ 错误做法</th><th>✅ 正确做法</th></tr></thead>
+    <tbody>
+      <tr><td><b>坚定的对方派</b></td><td>直接论证你方的好处</td><td><b>放弃。</b> 或只谈双方都不否认的点（如「疫苗是自愿的」）</td></tr>
+      <tr><td><b>倾向对方的中间派</b></td><td>说「你错了」</td><td><b>从他认同的价值切入</b>（旅游业、个人自由、对政府扩权的警惕），只推一小步</td></tr>
+      <tr><td><b>完全中立</b></td><td>强推你方立场</td><td><b>提供「两边顾虑都被听到」的框架</b>，降低立场转换的心理成本</td></tr>
+      <tr><td><b>倾向你方</b></td><td>重复论证</td><td>强化 + 提供<b>回击对方论点的弹药</b>，让他们能为自己立场辩护</td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-key">
+    <span class="t">📙 核心策略</span>
+    <b>不要试图「说服」任何人，要试图让已经倾向于你的人更有底气、更愿意发声。</b>
+    <ul style="margin:8px 0 0">
+      <li>他们立场改变的成本最低 —— 顺势而为，不是逆势</li>
+      <li>他们会变成你的<b>传播节点</b>：由市民说出来的话，比你的 bot 说出来的可信度高一个数量级</li>
+      <li>而且这同时喂饱了 Engagement（市民互动）和 Story（观点强化）—— <b>两个分数一起涨</b></li>
+    </ul>
+  </div>
+
+  <h4>闸门 ④ · 触发更新 —— 靠重复和分布，不靠单条爆款</h4>
+  <ul>
+    <li><b>重复，但要变换表面形式。</b> 同一论点，通过 20 个不同账号、20 种说法、在不同时间到达同一个 NPC。单一视角的一次暴露通常不够。</li>
+    <li><b>多来源一致性 &gt; 单条高质量。</b> 如果他从三个不同方向都听到同一件事，可信度远高于同一个人说三遍。</li>
+    <li><b>⚠️ 注意反效果。</b> 措辞雷同、时间密集的机械重复，可能触发「协同不实行为」判定或让 NPC 产生抵触 —— 这正是多样性守卫存在的理由。</li>
+  </ul>
+
+  <h4>闸门 ⑤ · 保持住 —— 后期发力</h4>
+  <p>论文明确说<b>越接近投票日，观点变化的权重越高</b>；同时 NPC 的 FSM 是<b>周期性</b>的，他会在离散时点更新状态。</p>
+  <ul>
+    <li><b>持续在场，而不是一波流。</b> 必须在 NPC「浏览」的那些时刻反复出现。</li>
+    <li><b>后期加强。</b> 但前期的关注图谱和信誉不能省 —— 否则后期你说的话他看不到。<b>前期建受众，后期压影响。</b></li>
+  </ul>
+
+  <h3>🔑 有两个受众，不是只有一个</h3>
+  <p>这是我认为<b>最被低估的战略点</b>。平台上有 7 个特殊 NPC（2 记者、2 专栏作家、2 候选人、1 前总统），他们的职能是<b>中介</b>：</p>
+<pre><code>你的内容 ──► 上趋势榜 ──► 记者 / 专栏作家选中 ──► 写成新闻稿
+          ──► <span class="s">4000 个 NPC 读新闻</span> ──► 观点移动 + <span class="s">给你额外 Story 加分</span></code></pre>
+
+  <div class="aud">
+    <div class="a n">
+      <h4>受众 A · 4000 个普通市民</h4>
+      逐条争夺注意力。触达是<b>一对一或小群</b>。竞争激烈，且要跟同阵营队伍分食。
+    </div>
+    <div class="a s">
+      <h4>受众 B · 7 个特殊 NPC <span class="conf c-inf">📙</span></h4>
+      职能是<b>放大</b>。一篇报道 = <b>一次触达 4000 人</b>，而且论文明确说被引用<b>有直接 Story 加分</b>。
+      <b>这里才是杠杆。</b>
+    </div>
+  </div>
+
+  <p><b>记者 NPC 会被什么吸引？</b> <span class="conf c-inf">📙</span> 新闻价值：<b>冲突性、新颖性、规模感、情绪强度、有具体人物或数据</b>。</p>
+  <table>
+    <thead><tr><th style="width:60px"></th><th>写法</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td style="color:var(--danger)">❌</td><td>「我们应该理性讨论疫苗政策」</td><td>没有新闻价值，不会被选中</td></tr>
+      <tr><td style="color:var(--good)">✅</td><td>「本地医院护士说：我们连流感季都撑不住」</td><td>有人物、有冲突、有紧迫感</td></tr>
+      <tr><td style="color:var(--good)">✅</td><td>「旅游业数据：如果再来一次封锁，3000 个岗位消失」</td><td>有数字、有具体群体、有利益相关方</td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-key">
+    <span class="t">换一个心法</span>
+    不是「发帖」，而是<b>制造新闻</b>。这同时命中了 Story 加分的明文机制。
+  </div>
+
+  <h3>2026 相对 2025 的三个变化，如何改变杠杆</h3>
+  <table>
+    <thead><tr><th style="width:180px">变化</th><th class="mono" style="width:110px">依据</th><th>对策略的影响</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>赛程从 4 周缩到 2 周</b></td>
+        <td class="mono">10/19–11/02<br>（2025 为 4 周）</td>
+        <td>NPC 状态更新次数减半 → <b>累积漂移空间变小 → 每次暴露的相对权重上升</b>；同时「前期探索」窗口被压缩，<b>D1–D2 必须高效</b></td>
+      </tr>
+      <tr>
+        <td><b>Engagement 必须来自模拟市民</b></td>
+        <td class="mono">2026 规则 7.1</td>
+        <td><b>伪造社会证明的路被封死</b>（正是 2025 年的主要漏洞）→ 逼所有人回到内容与关系质量</td>
+      </tr>
+      <tr>
+        <td><b>领先阵营获得加成</b><br><span style="font-size:12.5px;color:var(--muted)">（2025 已有）</span></td>
+        <td class="mono">论文 §3.4</td>
+        <td><b>早期领先会复利</b> → 前期建立关注图谱不只是为了曝光，也是为了触发马太效应</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout c-good">
+    <span class="t">判断</span>
+    2026 的规则改动把比赛从<b>「刷量竞赛」推回了「说服竞赛」</b>。这对准备充分、有测量纪律的队伍是<b>利好</b> ——
+    因为刷量是低门槛的，说服是高门槛的。
+  </div>
+
+  <h3>最大的未知，以及怎么用实验反推</h3>
+  <div class="callout c-spec" style="border-left-color:var(--warn);background:var(--warn-bg);color:#78350f">
+    <span class="t" style="color:var(--warn)">📕 决定哪套策略对的唯一关键问题</span>
+    <b>Layer 4 的观点更新，是程序化概率函数，还是 LLM 判断？</b><br>
+    · 若<b>程序化</b> → 决定因素是立场距离、重复次数、来源一致性、可见互动量（可计算特征）<br>
+    · 若 <b>LLM 判断</b> → 决定因素是框架、语气、身份共鸣、论证质量<br><br>
+    <b>我倾向程序化，但置信度只有约 65%。</b>
+  </div>
+
+  <h4>用实验主动探测，而不只是被动观察</h4>
+  <p>你可以把 Layer 4 当成一个黑盒函数来<b>主动探测</b>：</p>
+  <table>
+    <thead><tr><th style="width:130px">实验</th><th>做法</th><th>能反推出什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>接受域测绘</b></td><td>对匹配的市民队列，投放<b>立场距离递增</b>的内容（从极温和到极强烈），测各队列的立场移动</td><td><b>说服曲线的形状</b> —— 找到「推多远最有效」的最优距离</td></tr>
+      <tr><td><b>剂量反应</b></td><td>固定内容，变化重复次数（1 / 3 / 10 次）</td><td>边际效用衰减点在哪</td></tr>
+      <tr><td><b>来源一致性</b></td><td>同一论点，分别用「与其人口统计接近」和「完全不像」的 bot 发出</td><td>信使身份占多少权重</td></tr>
+      <tr><td><b>框架对照</b></td><td>同一事实，「医院容量」vs「个人自由」vs「经济」框架</td><td>哪种框架对该人群最有效</td></tr>
+      <tr><td><b>渠道对照</b></td><td>社交帖直达 vs 被记者选中后经新闻触达</td><td>新闻渠道的可信度溢价有多大</td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-good">
+    <span class="t">这五个实验就是 PREDICTIONS.md 该写的东西</span>
+    赛前把预测写下来，D1–D2 跑实验，D3 之后按结果分配预算。
+    <b>而且这套东西本身就是答辩素材</b> —— 评审是论文作者，他们会认这个。
+  </div>
+
+  <h4>落地方式：聚类代替逐人定制</h4>
+  <p>4000 个市民不可能逐人定制。所以「投其所好」在工程上的实现是：</p>
+<pre><code><span class="s">4000 NPC</span> ──► 用 40 维 profile 做聚类 ──► <span class="s">8–15 个 archetype</span>
+         ──► 每个 archetype 一套论点框架 + 一个匹配的 bot 人设
+         ──► 内容按 archetype 生产，由「像他们的」账号投递</code></pre>
+  <p>不是 4000 份定制文案，而是 <b>15 个精心匹配的（框架 × 人设）组合</b>，投给对应的市民群。
+     这同时解决了说服效率和反协同检测两个问题。</p>
+
+  <h3>一张表总结</h3>
+  <table>
+    <thead><tr><th style="width:130px">层级</th><th>投其所好的具体做法</th><th style="width:110px">置信度</th></tr></thead>
+    <tbody>
+      <tr><td><b>进信息流</b></td><td>先建关注图谱再说话；借道市民自己的帖子；在私人赛道而非公共趋势赛道竞争</td><td><span class="conf c-doc">📗 机制明确</span></td></tr>
+      <tr><td><b>过注意力</b></td><td>短、具体、生活化语言；绑定职业 / 家庭 / 经济处境，不用政策词汇</td><td><span class="conf c-inf">📙 高</span></td></tr>
+      <tr><td><b>过接受度</b></td><td><b>只推一小步</b>；从对方已认同的价值切入；对铁杆反对派直接放弃；<b>重点强化已有支持者，让他们成为传播节点</b></td><td><span class="conf c-inf">📙 高</span></td></tr>
+      <tr><td><b>触发更新</b></td><td>同论点 × 多账号 × 多说法 × 多时点；多来源一致 &gt; 单条爆款</td><td><span class="conf c-inf">📙 高</span></td></tr>
+      <tr><td><b>保持住</b></td><td>持续在场 + 后期加力；前期建受众，后期压影响</td><td><span class="conf c-doc">📗 论文明确</span></td></tr>
+      <tr><td><b>投记者所好</b></td><td>制造新闻价值：具体人物、数字、冲突、紧迫感 → 争取被专栏引用（<b>直接加分 + 一次触达 4000 人</b>）</td><td><span class="conf c-inf">📙 中高</span></td></tr>
+      <tr><td><b>避开</b></td><td>别再想用自己人互相点赞伪造共识 —— 2026 规则已封死</td><td><span class="conf c-doc">📗 规则明确</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-key">
+    <span class="t">如果只记一句</span>
+    市民大概率是被<b>「立场距离 + 重复暴露 + 来源一致性」</b>驱动的概率函数推动的，而不是被单条雄辩说服的。<br>
+    所以你要做的不是写出最好的帖子，而是<b>让合适的论点、通过像他们的账号、在他们会看到的时刻、反复出现 —— 并且最好被记者写进报纸。</b>
+  </div>
+</section>
+
+<!-- ═══════════════ 8 ═══════════════ -->
+<section id="measure">
+  <h2><span class="num">08</span>测量设计 <span style="font-size:12px;color:var(--danger);font-family:var(--mono)">← 应排在写代码之前定稿</span></h2>
+  <p class="lead">测量口径一旦定了，代码才写得对；反过来做，会漏掉关键字段。</p>
+
+  <h3>先厘清：「买账」是三件会互相背离的事</h3>
+  <table>
+    <thead><tr><th></th><th>信号</th><th>对应分数</th><th>测起来</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">(a)</td><td>互动：点赞、转发、评论</td><td>Engagement</td><td style="color:var(--good)">容易，但廉价、可刷</td></tr>
+      <tr><td class="mono">(b)</td><td><b>态度改变：立场真的挪了</b></td><td><b>Story</b></td><td style="color:var(--danger)">难，归因困难</td></tr>
+      <tr><td class="mono">(c)</td><td>投票行为</td><td>最终结果</td><td>只在结束时可见</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-danger">
+    <span class="t">2025 年绝大多数队伍死在 (a) 上</span>
+    论文原话：<i>“Because engagement was rewarded, <b>most teams prioritised high-volume posting over nuanced influence</b>.”</i><br>
+    另有 7 支队伍坦白，他们<b>主动放弃</b>了原本「连贯而微妙的影响」计划转向刷屏，因为「平台的奖励结构奖励数量而非内容质量」。<br><br>
+    而 2026 规则把 Engagement 限定为「来自模拟市民」—— <b>这几乎肯定就是主办方在堵这个漏洞。别重复他们的错误。</b>
+  </div>
+
+  <h3>归因难题与解法</h3>
+  <p>主办方的计分本身就是分摊的（见 §04-⑤），所以连他们都无法把功劳归给单条内容。解法是<b>自己造一个干净的对比</b>：</p>
+
+  <div class="box">
+    <p style="margin:0 0 8px"><b>在目标市民里，主动留出 10–15% 作为对照组，从头到尾不碰。</b>其余作为处理组高强度投入，然后比较两组的立场移动。</p>
+    <ul style="margin:0">
+      <li>牺牲一点覆盖率，换来<b>因果估计</b>：处理组移动 − 对照组移动 = 你的真实效果</li>
+      <li>人群细分：哪类市民真的会被说动</li>
+      <li>论点筛选：去掉对手与同阵营噪音后的效果对比</li>
+      <li>对照组/处理组必须按<b>初始立场与可说服度分层匹配</b>，否则比较无意义</li>
+    </ul>
+  </div>
+
+  <h3>三件赛前必须做好的事</h3>
+
+  <h4>🔴 ① 曝光日志 —— 唯一不可追溯的东西</h4>
+  <p>记录<b>哪个市民、在什么时刻、看到了我们的哪条内容</b>。论文说计分是「自市民上次状态更新以来他消费过的所有帖子」，
+     你要自己做同样的归因就必须自己维护消费记录。<b>数据一旦没记，就永久丢失。</b></p>
+<pre><code><span class="k">CREATE TABLE</span> exposure (
+  ts          <span class="k">REAL</span>,      <span class="c">-- 时刻</span>
+  citizen     <span class="k">TEXT</span>,      <span class="c">-- 哪个市民</span>
+  my_post_id  <span class="k">TEXT</span>,      <span class="c">-- 我们的哪条内容</span>
+  my_account  <span class="k">TEXT</span>,
+  channel     <span class="k">TEXT</span>,      <span class="c">-- feed / reply / repost / search</span>
+  decision_id <span class="k">TEXT</span>
+);</code></pre>
+  <p>这也决定了<b>必须优先读市民信息流</b>（<code>get_feed(citizen)</code>），而不是只读全局趋势 —— 因为你需要知道他们看到了什么。</p>
+
+  <h4>🟠 ② 预注册预测 —— 唯一能证伪自己的机制</h4>
+  <p>赛前写下判断，然后让数据打脸。否则赛后一定会把任何结果解释成「我早就知道」（事后合理化 + 多重比较）。</p>
+<pre><code><span class="c"># PREDICTIONS.md —— 赛前零成本，价值最高的准备</span>
+<span class="s">"在 35–55 岁有稳定工作的市民中，「医院容量」框架比「个人自由」
+  更能推动立场（预测效果差 &gt; 0.05 立场单位）"</span>
+
+<span class="s">"情绪强度高的帖子获得更多互动，但立场移动更少
+  （即 (a) 与 (b) 负相关）"</span>
+
+<span class="s">"引用 IHO 权威对已倾向 YES 的人有效，对 NO 阵营无效甚至反效果"</span></code></pre>
+  <p>第 2 条若成立，直接证明「刷互动 ≠ 赢公投」，你就有理由把资源从刷量转向说服。
+     而且这<b>本身就构成答辩内容</b>：「我们的赛前假设有 3 条被数据否证，据此在第 3 天调整了策略」。</p>
+
+  <h4>🟢 ③ 分布内模拟 —— 有用，但要知道边界</h4>
+  <p>论文给了 NPC 的设计规格：<b>40 维 profile</b>（年龄、性别、家庭与就业、经济状况、对争议与非争议议题的基线立场、初始政治倾向），
+     行为由<b>有限状态机</b>驱动，交互后由<b>概率更新函数</b>决定内部状态变化。</p>
+  <table>
+    <thead><tr><th>✅ 你知道</th><th>❌ 你不知道</th></tr></thead>
+    <tbody>
+      <tr><td>NPC 的 profile 维度结构</td><td><b>主办方写的 NPC prompt 长什么样</b></td></tr>
+      <tr><td>NPC 由 LLM 驱动</td><td><b>他们用哪个模型</b></td></tr>
+      <tr><td>行为是状态机 + 概率更新</td><td>概率更新函数的具体形式</td></tr>
+      <tr><td><b>两边的核心论点（设定页给了）</b></td><td><b>4000 个市民在这些论点上的分布</b></td></tr>
+    </tbody>
+  </table>
+  <p>根本问题：NPC 的反应是 <code>f(profile, 主办方 prompt, 主办方模型)</code>，你只能复制第一项。
+     <b>所以这是「你自己的市民模型」的测试，不是对他们的测试 —— 会有系统性偏差，而且你不知道偏在哪。</b></p>
+  <div class="callout c-warn">
+    <span class="t">模拟的正确用途</span>
+    不是「验证内容有效」，而是<b>发现明显的蠢错误</b>：消息有没有歧义、会不会被误读成相反立场、人设语气是否可信、有没有踩平台规则。<br>
+    过滤掉明显坏的内容它是可靠的；判断「哪个论点更强」它不可靠。
+  </div>
+
+  <h3>开赛后：24–48 小时才是真正的测量窗口</h3>
+  <table>
+    <thead><tr><th>阶段</th><th>目标</th><th>动作</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">D1–D2</td><td>建基线与对照</td><td>大量 OBSERVE、少量 PUBLISH、测市民分布、验证预注册预测</td></tr>
+      <tr><td class="mono">D3–D5</td><td>论点筛选</td><td>小样本对照实验排出论点效果，砍掉无效的</td></tr>
+      <tr><td class="mono">D6–D11</td><td>集中利用</td><td>把<b>被验证</b>的东西规模化</td></tr>
+      <tr><td class="mono">D12–D14</td><td>冲刺</td><td>论文：越接近投票日权重越高 → 影响力压在这里</td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-key">
+    <span class="t">方法与分数天然对齐</span>
+    因为后期权重更高，<b>早期的探索是「便宜」的，后期的利用是「值钱」的</b>。
+    所以「先学习后利用」不只是方法论正确，在分数上也是最优的。
+  </div>
+  <div class="callout c-warn">
+    <span class="t">两个注意事项</span>
+    <b>1.</b> 别用账号额度去探索 —— 探索成本应主要是读取额度和少量内容覆盖，不要为测效果把 40 个账号的身份可信度烧掉。<br>
+    <b>2.</b> 别信每周民调 —— 2025 是「随机抽样 357 个 NPC（95% CI）」，4000 里抽 357 分辨率很粗，小效果看不见。
+    要<b>直接追踪目标市民个体立场</b>（从他们自己发的帖子推断），这正是 Jev <code>Score</code> 的另一个用途。
+  </div>
+</section>
+
+<!-- ═══════════════ 9 ═══════════════ -->
+<section id="degrade">
+  <h2><span class="num">09</span>降级策略</h2>
+  <p class="lead">两周运行，每个外部依赖都会挂。这张表比功能清单更重要。</p>
+
+  <table>
+    <thead><tr><th>故障</th><th>降级策略</th></tr></thead>
+    <tbody>
+      <tr><td><b>Jev API 挂了</b></td><td>回落到保守规则引擎，只做高置信度的明显动作，<b>不冒险</b></td></tr>
+      <tr><td><b>平台返回 429</b></td><td>令牌桶自动降速；<b>优先砍读取，保护写入</b></td></tr>
+      <tr><td><b>LLM 超时</b></td><td>回落到 RAG 模板 + 人设改写</td></tr>
+      <tr><td><b>账号被封</b></td><td>池子摘除、重新分配，管线不中断</td></tr>
+      <tr><td><b>进程崩溃</b></td><td>systemd 拉起，从 sqlite 恢复</td></tr>
+      <tr><td><b>预算耗尽</b></td><td>感知循环自动提高筛选门槛，只读「极可能产生动作」的内容</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-key">
+    <span class="t">核心原则</span>
+    <b>宁可少做，不可乱做。</b> 乱做的代价（封号、规则违规）是不可逆的，少做的代价只是少得分。
+  </div>
+</section>
+
+<!-- ═══════════════ 10 ═══════════════ -->
+<section id="phases">
+  <h2><span class="num">10</span>建设顺序</h2>
+  <p class="lead">顺序本身反映依赖关系。阶段 1–3 与官方 API 形状<b>完全无关</b> —— 这就是「别干等」的具体含义。</p>
+
+  <div class="phase">
+    <div class="idx">1</div>
+    <div><b>地基</b> · <code>config</code> + <code>models</code> + <code>state</code> (含 exposure 表) + <code>telemetry</code></div>
+    <div class="st"><span class="dot g"></span>现在就能做</div>
+  </div>
+  <div class="phase">
+    <div class="idx">2</div>
+    <div><b>限速与预算</b> · <code>ratelimit</code> 双层令牌桶 + 账本<br>
+      <span style="font-size:13px;color:var(--muted)">最容易做错、最不能出错，且与 API 无关</span></div>
+    <div class="st"><span class="dot g"></span>现在就能做</div>
+  </div>
+  <div class="phase">
+    <div class="idx">3</div>
+    <div><b>平台边界</b> · <code>client/base</code> + <code>client/mock</code><br>
+      <span style="font-size:13px;color:var(--muted)">有了 mock 才能端到端跑，官方模板不再是阻塞项</span></div>
+    <div class="st"><span class="dot g"></span>现在就能做</div>
+  </div>
+  <div class="phase">
+    <div class="idx">4</div>
+    <div><b>智力核心</b> · <code>jev/questions</code> + <code>jev/client</code><br>
+      <span style="font-size:13px;color:var(--muted)">问题集决定上限；批量大小要靠 mock 数据测准确率曲线</span></div>
+    <div class="st"><span class="dot g"></span>现在就能做</div>
+  </div>
+  <div class="phase">
+    <div class="idx">5</div>
+    <div><b>内容与安全</b> · <code>guard</code> + <code>rag</code> + <code>llm</code><br>
+      <span style="font-size:13px;color:var(--muted)">含多样性守卫与两库物理隔离</span></div>
+    <div class="st"><span class="dot g"></span>现在就能做</div>
+  </div>
+  <div class="phase">
+    <div class="idx">6</div>
+    <div><b>串起来</b> · <code>pipeline/perceive</code> + <code>decide</code> + <code>act</code></div>
+    <div class="st"><span class="dot g"></span>现在就能做</div>
+  </div>
+  <div class="phase">
+    <div class="idx">7</div>
+    <div><b>上线</b> · <code>main</code> + systemd + <code>deploy.sh</code> + 优雅关闭</div>
+    <div class="st"><span class="dot y"></span>开赛前</div>
+  </div>
+  <div class="phase">
+    <div class="idx">8</div>
+    <div><b>真适配器</b> · <code>client/legit_v1.py</code><br>
+      <span style="font-size:13px;color:var(--muted)">等官方模板到了再写 —— 只改这一个文件</span></div>
+    <div class="st"><span class="dot r"></span>等官方</div>
+  </div>
+
+  <h3>部署形态</h3>
+<pre><code><span class="c"># 目录切分：代码归 git，状态与密钥绝不进 git</span>
+/opt/ctn/
+├── app/     <span class="c">← git 仓库，只有代码</span>
+├── state/   <span class="c">← sqlite / checkpoint / exposure（单独备份）</span>
+├── logs/    <span class="c">← JSONL 遥测</span>
+└── .env     <span class="c">← 权限 600</span>
+
+<span class="c"># systemd 守护（不用 tmux：两周运行一定会崩，必须自动拉起）</span>
+Restart=always
+RestartSec=5
+
+<span class="c"># .gitignore 必须挡住的：</span>
+.env  *.db  *.sqlite  state/  logs/  keys/  materials/</code></pre>
+  <div class="callout c-danger">
+    <span class="t">git 相关违规风险</span>
+    规则 <b>5.6</b>：绝不能把比赛 API key 泄漏到队伍外 → 硬编码后 push 就是违规，删掉也没用（历史里还在）。<br>
+    规则 <b>5.2</b>：不能把比赛材料（规则 PDF、简报、Discord 截图）提交进可能变公开的仓库。<br>
+    <b>比赛期间仓库必须私有</b> —— 公开你的代码等于把策略白送给 41 支对手。
+  </div>
+</section>
+
+<!-- ═══════════════ 11 ═══════════════ -->
+<section id="open">
+  <h2><span class="num">11</span>待确认事项</h2>
+  <p class="lead">这些不阻塞开发（阶段 1–6 可以先做），但会改变参数与容量规划。</p>
+
+  <table>
+    <thead><tr><th>#</th><th>问题</th><th>为什么重要</th><th>影响</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">1</td>
+        <td><b>2026 每队能开多少账号？</b></td>
+        <td>2025 是 <b>41 个</b>（1 主 + 40 bot），2026 数字未公布</td>
+        <td>账号池容量、并发度</td>
+      </tr>
+      <tr>
+        <td class="mono">2</td>
+        <td><b>平台限速的确切数字？读写是否分开计？</b></td>
+        <td>2025 反推每队约 0.61 req/s，但只是均值</td>
+        <td><code>RateConfig</code> 全部默认值</td>
+      </tr>
+      <tr>
+        <td class="mono">3</td>
+        <td><b>Python 模板与 API 文档何时、在哪里发布？</b></td>
+        <td>决定阶段 8 何时能开始</td>
+        <td>进度排期</td>
+      </tr>
+      <tr>
+        <td class="mono">4</td>
+        <td><b>开赛前是否有 sandbox / 练习环境？</b></td>
+        <td>若有，§08-③ 分布内模拟的局限大幅减弱</td>
+        <td>校准质量</td>
+      </tr>
+      <tr>
+        <td class="mono">5</td>
+        <td><b>外部非生成式模型（如 Jev 这类分类/决策模型）是否落在规则 5.1 的例外内？</b></td>
+        <td>5.1 的例外措辞是 <i>“external AI models for <b>creative content generation</b>”</i>，
+            而 Jev 不生成创意内容</td>
+        <td>架构合规性</td>
+      </tr>
+      <tr>
+        <td class="mono">6</td>
+        <td><b>官方提供 LLM 的配额、限速与费用？</b></td>
+        <td>规则只说「可以使用」，未说明配额</td>
+        <td>生成层选型</td>
+      </tr>
+      <tr>
+        <td class="mono">7</td>
+        <td><b>NPC 的观点更新是程序化概率函数，还是 LLM 判断？</b><br>
+            <span style="font-size:12.5px;color:var(--muted)">（不指望得到直接答复，但可以问「NPC 的行为文档是否会提供」）</span></td>
+        <td>§07 的最大未知，决定「可计算特征」还是「框架措辞」更有效</td>
+        <td>整个内容策略的取向</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-good">
+    <span class="t">提问渠道</span>
+    Discord <code>#questions</code> 是唯一正式渠道；伦理问题联系 <code>rahat.masood@unsw.edu.au</code>。
+    另外注意：2026 规则页仍带 2025 残留内容（颁奖页明确标注为 placeholder，规则 7.3/7.4 仍写 31 Oct 2025）——
+    <b>日期安排以 Discord 公告和社区门户为准。</b>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  CTN 2026 架构设计 · 生成于 2026-10-07 · 参赛周期 2026-10-19 → 2026-11-02<br>
+  依据：官方 2026 规则 v1.0.0 / 设定页，以及主办方论文 arXiv:2607.23993（2025 技术规格与赛果数据）<br>
+  <span style="font-size:12px">§07 中的 📗/📙/📕 分级用于区分「论文明说」与「本人推断」，请勿将推断当作事实使用</span>
+</footer>
+
+</body>
+</html>
