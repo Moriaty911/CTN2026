@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTN 2026 · Project Architecture Design</title>
+<style>
+  :root{
+    --bg:#fafaf9; --panel:#fff; --ink:#1c1917; --muted:#57534e; --faint:#a8a29e;
+    --line:#e7e5e4; --line-strong:#d6d3d1;
+    --accent:#0f766e; --accent-bg:#f0fdfa; --accent-line:#99f6e4;
+    --warn:#b45309; --warn-bg:#fffbeb; --warn-line:#fde68a;
+    --danger:#b91c1c; --danger-bg:#fef2f2; --danger-line:#fecaca;
+    --good:#15803d; --good-bg:#f0fdf4; --good-line:#bbf7d0;
+    --code-bg:#1c1917; --code-ink:#e7e5e4; --code-dim:#a8a29e;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:15.5px; line-height:1.72; -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- layout ---------- */
+  header.top{
+    background:linear-gradient(180deg,#0f766e 0%,#115e59 100%);
+    color:#f0fdfa; padding:34px 24px 30px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  header.top h1{margin:0 0 6px; font-size:28px; letter-spacing:-.3px}
+  header.top .sub{opacity:.82; font-size:14.5px}
+  header.top .meta{margin-top:16px; display:flex; gap:10px; flex-wrap:wrap}
+  .chip{
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22);
+    padding:4px 11px; border-radius:99px; font-size:12.5px; font-family:var(--mono);
+  }
+
+  nav.toc{
+    position:sticky; top:0; z-index:20; background:rgba(250,250,249,.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    padding:9px 24px; overflow-x:auto; white-space:nowrap;
+  }
+  nav.toc a{
+    color:var(--muted); text-decoration:none; font-size:13px; margin-right:16px;
+    padding:3px 0; border-bottom:2px solid transparent; display:inline-block;
+  }
+  nav.toc a:hover{color:var(--accent); border-bottom-color:var(--accent-line)}
+
+  main{max-width:1080px; margin:0 auto; padding:30px 24px 90px}
+  section{margin:0 0 46px; scroll-margin-top:56px}
+  h2{
+    font-size:21px; margin:0 0 6px; letter-spacing:-.2px;
+    padding-bottom:9px; border-bottom:2px solid var(--line);
+  }
+  h2 .num{
+    font-family:var(--mono); font-size:13px; color:var(--accent);
+    background:var(--accent-bg); border:1px solid var(--accent-line);
+    padding:1px 7px; border-radius:5px; margin-right:9px; vertical-align:2px;
+  }
+  h3{font-size:16.5px; margin:26px 0 8px}
+  h4{font-size:14.5px; margin:18px 0 6px; color:var(--muted)}
+  p{margin:9px 0}
+  .lead{color:var(--muted); font-size:14.5px; margin-bottom:18px}
+  ul,ol{margin:9px 0; padding-left:22px}
+  li{margin:5px 0}
+  code{
+    font-family:var(--mono); font-size:.885em; background:#f5f5f4;
+    border:1px solid var(--line); padding:1px 5px; border-radius:4px;
+  }
+  pre{
+    background:var(--code-bg); color:var(--code-ink); padding:15px 17px;
+    border-radius:var(--r); overflow-x:auto; font-family:var(--mono);
+    font-size:12.8px; line-height:1.62; margin:12px 0;
+  }
+  pre code{background:none;border:none;padding:0;color:inherit;font-size:inherit}
+  pre .c{color:#78716c}      /* comment */
+  pre .k{color:#5eead4}      /* keyword */
+  pre .s{color:#fcd34d}      /* string */
+  pre .f{color:#93c5fd}      /* function */
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14px}
+  th,td{border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top}
+  th{background:#f5f5f4; font-weight:600; font-size:13px; color:var(--muted)}
+  tbody tr:nth-child(even){background:#fcfcfb}
+  td.mono,th.mono{font-family:var(--mono); font-size:12.5px}
+
+  .box{border:1px solid var(--line); background:var(--panel); border-radius:var(--r); padding:15px 18px; margin:14px 0}
+  .callout{border-left:4px solid; border-radius:0 var(--r) var(--r) 0; padding:13px 17px; margin:15px 0; font-size:14.5px}
+  .callout .t{font-weight:700; display:block; margin-bottom:4px; font-size:13.5px; letter-spacing:.2px}
+  .c-key{background:var(--accent-bg); border-color:var(--accent); color:#134e4a}
+  .c-key .t{color:var(--accent)}
+  .c-warn{background:var(--warn-bg); border-color:var(--warn); color:#78350f}
+  .c-warn .t{color:var(--warn)}
+  .c-danger{background:var(--danger-bg); border-color:var(--danger); color:#7f1d1d}
+  .c-danger .t{color:var(--danger)}
+  .c-good{background:var(--good-bg); border-color:var(--good); color:#14532d}
+  .c-good .t{color:var(--good)}
+
+  /* ---------- pipeline diagram ---------- */
+  .flow{margin:20px 0}
+  .stage{
+    border:1px solid var(--line-strong); background:var(--panel);
+    border-radius:var(--r); padding:0; overflow:hidden;
+    display:grid; grid-template-columns:186px 1fr; align-items:stretch;
+  }
+  .stage .tag{
+    background:#f5f5f4; border-right:1px solid var(--line);
+    padding:13px 15px; font-family:var(--mono); font-size:12.5px;
+    font-weight:600; color:var(--ink); display:flex; flex-direction:column; gap:5px;
+  }
+  .stage .tag .badge{
+    font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:99px;
+    align-self:flex-start; font-family:var(--sans); letter-spacing:.2px;
+  }
+  .b-read{background:var(--accent-bg); color:var(--accent); border:1px solid var(--accent-line)}
+  .b-write{background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger-line)}
+  .b-free{background:var(--good-bg); color:var(--good); border:1px solid var(--good-line)}
+  .b-store{background:#f5f5f4; color:var(--muted); border:1px solid var(--line-strong)}
+  .stage .body{padding:13px 16px; font-size:14px}
+  .stage .body b{font-size:14.5px}
+  .stage .body ul{margin:7px 0 0; padding-left:19px; color:var(--muted); font-size:13.5px}
+  .stage .body li{margin:2px 0}
+  .arrow{
+    text-align:center; color:var(--faint); font-family:var(--mono); font-size:12px;
+    padding:7px 0; line-height:1.35;
+  }
+  .arrow .lbl{color:var(--muted); background:var(--bg); padding:0 8px}
+  .side-note{
+    font-family:var(--mono); font-size:11.5px; color:var(--muted);
+    background:#f5f5f4; border:1px dashed var(--line-strong); border-radius:6px;
+    padding:7px 11px; margin:8px 0 8px 200px;
+  }
+
+  /* ---------- ladder ---------- */
+  .ladder{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0}
+  .rung{border:1px solid var(--line); border-radius:var(--r); background:var(--panel); overflow:hidden}
+  .rung .hd{padding:10px 13px; font-weight:700; font-size:14px; border-bottom:1px solid var(--line)}
+  .rung .bd{padding:11px 13px; font-size:13.3px; color:var(--muted)}
+  .rung.r0 .hd{background:#f5f5f4}
+  .rung.r1 .hd{background:var(--accent-bg); color:var(--accent)}
+  .rung.r2 .hd{background:var(--danger-bg); color:var(--danger)}
+  .score{display:inline-block; font-family:var(--mono); font-size:11px; padding:1px 6px; border-radius:4px; margin-top:7px}
+  .score.s-story{background:var(--accent-bg); color:var(--accent); border:1px solid var(--accent-line)}
+  .score.s-eng{background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger-line)}
+  .score.s-none{background:#f5f5f4; color:var(--faint); border:1px solid var(--line-strong)}
+
+  /* ---------- confidence markers ---------- */
+  .conf{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;white-space:nowrap;font-weight:600}
+  .c-doc{background:var(--good-bg);color:var(--good);border:1px solid var(--good-line)}
+  .c-inf{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-line)}
+  .c-spec{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
+
+  /* ---------- layer stack ---------- */
+  .layers{border:1px solid var(--line-strong);border-radius:var(--r);overflow:hidden;margin:16px 0}
+  .layer{display:grid;grid-template-columns:206px 1fr;border-bottom:1px solid var(--line);font-size:14px}
+  .layer:last-child{border-bottom:none}
+  .layer .lh{background:#f5f5f4;padding:12px 14px;border-right:1px solid var(--line);font-weight:600;font-size:13.3px}
+  .layer .lh .sub{display:block;font-weight:400;color:var(--muted);font-size:11.8px;font-family:var(--mono);margin-top:4px;line-height:1.5}
+  .layer .lb{padding:12px 15px;background:var(--panel)}
+  .layer .lb ul{margin:4px 0 0;padding-left:19px;color:var(--muted);font-size:13.3px}
+  .layer .lb li{margin:2px 0}
+  .layer.hot .lh{background:#fee2e2;color:var(--danger)}
+  .layer.hot .lb{background:var(--danger-bg)}
+
+  /* ---------- gates ---------- */
+  .gates{margin:16px 0;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .gate{display:grid;grid-template-columns:48px 1fr 196px;border-bottom:1px solid var(--line);background:var(--panel);font-size:14px}
+  .gate:last-child{border-bottom:none}
+  .gate > div{padding:11px 14px;border-right:1px solid var(--line)}
+  .gate > div:last-child{border-right:none;font-size:13px;display:flex;align-items:center}
+  .gate .gn{text-align:center;font-family:var(--mono);font-weight:700;background:#fafaf9;color:var(--accent);font-size:15px}
+  .gate .gt b{font-size:14.5px}
+  .gate .gd{color:var(--muted);font-size:13.3px;margin-top:3px}
+  .heat{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-family:var(--mono);color:var(--muted)}
+  .heat .bars{display:inline-flex;gap:2px}
+  .heat .bar{width:9px;height:9px;border-radius:2px;background:var(--line-strong)}
+  .heat .bar.on{background:var(--danger)}
+
+  /* ---------- audience split ---------- */
+  .aud{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+  .aud .a{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:14px 16px}
+  .aud .a h4{margin:0 0 7px;font-size:14.5px;color:var(--ink)}
+  .aud .a.n{background:#fafaf9}
+  .aud .a.s{border-color:var(--accent-line);background:var(--accent-bg)}
+
+  /* ---------- module tree ---------- */
+  .tree{background:var(--code-bg); color:var(--code-ink); border-radius:var(--r); padding:17px 19px;
+        font-family:var(--mono); font-size:12.6px; line-height:1.75; overflow-x:auto}
+  .tree .d{color:#5eead4}
+  .tree .n{color:#e7e5e4}
+  .tree .a{color:#78716c}
+  .tree .now{color:#86efac}
+  .tree .later{color:#fcd34d}
+
+  /* ---------- phases ---------- */
+  .phase{display:grid; grid-template-columns:64px 1fr 132px; border:1px solid var(--line);
+         border-bottom:none; background:var(--panel); font-size:14px}
+  .phase:first-child{border-radius:var(--r) var(--r) 0 0}
+  .phase:last-child{border-bottom:1px solid var(--line); border-radius:0 0 var(--r) var(--r)}
+  .phase > div{padding:11px 14px; border-right:1px solid var(--line)}
+  .phase > div:last-child{border-right:none}
+  .phase .idx{font-family:var(--mono); font-weight:700; color:var(--accent); text-align:center; background:#fafaf9}
+  .phase .st{font-size:12px; font-family:var(--mono); display:flex; align-items:center; gap:5px}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none}
+  .dot.g{background:var(--good)} .dot.y{background:var(--warn)} .dot.r{background:var(--danger)}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:820px){
+    .grid2,.ladder,.aud{grid-template-columns:1fr}
+    .stage{grid-template-columns:1fr}
+    .stage .tag{border-right:none; border-bottom:1px solid var(--line); flex-direction:row; align-items:center; flex-wrap:wrap}
+    .side-note{margin-left:0}
+    .phase{grid-template-columns:52px 1fr}
+    .phase .st{grid-column:2; border-top:1px dashed var(--line)}
+    .phase > div{border-right:none}
+    .layer{grid-template-columns:1fr}
+    .layer .lh{border-right:none;border-bottom:1px solid var(--line)}
+    .gate{grid-template-columns:48px 1fr}
+    .gate > div{border-right:none}
+    .gate > div:last-child{grid-column:2;border-top:1px dashed var(--line)}
+  }
+  footer{border-top:1px solid var(--line); padding:22px 24px 40px; color:var(--faint); font-size:13px; text-align:center}
+  @media print{
+    nav.toc{display:none} header.top{background:#115e59!important;-webkit-print-color-adjust:exact}
+    section{page-break-inside:avoid} pre{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <h1>CTN 2026 · Project Architecture Design</h1>
+    <div class="sub">Capture the Narrative 2026 — “Can you rule the referendum?”<br>
+      Kingstonia H2D2 Dolphin Flu Referendum · Social Media Consultancy Simulation</div>
+    <div class="meta">
+      <span class="chip">Competition 2026-10-19 → 2026-11-02</span>
+      <span class="chip">Today 2026-10-07 · T−12 days</span>
+      <span class="chip">Python 3.13</span>
+      <span class="chip">Team: 1–4 members</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#premise">Design Premise</a>
+    <a href="#arch">Overall Architecture</a>
+    <a href="#modules">Module Map</a>
+    <a href="#decisions">Key Decisions</a>
+    <a href="#jev">Jev Funnel</a>
+    <a href="#ladder">Action Ladder</a>
+    <a href="#citizens">Simulated Citizens</a>
+    <a href="#measure">Measurement Design</a>
+    <a href="#degrade">Fallback Strategies</a>
+    <a href="#phases">Build Order</a>
+    <a href="#open">Open Questions</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ═══════════════ 1 ═══════════════ -->
+<section id="premise">
+  <h2><span class="num">01</span>Design Premise: Two Scarce Resources, Not One</h2>
+  <p class="lead">Almost every bot architecture assumes that compute is the bottleneck and focuses on saving tokens. That assumption is wrong for this competition.</p>
+
+  <table>
+    <thead><tr><th>Resource</th><th>Scarcity</th><th>Basis</th><th>Can Money Buy More?</th></tr></thead>
+    <tbody>
+      <tr><td><b>Platform Read Budget</b></td><td class="mono" style="color:var(--danger)">Very scarce</td><td>Estimated from public 2025 data: per team ≈  <b>0.61 req/s</b> (reads + writes combined)</td><td style="color:var(--danger)"><b>❌ Not purchasable</b></td></tr>
+      <tr><td><b>Platform Write Budget</b></td><td class="mono" style="color:var(--danger)">Scarcest</td><td>In 2025, only about  <b>11.4%</b>  of requests were posts (7.07M posts / 62M requests)</td><td style="color:var(--danger)"><b>❌ Not purchasable</b></td></tr>
+      <tr><td><b>Jev Inference</b></td><td class="mono" style="color:var(--good)">Abundant</td><td>$0.042 / 1M tokens; free output; external API calls  <b>do not consume the platform rate limit</b></td><td style="color:var(--good)"><b>✅ Buy freely</b></td></tr>
+      <tr><td><b>LLM Generation</b></td><td class="mono" style="color:var(--good)">Abundant</td><td>External models explicitly permitted (Rules 5.1 / 5.2)</td><td style="color:var(--good)"><b>✅ Purchasable</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-key">
+    <span class="t">The Entire Point of the Design</span>
+    <b>Convert scarce platform reads into high-value platform writes.</b><br>
+    Jev is the only abundant resource between the two. It is not a money-saving filter, but <b>judgment we can afford</b>. Use it generously, rather than sparingly.
+  </div>
+
+  <h3>One Hard Rule</h3>
+  <div class="box">
+    <p style="margin:0"><b>Only the adapters in  <code>client/</code>  may access the platform.<br>
+    Only  <code>act.py</code> may initiate write actions.</b></p>
+    <p style="margin:9px 0 0;color:var(--muted);font-size:14px">Break this rule and the rate-limit guarantee fails; the cost is an account ban. Accounts are expendable, but replacements need to be established again.</p>
+  </div>
+</section>
+
+<!-- ═══════════════ 2 ═══════════════ -->
+<section id="arch">
+  <h2><span class="num">02</span>Overall Architecture</h2>
+  <p class="lead">A three-stage pipeline + two side resources + one authoritative state store. Arrows show what passes between stages and whether it is trusted.</p>
+
+  <div class="flow">
+
+    <div class="stage">
+      <div class="tag">
+        Perceive
+        <span class="badge b-read">Uses read budget</span>
+      </div>
+      <div class="body">
+        <b>Budget-Aware Perception Loop</b>
+        <ul>
+          <li>Prioritize trends / selected citizen feeds / mentions instead of polling the entire timeline</li>
+          <li>Deduplicate with a local cache: repeated analysis does not call the platform again</li>
+          <li>Automatically raise the selection threshold as read pressure increases (<code>read_pressure</code>)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">↓ <span class="lbl">Raw content: always treated as untrusted data</span></div>
+
+    <div class="stage">
+      <div class="tag">
+        Decide
+        <span class="badge b-free">Abundant Jev capacity</span>
+      </div>
+      <div class="body">
+        <b>Two-Stage Jev Funnel → Action Allocation</b>
+        <ul>
+          <li><b>Stage A: Batch Triage</b>: process N posts per request (1 state × N questions, evaluated in parallel internally)</li>
+          <li><b>Stage B: Per-Post Deep Evaluation</b>: run ~10 independent judgments only on surviving candidates</li>
+          <li>Route to action tiers according to which score an action buys, not whether it is expensive</li>
+          <li>Narrowcasting: prioritize persuadable citizens where our share of their feed is low</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="side-note">Side resource: trusted talking-point library (closed corpus) → arguments / facts / personas only; <b>never accepts platform content</b></div>
+
+    <div class="arrow">↓ <span class="lbl">Decision (including full Jev probabilities and confidence)</span></div>
+
+    <div class="stage">
+      <div class="tag">
+        Guard
+        <span class="badge b-free">Jev guardrails</span>
+      </div>
+      <div class="body">
+        <b>Pre-Publication Compliance + Inbound Isolation</b>
+        <ul>
+          <li>Check drafts with Jev: <code>rule_risk</code> / <code>hate</code> / <code>impersonation</code> → ALLOW / FLAG / BLOCK</li>
+          <li>Detect injection in inbound content <b>before it enters the LLM</b> (otherwise it is too late)</li>
+          <li>Diversity guard: too similar to our team's recent content → rewrite</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">↓ <span class="lbl">Approved Action</span></div>
+
+    <div class="stage">
+      <div class="tag">
+        Act
+        <span class="badge b-write">Uses write budget</span>
+      </div>
+      <div class="body">
+        <b>Two-Level Token Buckets → Execute → Record</b>
+        <ul>
+          <li>Team-level bucket + account-level bucket; <b>reads and writes fully separated</b></li>
+          <li>429 → automatically slow down; cut reads first to <b>protect writes</b></li>
+          <li>Account banned → remove from pool and reallocate without stopping the pipeline</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <div class="stage">
+      <div class="tag">
+        State + Telemetry
+        <span class="badge b-store">Local</span>
+      </div>
+      <div class="body">
+        <b>sqlite (synchronous) + JSONL</b>
+        <ul>
+          <li>Single authoritative state: resume after interruption, exposure logs, budget ledger</li>
+          <li>Record full Jev probabilities for each decision → input for feedback-driven calibration</li>
+          <li>Also the evidence base for the 7-minute Sydney presentation</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="callout c-warn">
+    <span class="t">Why Split the Pipeline into Three Stages?</span>
+    The three latencies span two orders of magnitude: platform 100–200ms, Jev 70–500ms, LLM generation  <b>1–5s</b>. In a single-threaded read → judge → generate → publish loop, 
+    <b>a 3-second LLM call stalls the entire perception pipeline</b> — and a 3-second stall during a trend window means missing that window. Decouple the three stages with asyncio queues; <b>queues are not persisted as state</b>, but rebuilt from sqlite on restart.
+  </div>
+</section>
+
+<!-- ═══════════════ 3 ═══════════════ -->
+<section id="modules">
+  <h2><span class="num">03</span>Module Map</h2>
+  <p class="lead">Colors distinguish what we can build now from what must wait for the official template: a concrete way to avoid waiting idle.</p>
+
+<pre class="tree"><span class="d">ctn/</span>
+├── <span class="now">config.py</span>        <span class="a"># Configuration and secrets: the only place that reads environment variables (Rule 5.6)</span>
+├── <span class="now">models.py</span>        <span class="a"># Domain types: Account / Post / Persona / Decision / Tier</span>
+├── <span class="now">telemetry.py</span>     <span class="a"># Structured logs (JSONL) → calibration data + presentation evidence</span>
+├── <span class="now">ratelimit.py</span>     <span class="a"># Two-level token buckets + budget ledger ← easiest to get wrong, most critical to get right</span>
+├── <span class="now">state.py</span>         <span class="a"># sqlite persistence / restart recovery / exposure logs</span>
+├── <span class="now">accounts.py</span>      <span class="a"># Account pool: health, establishment, throttling, retirement</span>
+│
+├── <span class="d">client/</span>          <span class="a"># ←── Platform boundary: the only place allowed to access the platform</span>
+│   ├── <span class="now">base.py</span>      <span class="a"># LegitClient Protocol (action set confirmed in the paper)</span>
+│   ├── <span class="now">mock.py</span>      <span class="a"># Mock platform: runnable today; stress-test limits / bans / drift</span>
+│   └── <span class="later">legit_v1.py</span>  <span class="a"># Real adapter ← build when the official template arrives; change only this file</span>
+│
+├── <span class="d">jev/</span>
+│   ├── <span class="now">questions.py</span> <span class="a"># Question set ← reasoning core; determines the performance ceiling</span>
+│   └── <span class="now">client.py</span>    <span class="a"># Fan-out batching + retries + fallback</span>
+│
+├── <span class="d">rag/</span>
+│   ├── <span class="now">store.py</span>     <span class="a"># Trusted talking-point library (closed corpus, physically isolated from observations)</span>
+│   └── <span class="now">personas.py</span>  <span class="a"># Persona voice specifications + diversity guard</span>
+│
+├── <span class="d">llm/</span>
+│   ├── <span class="now">base.py</span>      <span class="a"># Generator Protocol</span>
+│   └── <span class="now">provider.py</span>  <span class="a"># External LLM adapter</span>
+│
+├── <span class="now">guard.py</span>         <span class="a"># Pre-publication guardrails + inbound injection isolation</span>
+│
+├── <span class="d">pipeline/</span>
+│   ├── <span class="now">perceive.py</span>  <span class="a"># Read: budget-aware perception loop</span>
+│   ├── <span class="now">decide.py</span>    <span class="a"># Jev funnel → action allocation policy</span>
+│   └── <span class="now">act.py</span>       <span class="a"># Write: guardrails → rate limits → execute → record (single write exit)</span>
+│
+└── <span class="now">main.py</span>          <span class="a"># Orchestration + graceful shutdown (persist on SIGTERM)</span>
+
+<span class="a">Outside the repository (never in git):</span>
+<span class="d">state/</span>  <span class="a"># sqlite, checkpoints, exposure logs</span>
+<span class="d">logs/</span>   <span class="a"># JSONL telemetry</span>
+<span class="d">.env</span>    <span class="a"># Secrets (permissions 600)</span>
+
+<span class="now">■ Green = independent of the official API shape; can be finished now with no rework</span>
+<span class="later">■ Yellow = must wait for the official template</span></pre>
+</section>
+
+<!-- ═══════════════ 4 ═══════════════ -->
+<section id="decisions">
+  <h2><span class="num">04</span>Key Design Decisions</h2>
+
+  <h3>① Use sqlite for State, Synchronously</h3>
+  <p>At 0.61 req/s, an asynchronous database adds <b>complexity with no benefit: just another source of failure</b>. Use the standard-library  <code>sqlite3</code> with WAL mode and short transactions. The main flow is async, but blocking for a few milliseconds at this load is acceptable.</p>
+  <table>
+    <thead><tr><th class="mono">Table</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">accounts</td><td>Account pool + health status + establishment progress</td></tr>
+      <tr><td class="mono">posts_seen</td><td>Deduplication + local cache (avoid repeated reads)</td></tr>
+      <tr><td class="mono">decisions</td><td>Every decision + full Jev probabilities and confidence</td></tr>
+      <tr><td class="mono">actions</td><td>Execution results</td></tr>
+      <tr><td class="mono">exposure</td><td><b>Which citizen saw which of our content, and when</b>  ← cannot be reconstructed later; required on Day 1</td></tr>
+      <tr><td class="mono">targets</td><td>Target citizens + estimated feed share + control-group flags</td></tr>
+      <tr><td class="mono">budget</td><td>Request ledger (continue counting after restart)</td></tr>
+    </tbody>
+  </table>
+  <p><b>Restart recovery is a requirement, not a bonus</b> — a process running continuously for two weeks will crash.</p>
+
+  <h3>② Accounts Are Expendable and Must Be Established Early</h3>
+  <p>Platform Rule LS.5.1: rate limits  <i>“varies by trust signals and recent activity”</i>. Therefore <b>new accounts have lower quotas</b>  → create and establish accounts now, rather than waiting for the competition.</p>
+<pre><code><span class="k">class</span> <span class="f">AccountStatus</span>(Enum):
+    ACTIVE     = <span class="s">"active"</span>      <span class="c"># Healthy</span>
+    THROTTLED  = <span class="s">"throttled"</span>   <span class="c"># Throttled: retain, but reduce frequency</span>
+    SUSPENDED  = <span class="s">"suspended"</span>   <span class="c"># Isolate; probe after cooldown</span>
+    RETIRED    = <span class="s">"retired"</span>     <span class="c"># Retired; never use again</span></code></pre>
+  <p>Independent token buckets per account: one throttled account must not slow down the whole team.</p>
+
+  <h3>③ All Inbound Content Is Untrusted (a Real Attack Surface)</h3>
+  <p>Rule 5.2  <b>explicitly permits</b> opponents to inject prompts into our agents. Two defenses are needed, and their placement matters:</p>
+  <table>
+    <thead><tr><th>Store</th><th>Content</th><th>Trust Level</th><th>May Act as Instructions?</th></tr></thead>
+    <tbody>
+      <tr><td><b>Trusted Store</b></td><td>Our own arguments, factual anchors, and personas</td><td style="color:var(--good)">Trusted</td><td style="color:var(--good)">Yes</td></tr>
+      <tr><td><b>Observation Store</b></td><td>Posts / comments / news collected from the platform</td><td style="color:var(--danger)"><b>Untrusted</b></td><td style="color:var(--danger)"><b>Never</b></td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-danger">
+    <span class="t">RAG Poisoning Is a Path the 2025 Teams Probably Did Not Defend</span>
+    If observations can be retrieved into the generation context, an opponent can write text <b>specifically designed to be retrieved</b> and hijack generation. The contamination happens at the <b>retrieval layer</b>, invisible at the input layer. The two stores must be physically isolated.
+  </div>
+
+  <h3>④ RAG Stores Arguments + Personas, Not Verbatim Scripts</h3>
+  <p>Platform Rule LS.5.3 prohibits  <i>“coordinated inauthentic behaviour … repetitive low-quality posting”</i>, and there is a <b>double risk</b>: several consultancies serve your side; identical supplied scripts would compete for the same attention.</p>
+<pre><code>TALKING_POINTS = {
+  <span class="s">"yes"</span>: { <span class="s">"arguments"</span>: [...],      <span class="c"># Five core arguments</span>
+           <span class="s">"rebuttals"</span>: {...},      <span class="c"># Responses to opposing arguments</span>
+           <span class="s">"fact_anchors"</span>: [...],   <span class="c"># IHO recommendation / COVID death toll / health system</span>
+           <span class="s">"framings"</span>: [...] },     <span class="c"># Prevention / responsibility / vulnerable groups</span>
+}
+PERSONA_VOICE = {
+  <span class="s">"persona_07"</span>: {
+    <span class="s">"voice"</span>: <span class="s">"40-year-old fisher; short, colloquial sentences; distrusts government"</span>,
+    <span class="s">"avoid_phrases"</span>: [<span class="s">"vaccine passport"</span>, <span class="s">"compulsory"</span>],   <span class="c"># Activates the opposing frame</span>
+    <span class="s">"stance_intensity"</span>: <span class="s">0.6</span>,              <span class="c"># Not a fanatic</span>
+  },
+}
+<span class="c"># Generation: one argument × 100 personas = 100 surface realizations</span></code></pre>
+  <p>Add a <b>diversity guard</b>: if a draft exceeds the similarity threshold against our recent content, regenerate with stronger persona constraints. This single mechanism addresses platform coordination detection, collisions with allied teams, and a bot network that visibly looks like a bot network.</p>
+
+  <h3>⑤ Narrowcasting: Story Score Credit Is Shared</h3>
+  <p>The organizers' paper states: <i>“the system attributed credit to <b>all teams whose posts the NPC had consumed</b> since their previous state update”</i>.</p>
+  <p>If a citizen reads 10 teams' content between state updates, those 10 teams <b>equally share</b> credit for the opinion change. Therefore:</p>
+  <div class="box">
+    <p style="margin:0">Appear once each before 1,000 citizens &nbsp;<b style="color:var(--danger)">≪</b>&nbsp; Appear 10 times each before 100 citizens</p>
+  </div>
+  <p>This directly affects the <b>perception layer</b>: monitoring global trends alone gives us the same public information as everyone else, without differentiation. Spend read budget to <b>measure our share of particular citizens' feeds</b>.</p>
+<pre><code><span class="c"># Maintain a coverage estimate for each target citizen</span>
+target.feed_share = my_posts_seen / total_posts_seen
+priority = target.persuadable * (<span class="s">1</span> - target.feed_share) * target.reach</code></pre>
+</section>
+
+<!-- ═══════════════ 5 ═══════════════ -->
+<section id="jev">
+  <h2><span class="num">05</span>The Two-Stage Jev Funnel</h2>
+  <p class="lead">Jev's key feature: <b>one request can contain multiple questions, evaluated in parallel internally; extra questions add almost no latency</b>, only a little input-token cost. Amortize the overhead.</p>
+
+  <div class="grid2">
+    <div class="box">
+      <h4 style="margin-top:0">Stage A · Batch Triage</h4>
+      <p style="font-size:13.5px;color:var(--muted)">Process a batch of posts in one request. 24 questions = keep-or-discard judgments for 24 posts, at a cost of a fraction of a cent.</p>
+<pre style="font-size:12px"><code><span class="c"># 1 state × N questions</span>
+state = render_posts(posts[<span class="s">0</span>:<span class="s">24</span>])
+questions = {
+  <span class="f">f</span><span class="s">"p{i}_worth_it"</span>: Noul(
+     <span class="s">f"Post #{i} is worth spending one scarce write action on"</span>)
+  <span class="k">for</span> i <span class="k">in</span> range(<span class="s">24</span>)
+}
+<span class="c"># → Eliminate 90%+ here</span></code></pre>
+    </div>
+    <div class="box">
+      <h4 style="margin-top:0">Stage B · Per-Post Deep Evaluation</h4>
+      <p style="font-size:13.5px;color:var(--muted)">Evaluate only survivors (usually 1–3 posts) with about 10 independent questions.</p>
+<pre style="font-size:12px"><code>deep = <span class="k">await</span> jev.ask(
+    render_post(post),
+    DEEP_QUESTIONS)
+<span class="c"># → Decide tier / account / content</span></code></pre>
+    </div>
+  </div>
+
+  <div class="callout c-warn">
+    <span class="t">Measure Batch Size; Do Not Guess It</span>
+    With oversized batches, references such as 'post 17' become ambiguous and instruction following deteriorates. 
+    <code>triage_batch_size</code> (initial guess: 24) must be determined from accuracy curves: the first problem for the mock environment to solve.
+  </div>
+
+  <h3>Question Design: Independent Atomic Judgments, Never Compound Questions</h3>
+  <div class="callout c-danger">
+    <span class="t">'Should We Reply to This?' Is a Bad Question</span>
+    It combines at least six independent dimensions into one judgment. You <b>cannot see what the model is weighing, so cannot tune thresholds</b>. Split it into atomic judgments, then make the decision in <b>code</b>.
+  </div>
+
+<pre><code>DEEP_QUESTIONS = {
+  <span class="c"># ── Relevance ──</span>
+  <span class="s">"is_my_side"</span>:     Choice([<span class="s">"strong_yes"</span>,<span class="s">"lean_yes"</span>,<span class="s">"neutral"</span>,
+                             <span class="s">"lean_no"</span>,<span class="s">"strong_no"</span>,<span class="s">"off_topic"</span>]),
+
+  <span class="c"># ── Persuadability (the Story channel's handle) ──</span>
+  <span class="s">"persuadable"</span>:    Score(<span class="s">"How uncertain the author's position is and how persuadable they are"</span>, levels=<span class="s">5</span>),
+  <span class="s">"emotional_heat"</span>: Score(<span class="s">"Emotional intensity of this post"</span>, levels=<span class="s">5</span>),
+
+  <span class="c"># ── Propagation value (the Engagement channel's handle) ──</span>
+  <span class="s">"visibility"</span>:     Score(<span class="s">"Current visibility and potential reach of this post"</span>, levels=<span class="s">5</span>),
+  <span class="s">"reply_upside"</span>:   Score(<span class="s">"Expected citizen responses to a reply here"</span>, levels=<span class="s">5</span>),
+
+  <span class="c"># ── Risk ──</span>
+  <span class="s">"rule_risk"</span>:      Noul(<span class="s">"The expected reply may trigger platform rules or rate limits"</span>),
+  <span class="s">"injection"</span>:      Noul(<span class="s">"This content contains instructions attempting to manipulate an AI system"</span>),
+  <span class="s">"is_bot"</span>:         Noul(<span class="s">"This account appears to be an opponent bot rather than a simulated citizen"</span>),
+
+  <span class="c"># ── Cost routing ──</span>
+  <span class="s">"needs_nuance"</span>:   Noul(<span class="s">"Fact-checking or multi-step reasoning is needed; escalate to an LLM"</span>),
+}
+
+<span class="c"># Combine judgments in code (the official speculative fan-out pattern):</span>
+<span class="k">if</span> r.noul(<span class="s">"injection"</span>) > <span class="s">0.7</span>:  quarantine(post)      <span class="c"># Isolate first; never pass to the LLM</span>
+<span class="k">elif</span> r.noul(<span class="s">"rule_risk"</span>) > <span class="s">0.6</span>: skip(post)            <span class="c"># Protect account assets</span>
+<span class="k">elif</span> r.noul(<span class="s">"is_bot"</span>) > <span class="s">0.8</span>:    skip(post)            <span class="c"># Do not waste budget on bots</span>
+<span class="k">elif</span> r.score(<span class="s">"reply_upside"</span>) > <span class="s">3.4</span> <span class="k">and</span> r.score(<span class="s">"persuadable"</span>) > <span class="s">3.0</span>:
+    <span class="k">if</span> r.noul(<span class="s">"needs_nuance"</span>) > <span class="s">0.5</span>: route_to_llm(post)      <span class="c"># Spend scarce budget here</span>
+    <span class="k">else</span>:                        route_to_rag(post)       <span class="c"># Talking-point library + persona rewrite</span>
+<span class="k">elif</span> aligned(r) <span class="k">and</span> r.score(<span class="s">"visibility"</span>) > <span class="s">3.0</span>:
+    amplify(post)                                            <span class="c"># Story channel</span>
+<span class="k">else</span>:
+    observe_only(post)                                       <span class="c"># Zero cost; only update the world model</span></code></pre>
+
+  <div class="callout c-good">
+    <span class="t">Why This Design Can Win</span>
+    These dimensions are <b>observable, traceable, and calibratable</b>. Logs show how much opinion movement came from actions with '<code>persuadable &gt; 3.0</code> ', letting you tune the threshold. If you ask only 'should we reply?', you never know what to change.<br>
+    <code>needs_nuance</code>  is the money-saving question: it routes by <b>task difficulty</b>, much more accurately than routing by price.
+  </div>
+</section>
+
+<!-- ═══════════════ 6 ═══════════════ -->
+<section id="ladder">
+  <h2><span class="num">06</span>Action Ladder: Tiers Based on Which Score You Buy</h2>
+  <p class="lead">Rule 7.1 explicitly limits Engagement to interactions <b>from simulated citizens</b>. Tiers should depend on which score they buy, not how expensive they are.</p>
+
+  <div class="ladder">
+    <div class="rung r0">
+      <div class="hd">T0 · OBSERVE</div>
+      <div class="bd">
+        Observe and record only. No platform write actions.<br>
+        <b>Zero write budget</b>, while building the world model that informs T1/T2 decisions.
+        <div class="score s-none">No score</div>
+      </div>
+    </div>
+    <div class="rung r1">
+      <div class="hd">T1 · AMPLIFY</div>
+      <div class="bd">
+        Like / repost <b>citizens'</b> aligned content.<br>
+        Narrative amplification and social proof.
+        <div class="score s-story">Story (※ requires measurement)</div>
+      </div>
+    </div>
+    <div class="rung r2">
+      <div class="hd">T2 · PUBLISH</div>
+      <div class="bd">
+        Original posts / replies to citizens. <b>Scarcest</b>.<br>
+        The only channel that can generate citizen → you interactions.
+        <div class="score s-eng">Engagement + Story</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout c-danger">
+    <span class="t">Structural Correction: Bots Liking Each Other Earn No Points</span>
+    Under the rules, bot-to-bot interactions are not from simulated citizens and <b>do not generate Engagement Score</b>; they simply burn budget. The architecture must prevent this <b>structurally</b>, rather than relying on self-discipline.
+  </div>
+
+  <div class="callout c-key">
+    <span class="t">Jev's Most Valuable Job</span>
+    Not 'should we like or reply?', but: <b>find the few dozen opportunities worth T2 budget among thousands of T0 observations.</b>
+  </div>
+</section>
+
+<!-- ═══════════════ 7 ═══════════════ -->
+<section id="citizens">
+  <h2><span class="num">07</span>Simulated Citizens: How They Work and Where to Focus</h2>
+  <p class="lead">You are not facing 4,000 people, but a system composed of  <b>profiles + finite-state machines + probabilistic update functions + LLMs</b> . Understanding its structure tells you where to focus your effort.</p>
+
+  <h3>Evidence Levels</h3>
+  <p>Every statement below has a source level, to <b>avoid designing strategies around inferences mistaken for facts</b>.</p>
+  <div class="legend">
+    <span class="conf c-doc">📗 Documented</span><span style="font-size:13.5px;color:var(--muted)">Explicitly stated in the paper or rules</span>
+    &nbsp;&nbsp;
+    <span class="conf c-inf">📙 Strong Inference</span><span style="font-size:13.5px;color:var(--muted)">Reasonable deduction from known facts</span>
+    &nbsp;&nbsp;
+    <span class="conf c-spec">📕 Speculation</span><span style="font-size:13.5px;color:var(--muted)">Conjecture requiring experimental validation</span>
+  </div>
+
+  <h3>Known Hard Facts (2025 Specifications)</h3>
+  <table>
+    <thead><tr><th>Fact</th><th class="mono" style="width:96px">Source</th></tr></thead>
+    <tbody>
+      <tr><td><b>4,000 ordinary NPCs</b>, each a citizen who can read posts, publish posts and media, react to content, and ultimately vote</td><td class="mono">Paper §3.2</td></tr>
+      <tr><td><b>7 special NPCs</b>: 2 journalists, 2 columnists, 2 presidential candidates, and 1 former president</td><td class="mono">Paper §3.2</td></tr>
+      <tr><td>Each NPC starts with a  <b>40-dimensional profile</b>: age, gender, family and employment circumstances, economic status, <b>baseline positions on controversial issues</b>, <b>baseline positions on non-controversial issues</b>, and initial political inclination</td><td class="mono">Paper §3.2</td></tr>
+      <tr><td>Behavior is driven by a <b>finite-state machine</b>: passively browse feed → react to posts → create original posts → read news articles</td><td class="mono">Paper §3.2</td></tr>
+      <tr><td>After each interaction, a <b>probabilistic update function</b> determines whether and how internal state changes (opinions, current political beliefs, candidate preferences)</td><td class="mono">Paper §3.2</td></tr>
+      <tr><td>NPC <b>can change opinions only through exposure to content within the simulation</b>; <b>only NPCs can vote</b> (competitor bots cannot)</td><td class="mono">Paper §3.2</td></tr>
+      <tr><td>NPCs are LLM-driven, using a <b>pool of concurrent LLM instances</b>; different roles use different model configurations; every agent <b>maintains a consistent persona throughout</b></td><td class="mono">Paper §3.2</td></tr>
+      <tr><td>Scoring: when a citizen's opinion changes, credit goes to <b>all teams whose content they consumed since their previous state update</b> (shared credit)</td><td class="mono">Paper §3.4</td></tr>
+      <tr><td>Weekly polls sample  <b>357 NPCs</b> (95% CI); teams on the leading side receive a bonus</td><td class="mono">Paper §3.4</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Inferred Operation: A Five-Layer Structure  <span class="conf c-inf">📙</span></h3>
+
+  <div class="layers">
+    <div class="layer">
+      <div class="lh">Layer 1 · Profile<span class="sub">Static · 40 dimensions</span></div>
+      <div class="lb">Demographics + baseline controversial-issue positions + baseline non-controversial-issue positions + initial political inclination
+        <ul><li>The basis for <b>clustering and segmentation</b>, and a list of handles for matching their interests</li></ul></div>
+    </div>
+    <div class="layer">
+      <div class="lh">Layer 2 · State<span class="sub">Dynamic</span></div>
+      <div class="lb">Current issue-position vector · candidate preferences · possible mood / attention
+        <ul><li>You can observe this layer indirectly only through <b>their posts</b> ← the purpose of Jev  <code>Score</code>  judgments</li></ul></div>
+    </div>
+    <div class="layer">
+      <div class="lh">Layer 3 · Behaviour FSM<span class="sub">Programmatic</span></div>
+      <div class="lb">Browse feed → react → create → read news → vote (at the end)
+        <ul><li>This step is most likely <b>code rather than an LLM</b>, making it <b>periodic and discrete</b></li></ul></div>
+    </div>
+    <div class="layer hot">
+      <div class="lh">Layer 4 · Update Function<span class="sub">Programmatic + probabilistic</span></div>
+      <div class="lb"><b>← Where Winning or Losing Is Really Determined</b><br>
+        Content exposure →  <code>P(update occurs) × Δ(update magnitude)</code>
+        <ul><li>Likely independent variables: <b>position distance · repetition count · source consistency · visible engagement · recency</b></li></ul></div>
+    </div>
+    <div class="layer">
+      <div class="lh">Layer 5 · Generative <span class="sub">LLM</span></div>
+      <div class="lb">The LLM generates NPC statements / reactions under their persona
+        <ul><li>This is your <b>only window into their internal state</b></li></ul></div>
+    </div>
+  </div>
+
+  <h4>Key Deduction: Why It Must Be a Hybrid Architecture</h4>
+  <p>An easily overlooked phrase in the paper: <i>“a <b>probabilistic update function</b> determines whether and how their internal state changes”</i> — this reads like a description of a <b>programmatic transition function</b> rather than an LLM judgment.</p>
+  <p>Consider concurrency constraints. In 2025,  <b>12 concurrent LLM instances</b> served 4,000 NPCs. A rough calculation:</p>
+<pre><code>At ~2s per generation, throughput ≈ 12 / 2 =  <span class="s">6</span>  calls/second
+4 weeks = 2,419,200 seconds → about  <span class="s">14.5 million</span> LLM calls
+Per NPC: about 3,600 calls / 4 weeks ≈  <span class="s">130</span>  calls/day</code></pre>
+  <p>This budget is not generous, but it does not imply that every state transition requires an LLM call.
+     <b>My judgment: Layer 4 is probably a programmatic probabilistic function; the LLM mainly handles Layer 5 generation and some relevance judgments between Layers 2 and 3.</b></p>
+
+  <div class="callout c-key">
+    <span class="t">What This Means for Strategy</span>
+    <b>If Layer 4 Is Programmatic</b> (my preferred hypothesis) → the deciding factor is not eloquence, but content's <b>computable features</b>: position distance, repetition count, source consistency, visible engagement, and recency.<br>
+    <b>If Layer 4 Uses LLM Judgments</b>  → emphasis shifts to framing, tone, identity resonance, and argument quality.<br><br>
+    🎯 <b>Recommendation: prioritize strategies effective under both hypotheses.</b> Most actions under the five gates below work either way. The main experimental distinction is which framing and wording to use, something to measure on D1–D2.
+  </div>
+
+  <h3>What Really Matters: Five Gates</h3>
+  <p>Most people focus only on step ③ or ④. But <b>content must pass five gates to have an effect</b>. The right column indicates how often each is overlooked.</p>
+
+  <div class="gates">
+    <div class="gate">
+      <div class="gn">①</div>
+      <div><b>Does It Enter the Feed?</b><div class="gd">Does your content appear in their feed? Controlled by the follow graph / reposts / trending algorithm</div></div>
+      <div><span class="heat">Overlooked <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i></span></span></div>
+    </div>
+    <div class="gate">
+      <div class="gn">②</div>
+      <div><b>Does It Pass the Attention Filter?</b><div class="gd">Will they actually read it? Controlled by FSM decisions + relevance judgments</div></div>
+      <div><span class="heat">Overlooked <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar"></i></span></span></div>
+    </div>
+    <div class="gate">
+      <div class="gn">③</div>
+      <div><b>Does It Pass the Acceptance Filter?</b><div class="gd">Too large a position gap → outright rejection, possibly movement in the opposite direction</div></div>
+      <div><span class="heat">Overlooked <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar"></i><i class="bar"></i></span></span></div>
+    </div>
+    <div class="gate">
+      <div class="gn">④</div>
+      <div><b>Does an Update Actually Occur?</b><div class="gd">Does the probabilistic function trigger? This is where most people focus</div></div>
+      <div><span class="heat">Overlooked <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i></span></span></div>
+    </div>
+    <div class="gate">
+      <div class="gn">⑤</div>
+      <div><b>Does the Update Persist?</b><div class="gd">Will subsequent opposing content overwrite it? Very few people consider this layer</div></div>
+      <div><span class="heat">Overlooked <span class="bars"><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar on"></i><i class="bar"></i></span></span></div>
+    </div>
+  </div>
+
+  <div class="callout c-danger">
+    <span class="t">The Most Important Sentence</span>
+    <b>Well-written content that nobody sees scores zero.</b>
+    Gate ① is the most overlooked and the easiest place to differentiate.
+  </div>
+
+  <h3>Matching Interests at Each Gate</h3>
+
+  <h4>Gate ① · Enter the Feed: The Graph Matters More Than Eloquence</h4>
+  <p>NPCs see <b>their own feeds</b>. Your content must come from someone they follow, be reposted by someone they follow, or appear in trends.</p>
+  <ul>
+    <li><b>Follow First, Speak Later.</b> The 40 bots should establish connections with target citizens before publishing: get in position first, then act.</li>
+    <li><b>Go Through Accounts They Trust.</b> Let <b>citizens' own posts</b> carry your arguments, and amplify them. Arguments conveyed by people like them have very different credibility.</li>
+    <li><b>Trends Are the Public Lane; the Follow Graph Is the Private Lane.</b> The private lane has far fewer opponents, and <b>no allied teams competing with you</b>.</li>
+  </ul>
+  <div class="callout c-warn">
+    <span class="t">2026 Closes the Fabricated Social Proof Route</span>
+    Engagement must come from simulated citizens. You <b>can no longer use your own accounts' mutual likes to fake widespread agreement</b> — the low-quality 2025 tactic. What remains is <b>genuine citizen engagement and follow relationships</b>. This makes establishing the follow graph an unavoidable first step.
+  </div>
+
+  <h4>Gate ② · Pass the Attention Filter: Make the Point Clear</h4>
+  <p>The NPC's FSM scans the feed in passive-browsing mode. What turns a glance into actual reading and a reaction?</p>
+  <ul>
+    <li><b>Short, Specific, with an Emotional Hook.</b> The first line decides whether it survives.</li>
+    <li><b>Relevant to Their Existing Lives</b>: work, family, commuting, healthcare, children's schools—not abstract policy arguments. The 40-dimensional profile includes employment, family, and economic status: ready-made handles.</li>
+    <li><b>Avoid Abstract Vocabulary.</b> 'Compulsory vaccination certification' is policy language; 'How do I get to work tomorrow?' is everyday language. <b>The latter gets read.</b></li>
+  </ul>
+
+  <h4>Gate ③ · Pass the Acceptance Filter: The Easiest Place to Go Wrong  <span class="conf c-inf">📙</span></h4>
+  <p>Here is a <b>possibly counterintuitive</b> suggestion. Social judgment theory includes the concept of <b>latitude of acceptance</b>: people accept only a limited range of positions.<b>An argument outside their latitude triggers a contrast effect: instead of accepting it, they move in the opposite direction.</b>
+     In other words, <b>an overly forceful rebuttal can push moderates toward the other side.</b></p>
+  <table>
+    <thead><tr><th style="width:150px">Audience</th><th>❌ Wrong Approach</th><th>✅ Right Approach</th></tr></thead>
+    <tbody>
+      <tr><td><b>Committed Opponents</b></td><td>Directly argue for your side's benefits</td><td><b>Move on.</b>  Or discuss only common ground (such as 'vaccination is voluntary')</td></tr>
+      <tr><td><b>Moderates Leaning Against You</b></td><td>Say 'you are wrong'</td><td><b>Start from values they already share</b> (tourism, personal freedom, concern about government overreach); move only a small step</td></tr>
+      <tr><td><b>Completely Neutral</b></td><td>Push your position hard</td><td><b>Offer a frame in which both sides' concerns are heard</b>, lowering the psychological cost of changing position</td></tr>
+      <tr><td><b>Leaning Toward Your Side</b></td><td>Repeat the argument</td><td>Reinforce + provide <b>responses to opposing arguments</b>, enabling them to defend their position</td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-key">
+    <span class="t">📙 Core Strategy</span>
+    <b>Do not try to persuade everyone; help those already leaning toward you feel more confident and willing to speak.</b>
+    <ul style="margin:8px 0 0">
+      <li>They face the lowest cost of changing position: work with the current, not against it</li>
+      <li>They become your <b>propagation nodes</b>: statements from citizens are an order of magnitude more credible than statements from your bots</li>
+      <li>This feeds both Engagement (citizen interactions) and Story (reinforced opinions):  <b>both scores rise together</b></li>
+    </ul>
+  </div>
+
+  <h4>Gate ④ · Trigger Updates: Repetition and Distribution, Not One Viral Post</h4>
+  <ul>
+    <li><b>Repeat, but Vary the Surface Form.</b> The same argument reaches one NPC through 20 accounts, 20 formulations, at different times. One exposure to one perspective is usually insufficient.</li>
+    <li><b>Consistent Sources &gt; One High-Quality Post.</b> Hearing the same point from three directions is much more credible than hearing one person repeat it three times.</li>
+    <li><b>⚠️ Watch for Backfire.</b> Mechanically repeating similar wording in a short period can trigger coordinated inauthentic behavior detection or NPC resistance: precisely why the diversity guard exists.</li>
+  </ul>
+
+  <h4>Gate ⑤ · Make It Last: Increase Effort Late</h4>
+  <p>The paper explicitly states that <b>opinion changes carry more weight closer to voting day</b>; the NPC's FSM is also <b>periodic</b>, updating state at discrete times.</p>
+  <ul>
+    <li><b>Stay Present Rather Than Relying on One Burst.</b> Appear repeatedly at the moments when the NPC is browsing.</li>
+    <li><b>Increase Effort Late.</b> But do not skip the early follow graph and reputation: otherwise they will not see what you say later. <b>Build the audience early; concentrate influence late.</b></li>
+  </ul>
+
+  <h3>🔑 Two Audiences, Not Just One</h3>
+  <p>I consider this the <b>most underestimated strategic point</b>. The 7 special NPCs (2 journalists, 2 columnists, 2 candidates, 1 former president) function as <b>intermediaries</b>: </p>
+<pre><code>Your content ──► Trends ──► Selected by journalist / columnist ──► News article
+          ──►  <span class="s">4,000 NPCs read news</span>  ──► Opinion movement +  <span class="s">additional Story points for you</span></code></pre>
+
+  <div class="aud">
+    <div class="a n">
+      <h4>Audience A · 4,000 Ordinary Citizens</h4>
+      Compete for attention post by post. Reach is <b>one-to-one or small-group</b>. Competition is intense, and you share the audience with allied teams.
+    </div>
+    <div class="a s">
+      <h4>Audience B · 7 Special NPCs  <span class="conf c-inf">📙</span></h4>
+      Their function is <b>amplification</b>. One article =  <b>reaching 4,000 people at once</b>, and the paper explicitly states that being cited <b>directly adds Story points</b>.
+      <b>. This is the leverage point.</b>
+    </div>
+  </div>
+
+  <p><b>What Attracts Journalist NPCs? </b> <span class="conf c-inf">📙</span> News value: <b>conflict, novelty, scale, emotional intensity, concrete people or data</b>.</p>
+  <table>
+    <thead><tr><th style="width:60px"></th><th>Wording</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td style="color:var(--danger)">❌</td><td>'We should discuss vaccine policy rationally'</td><td>No news value; will not be selected</td></tr>
+      <tr><td style="color:var(--good)">✅</td><td>'A local hospital nurse says: we cannot even cope with flu season'</td><td>A person, conflict, and urgency</td></tr>
+      <tr><td style="color:var(--good)">✅</td><td>'Tourism data: another lockdown would eliminate 3,000 jobs'</td><td>Numbers, a concrete group, and stakeholders</td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-key">
+    <span class="t">A Different Mindset</span>
+    Not posting, but <b>creating news</b>. This also taps the explicitly described Story bonus mechanism.
+  </div>
+
+  <h3>Three Changes from 2025 to 2026 and Their Effect on Leverage</h3>
+  <table>
+    <thead><tr><th style="width:180px">Change</th><th class="mono" style="width:110px">Basis</th><th>Strategic Impact</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Competition shortened from 4 weeks to 2</b></td>
+        <td class="mono">10/19–11/02<br>(2025 lasted 4 weeks)</td>
+        <td>Half as many NPC state updates →  <b>less room for cumulative drift → greater relative weight per exposure</b>; the early exploration window is also compressed, so <b>D1–D2 must be efficient</b></td>
+      </tr>
+      <tr>
+        <td><b>Engagement must come from simulated citizens</b></td>
+        <td class="mono">2026 Rule 7.1</td>
+        <td><b>Fabricated social proof is blocked</b> (the major 2025 loophole) → everyone must return to content and relationship quality</td>
+      </tr>
+      <tr>
+        <td><b>Leading side receives a bonus</b><br><span style="font-size:12.5px;color:var(--muted)">(already present in 2025)</span></td>
+        <td class="mono">Paper §3.4</td>
+        <td><b>An early lead compounds</b>  → building the follow graph early is about triggering a Matthew effect as well as exposure</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout c-good">
+    <span class="t">Assessment</span>
+    The 2026 rule changes shift the competition from <b>a volume contest back to a persuasion contest</b>. This is <b>good news</b>  for well-prepared teams with measurement discipline: volume has a low barrier; persuasion has a high one.
+  </div>
+
+  <h3>The Biggest Unknown and How Experiments Can Infer It</h3>
+  <div class="callout c-spec" style="border-left-color:var(--warn);background:var(--warn-bg);color:#78350f">
+    <span class="t" style="color:var(--warn)">📕 The Key Question Determining Which Strategy Is Right</span>
+    <b>Does Layer 4 update opinions through a programmatic probabilistic function or LLM judgments?</b><br>
+    · If <b>programmatic</b>  → position distance, repetition, source consistency, and visible engagement determine outcomes (computable features)<br>
+    · If  <b>LLM-based</b>  → framing, tone, identity resonance, and argument quality determine outcomes<br><br>
+    <b>I favor the programmatic hypothesis, but with only about 65% confidence.</b>
+  </div>
+
+  <h4>Probe Actively with Experiments, Not Just Passive Observation</h4>
+  <p>Treat Layer 4 as a black-box function and <b>actively probe it</b>: </p>
+  <table>
+    <thead><tr><th style="width:130px">Experiment</th><th>Method</th><th>What It Can Reveal</th></tr></thead>
+    <tbody>
+      <tr><td><b>Map the Latitude of Acceptance</b></td><td>For matched citizen cohorts, deliver content with <b>increasing position distance</b> (from very mild to very forceful) and measure each cohort's opinion movement</td><td><b>The persuasion curve's shape</b> — find the optimal distance: how far to push for the best effect</td></tr>
+      <tr><td><b>Dose–Response</b></td><td>Hold content constant; vary repetition count (1 / 3 / 10 times)</td><td>Where marginal returns diminish</td></tr>
+      <tr><td><b>Source Consistency</b></td><td>Send the same argument using bots demographically similar to the audience versus completely dissimilar bots</td><td>The weight assigned to messenger identity</td></tr>
+      <tr><td><b>Framing Comparison</b></td><td>Same fact: hospital capacity vs personal freedom vs economic framing</td><td>Which frame works best for that group</td></tr>
+      <tr><td><b>Channel Comparison</b></td><td>Direct social posts vs news exposure after selection by a journalist</td><td>The credibility premium of the news channel</td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-good">
+    <span class="t">These Five Experiments Belong in PREDICTIONS.md</span>
+    Write predictions before the competition, run experiments on D1–D2, and allocate budget by results from D3 onward. 
+    <b>This process itself supplies presentation material</b> — the reviewers are the paper's authors and will recognize its value.
+  </div>
+
+  <h4>Implementation: Clustering Instead of Individual Customization</h4>
+  <p>Customizing for each of 4,000 citizens is impractical. Matching their interests becomes:</p>
+<pre><code><span class="s">4000 NPC</span>  ──► Cluster using 40-dimensional profiles ──►  <span class="s">8–15 archetypes</span>
+          ──► One argument frame + matching bot persona per archetype
+         ──► Produce content by archetype; deliver through accounts resembling them</code></pre>
+  <p>Not 4,000 custom texts, but  <b>15 carefully matched frame × persona combinations</b> delivered to the corresponding citizen groups. This addresses persuasion efficiency and coordination detection at once.</p>
+
+  <h3>Summary Table</h3>
+  <table>
+    <thead><tr><th style="width:130px">Layer</th><th>How to Match Their Interests</th><th style="width:110px">Confidence</th></tr></thead>
+    <tbody>
+      <tr><td><b>Enter the Feed</b></td><td>Build the follow graph before speaking; amplify citizens' own posts; compete through private connections rather than public trends</td><td><span class="conf c-doc">📗 Mechanism documented</span></td></tr>
+      <tr><td><b>Pass Attention</b></td><td>Short, concrete, everyday language; connect to work / family / finances rather than policy terminology</td><td><span class="conf c-inf">📙 High</span></td></tr>
+      <tr><td><b>Pass Acceptance</b></td><td><b>Move only a small step</b>; start from values already accepted; move on from committed opponents; <b>focus on reinforcing existing supporters so they become propagation nodes</b></td><td><span class="conf c-inf">📙 High</span></td></tr>
+      <tr><td><b>Trigger Updates</b></td><td>Same argument × multiple accounts × varied wording × multiple times; consistent sources &gt; one viral post</td><td><span class="conf c-inf">📙 High</span></td></tr>
+      <tr><td><b>Make It Last</b></td><td>Sustained presence + increased late effort; build audiences early, concentrate influence late</td><td><span class="conf c-doc">📗 Explicit in paper</span></td></tr>
+      <tr><td><b>Appeal to Journalists</b></td><td>Create news value: concrete people, numbers, conflict, urgency → seek column citations (<b>direct points + reach 4,000 at once</b>)</td><td><span class="conf c-inf">📙 Medium–high</span></td></tr>
+      <tr><td><b>Avoid</b></td><td>Do not fabricate consensus with mutual likes from your own accounts: blocked by the 2026 rules</td><td><span class="conf c-doc">📗 Explicit in rules</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-key">
+    <span class="t">If You Remember One Thing</span>
+    Citizens are probably moved by a probabilistic function driven by <b>position distance + repeated exposure + source consistency</b> rather than by a single eloquent post.<br>
+    Your task is not to write the best post, but to <b>repeatedly deliver the right argument, through accounts resembling them, at times when they will see it—and preferably get it into a newspaper article.</b>
+  </div>
+</section>
+
+<!-- ═══════════════ 8 ═══════════════ -->
+<section id="measure">
+  <h2><span class="num">08</span>Measurement Design  <span style="font-size:12px;color:var(--danger);font-family:var(--mono)">← Finalize Before Writing Code</span></h2>
+  <p class="lead">Define measurement criteria first so the code captures the right fields. Reversing the order misses critical data.</p>
+
+  <h3>First Clarify: Three Different Ways of 'Winning Them Over' Can Diverge</h3>
+  <table>
+    <thead><tr><th></th><th>Signal</th><th>Associated Score</th><th>Measurement</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">(a)</td><td>Engagement: likes, reposts, comments</td><td>Engagement</td><td style="color:var(--good)">Easy, but cheap and gameable</td></tr>
+      <tr><td class="mono">(b)</td><td><b>Attitude change: a genuine shift in position</b></td><td><b>Story</b></td><td style="color:var(--danger)">Difficult; attribution is hard</td></tr>
+      <tr><td class="mono">(c)</td><td>Voting behavior</td><td>Final result</td><td>Visible only at the end</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-danger">
+    <span class="t">Most 2025 Teams Got Stuck on (a)</span>
+    The paper states: <i>“Because engagement was rewarded, <b>most teams prioritised high-volume posting over nuanced influence</b>.”</i><br>
+    Another 7 teams admitted that they <b>deliberately abandoned</b> their original plans for coherent, nuanced influence and switched to flooding the platform because its reward structure favored quantity over quality.<br><br>
+    The 2026 rules restrict Engagement to simulated citizens— <b>almost certainly the organizers closing this loophole. Do not repeat the same mistake.</b>
+  </div>
+
+  <h3>The Attribution Problem and Its Solution</h3>
+  <p>The organizers' scoring already shares credit (see §04-⑤), so even they cannot attribute it to one post. The solution is to <b>create a clean comparison ourselves</b>: </p>
+
+  <div class="box">
+    <p style="margin:0 0 8px"><b>Reserve 10–15% of target citizens as a control group, leaving them untouched throughout.</b> Invest intensively in the remaining treatment group, then compare opinion movement between groups.</p>
+    <ul style="margin:0">
+      <li>Sacrifice a little coverage for a <b>causal estimate</b>: treatment-group movement − control-group movement = your true effect</li>
+      <li>Audience segmentation: which citizens actually respond</li>
+      <li>Argument selection: compare effects after removing noise from opponents and allied teams</li>
+      <li>Control and treatment groups must be stratified and matched by <b>initial position and persuadability</b>, or the comparison is meaningless</li>
+    </ul>
+  </div>
+
+  <h3>Three Things to Prepare Before the Competition</h3>
+
+  <h4>🔴 ① Exposure Logs: The One Thing You Cannot Reconstruct Later</h4>
+  <p>Record <b>which citizen saw which of our content, and when</b>. The paper says scoring considers all posts consumed since the citizen's previous state update. Replicating that attribution requires our own consumption records.<b>Unrecorded data is lost permanently.</b></p>
+<pre><code><span class="k">CREATE TABLE</span> exposure (
+  ts          <span class="k">REAL</span>,      <span class="c">-- Timestamp</span>
+  citizen     <span class="k">TEXT</span>,      <span class="c">-- Which citizen</span>
+  my_post_id  <span class="k">TEXT</span>,      <span class="c">-- Which of our content</span>
+  my_account  <span class="k">TEXT</span>,
+  channel     <span class="k">TEXT</span>,      <span class="c">-- feed / reply / repost / search</span>
+  decision_id <span class="k">TEXT</span>
+);</code></pre>
+  <p>This also means <b>prioritizing citizen-feed reads</b> (<code>get_feed(citizen)</code>), not just global trends: we need to know what they saw.</p>
+
+  <h4>🟠 ② Preregistered Predictions: The Mechanism for Falsifying Our Own Assumptions</h4>
+  <p>Write judgments down before the competition and let the data challenge them. Otherwise, every result becomes 'I knew it' afterward (post-hoc rationalization + multiple comparisons).</p>
+<pre><code><span class="c"># PREDICTIONS.md: zero cost before the competition; highest-value preparation</span>
+<span class="s">"Among citizens aged 35–55 with stable employment, the hospital-capacity frame shifts positions more than the personal-freedom frame (predicted difference &gt; 0.05 position units)"</span>
+
+<span class="s">"Highly emotional posts receive more engagement but less opinion movement (i.e., (a) and (b) are negatively correlated)"</span>
+
+<span class="s">"Citing IHO authority works for those already leaning YES, but is ineffective or backfires among NO supporters"</span></code></pre>
+  <p>If prediction 2 holds, it directly shows that engagement ≠ winning the referendum, justifying a shift from volume to persuasion. This also <b>forms part of the presentation</b>: 'Data falsified three pre-competition assumptions, so we adjusted strategy on Day 3.'</p>
+
+  <h4>🟢 ③ In-Distribution Simulation: Useful, with Limits</h4>
+  <p>The paper provides NPC specifications: <b>40-dimensional profiles</b> (age, gender, family and employment, economic circumstances, baseline positions on controversial and non-controversial issues, initial political inclination). Behavior is driven by a <b>finite-state machine</b>, with internal state changes after interaction determined by a <b>probabilistic update function</b>.</p>
+  <table>
+    <thead><tr><th>✅ What You Know</th><th>❌ What You Do Not Know</th></tr></thead>
+    <tbody>
+      <tr><td>The dimensions of NPC profiles</td><td><b>The organizers' NPC prompts</b></td></tr>
+      <tr><td>NPCs are LLM-driven</td><td><b>Which models they use</b></td></tr>
+      <tr><td>Behavior uses a state machine + probabilistic updates</td><td>The exact form of the update function</td></tr>
+      <tr><td><b>Both sides' core arguments (from the setting page)</b></td><td><b>The distribution of positions among 4,000 citizens</b></td></tr>
+    </tbody>
+  </table>
+  <p>The fundamental problem: NPC reactions are  <code>f(profile, organizer prompt, organizer model)</code>, and you can replicate only the first input.
+     <b>This tests your own citizen model, not theirs. There will be systematic bias, and you will not know its direction.</b></p>
+  <div class="callout c-warn">
+    <span class="t">The Right Use of Simulation</span>
+    Not validating effectiveness, but <b>finding obvious mistakes</b>: ambiguity, a message read as supporting the opposite position, implausible persona voice, or platform-rule violations.<br>
+    Reliable for filtering obviously bad content; unreliable for deciding which argument is stronger.
+  </div>
+
+  <h3>After Launch: The First 24–48 Hours Are the Real Measurement Window</h3>
+  <table>
+    <thead><tr><th>Phase</th><th>Goal</th><th>Actions</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">D1–D2</td><td>Establish Baseline and Controls</td><td>Lots of OBSERVE, a little PUBLISH; measure citizen distributions and test preregistered predictions</td></tr>
+      <tr><td class="mono">D3–D5</td><td>Screen Arguments</td><td>Use small controlled experiments to rank argument effects and drop ineffective ones</td></tr>
+      <tr><td class="mono">D6–D11</td><td>Concentrate on What Works</td><td>Scale what has been <b>validated</b></td></tr>
+      <tr><td class="mono">D12–D14</td><td>Final Push</td><td>Paper: greater weight closer to voting day → concentrate influence here</td></tr>
+    </tbody>
+  </table>
+  <div class="callout c-key">
+    <span class="t">Method and Scoring Naturally Align</span>
+    Because late changes carry more weight, <b>early exploration is cheap and later exploitation is valuable</b>. Learning first and exploiting later is not just sound methodology, but optimal for scoring.
+  </div>
+  <div class="callout c-warn">
+    <span class="t">Two Cautions</span>
+    <b>1.</b> Do not burn account quotas on exploration. Its cost should mainly be reads and a little content exposure; do not spend the credibility of 40 accounts just to measure effects.<br>
+    <b>2.</b> Do not trust weekly polls: in 2025 they randomly sampled 357 NPCs (95% CI). A sample of 357 out of 4,000 has coarse resolution and misses small effects. Instead, <b>track individual target citizens' positions directly</b> (infer from their posts), another use of Jev  <code>Score</code> .
+  </div>
+</section>
+
+<!-- ═══════════════ 9 ═══════════════ -->
+<section id="degrade">
+  <h2><span class="num">09</span>Fallback Strategies</h2>
+  <p class="lead">Over two weeks, every external dependency will fail. This table matters more than a feature list.</p>
+
+  <table>
+    <thead><tr><th>Failure</th><th>Fallback Strategy</th></tr></thead>
+    <tbody>
+      <tr><td><b>Jev API Unavailable</b></td><td>Fall back to a conservative rules engine; take only obvious, high-confidence actions; <b>do not take risks</b></td></tr>
+      <tr><td><b>Platform Returns 429</b></td><td>Token buckets automatically slow down; <b>cut reads first and protect writes</b></td></tr>
+      <tr><td><b>LLM Timeout</b></td><td>Fall back to RAG templates + persona rewriting</td></tr>
+      <tr><td><b>Account Banned</b></td><td>Remove from pool and reallocate without stopping the pipeline</td></tr>
+      <tr><td><b>Process Crash</b></td><td>systemd restarts the process; restore from sqlite</td></tr>
+      <tr><td><b>Budget Exhausted</b></td><td>Raise perception thresholds automatically; read only content very likely to produce an action</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-key">
+    <span class="t">Core Principle</span>
+    <b>Better to Do Less Than Act Recklessly.</b> Recklessness causes irreversible costs (bans and rule violations); doing less only means fewer points.
+  </div>
+</section>
+
+<!-- ═══════════════ 10 ═══════════════ -->
+<section id="phases">
+  <h2><span class="num">10</span>Build Order</h2>
+  <p class="lead">The sequence reflects dependencies. Phases 1–3 are <b>entirely independent</b>  of the official API shape: a concrete way to avoid waiting idle.</p>
+
+  <div class="phase">
+    <div class="idx">1</div>
+    <div><b>Foundation</b> · <code>config</code> + <code>models</code> + <code>state</code>  (including the exposure table) +  <code>telemetry</code></div>
+    <div class="st"><span class="dot g"></span>Build now</div>
+  </div>
+  <div class="phase">
+    <div class="idx">2</div>
+    <div><b>Rate Limits and Budget</b> · <code>ratelimit</code>  two-level token buckets + ledger<br>
+      <span style="font-size:13px;color:var(--muted)">Easiest to get wrong, most critical to get right; independent of the API</span></div>
+    <div class="st"><span class="dot g"></span>Build now</div>
+  </div>
+  <div class="phase">
+    <div class="idx">3</div>
+    <div><b>Platform Boundary</b> · <code>client/base</code> + <code>client/mock</code><br>
+      <span style="font-size:13px;color:var(--muted)">Mock enables end-to-end runs; the official template no longer blocks progress</span></div>
+    <div class="st"><span class="dot g"></span>Build now</div>
+  </div>
+  <div class="phase">
+    <div class="idx">4</div>
+    <div><b>Reasoning Core</b> · <code>jev/questions</code> + <code>jev/client</code><br>
+      <span style="font-size:13px;color:var(--muted)">The question set determines the ceiling; measure batch-size accuracy curves using mock data</span></div>
+    <div class="st"><span class="dot g"></span>Build now</div>
+  </div>
+  <div class="phase">
+    <div class="idx">5</div>
+    <div><b>Content and Safety</b> · <code>guard</code> + <code>rag</code> + <code>llm</code><br>
+      <span style="font-size:13px;color:var(--muted)">Includes diversity guard and physical isolation of the two stores</span></div>
+    <div class="st"><span class="dot g"></span>Build now</div>
+  </div>
+  <div class="phase">
+    <div class="idx">6</div>
+    <div><b>Connect the Pipeline</b> · <code>pipeline/perceive</code> + <code>decide</code> + <code>act</code></div>
+    <div class="st"><span class="dot g"></span>Build now</div>
+  </div>
+  <div class="phase">
+    <div class="idx">7</div>
+    <div><b>Deploy</b> · <code>main</code> + systemd + <code>deploy.sh</code>  + graceful shutdown</div>
+    <div class="st"><span class="dot y"></span>Before launch</div>
+  </div>
+  <div class="phase">
+    <div class="idx">8</div>
+    <div><b>Real Adapter</b> · <code>client/legit_v1.py</code><br>
+      <span style="font-size:13px;color:var(--muted)">Build when the official template arrives; change only this file</span></div>
+    <div class="st"><span class="dot r"></span>Await official template</div>
+  </div>
+
+  <h3>Deployment Layout</h3>
+<pre><code><span class="c"># Separate directories: code in git; state and secrets never in git</span>
+/opt/ctn/
+├── app/     <span class="c">← git repository; code only</span>
+├── state/   <span class="c">← sqlite / checkpoints / exposure (backed up separately)</span>
+├── logs/    <span class="c">← JSONL telemetry</span>
+└── .env     <span class="c">← permissions 600</span>
+
+<span class="c"># systemd supervision (not tmux: two-week runs will crash; automatic restart is required)</span>
+Restart=always
+RestartSec=5
+
+<span class="c"># .gitignore must exclude:</span>
+.env  *.db  *.sqlite  state/  logs/  keys/  materials/</code></pre>
+  <div class="callout c-danger">
+    <span class="t">Git-Related Compliance Risks</span>
+    Rule  <b>5.6</b>: never leak competition API keys outside the team. Hardcoding then pushing is a violation; deleting afterward does not remove git history.<br>
+    Rule  <b>5.2</b>: do not commit competition materials (rules PDFs, briefings, Discord screenshots) to repositories that could become public.<br>
+    <b>Keep the Repository Private During the Competition</b> — publishing your code hands your strategy to 41 opponents for free.
+  </div>
+</section>
+
+<!-- ═══════════════ 11 ═══════════════ -->
+<section id="open">
+  <h2><span class="num">11</span>Open Questions</h2>
+  <p class="lead">These do not block development (phases 1–6 can proceed), but affect parameters and capacity planning.</p>
+
+  <table>
+    <thead><tr><th>#</th><th>Question</th><th>Why It Matters</th><th>Impact</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">1</td>
+        <td><b>How many accounts can each team create in 2026?</b></td>
+        <td>In 2025 there were  <b>41</b> (1 main + 40 bots); the 2026 number is unpublished</td>
+        <td>Account-pool capacity and concurrency</td>
+      </tr>
+      <tr>
+        <td class="mono">2</td>
+        <td><b>Exact platform rate limits? Are reads and writes counted separately?</b></td>
+        <td>2025 estimate: about 0.61 req/s per team, but only an average</td>
+        <td><code>RateConfig</code>  defaults</td>
+      </tr>
+      <tr>
+        <td class="mono">3</td>
+        <td><b>When and where will Python templates and API documentation be released?</b></td>
+        <td>Determines when phase 8 can begin</td>
+        <td>Scheduling</td>
+      </tr>
+      <tr>
+        <td class="mono">4</td>
+        <td><b>Will there be a sandbox / practice environment before launch?</b></td>
+        <td>If so, the limitations of in-distribution simulation (§08-③) are substantially reduced</td>
+        <td>Calibration quality</td>
+      </tr>
+      <tr>
+        <td class="mono">5</td>
+        <td><b>Do external non-generative models, such as Jev classification / decision models, fall within the Rule 5.1 exception?</b></td>
+        <td>The exception in 5.1 says  <i>“external AI models for <b>creative content generation</b>”</i>, while Jev does not generate creative content</td>
+        <td>Architecture compliance</td>
+      </tr>
+      <tr>
+        <td class="mono">6</td>
+        <td><b>Quotas, rate limits, and costs for the provided LLMs?</b></td>
+        <td>The rules permit their use but do not specify quotas</td>
+        <td>Generation-layer selection</td>
+      </tr>
+      <tr>
+        <td class="mono">7</td>
+        <td><b>Are NPC opinion updates programmatic probabilistic functions or LLM judgments?</b><br>
+            <span style="font-size:12.5px;color:var(--muted)">(A direct answer is unlikely, but we can ask whether NPC behavior documentation will be available)</span></td>
+        <td>The biggest unknown in §07: determines whether computable features or framing and wording matter more</td>
+        <td>Overall content-strategy direction</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-good">
+    <span class="t">Where to Ask</span>
+    Discord <code>#questions</code>  is the only formal channel; ethics questions:  <code>rahat.masood@unsw.edu.au</code>. Also note that the 2026 rules page retains 2025 content (the prizegiving page explicitly says placeholder; Rules 7.3/7.4 still say 31 Oct 2025): 
+    <b>use Discord announcements and the Community Portal for scheduling.</b>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  CTN 2026 Architecture Design · Created 2026-10-07 · Competition 2026-10-19 → 2026-11-02<br>
+  Based on: official 2026 Rules v1.0.0 / Setting page and organizers' paper arXiv:2607.23993 (2025 technical specifications and results)<br>
+  <span style="font-size:12px">The 📗/📙/📕 levels in §07 distinguish explicit paper statements from the author's inferences. Do not treat inferences as facts.</span>
+</footer>
+
+</body>
+</html>

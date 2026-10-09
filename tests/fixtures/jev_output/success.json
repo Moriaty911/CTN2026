@@ -1,0 +1,27 @@
+{
+  "schema_version": "jev-output.v1",
+  "evaluation_id": "sample-evaluation-success",
+  "post_id": "sample-minimal",
+  "source_kind": "synthetic",
+  "stage": "deep",
+  "question_set_version": "sample-questions-v1",
+  "status": "success",
+  "request_id": "sample-request-success",
+  "model": "sample-model-version",
+  "usage": {"input_tokens": 120, "output_tokens": 18},
+  "latency_ms": 35.0,
+  "evaluated_at": "2026-10-09T10:01:00+11:00",
+  "context_issues": [{"path": "metrics", "reason": "unknown"}],
+  "answers": {
+    "intent": {
+      "type": "choice", "status": "valid", "value": "question",
+      "probabilities": {"question": 0.8, "opinion": 0.2}, "confidence": 0.6
+    },
+    "openness": {
+      "type": "score", "status": "valid", "value": 1.6,
+      "legend": {"0": "Closed", "1": "Unclear", "2": "Open"},
+      "probabilities": {"0": 0.0, "1": 0.4, "2": 0.6}, "confidence": 0.2
+    },
+    "is_question": {"type": "noul", "status": "valid", "value": 0.95}
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "limits": {
+    "max_state_bytes": 512,
+    "max_request_bytes": 131072,
+    "max_conversation_items": 20,
+    "max_history_events": 20,
+    "context_priority": [
+      "parent",
+      "quoted",
+      "verified_background",
+      "comment",
+      "related",
+      "history",
+      "profile",
+      "hashtags"
+    ]
+  },
+  "result": {
+    "schema_version": "jev-packing.v1",
+    "status": "deferred",
+    "kind": "post",
+    "stage": "triage",
+    "targets": [
+      {
+        "role": "target",
+        "source_kind": "synthetic",
+        "post_id": "sample-minimal",
+        "content_path": "content"
+      }
+    ],
+    "issues": [
+      {
+        "path": "content",
+        "reason": "core_state_over_budget"
+      }
+    ],
+    "question_ids": [
+      "relevance",
+      "topic",
+      "policy_stance",
+      "prompt_injection"
+    ],
+    "answer_bindings": {
+      "relevance": {
+        "question_id": "relevance",
+        "content_path": "content",
+        "targets": [
+          {
+            "role": "target",
+            "source_kind": "synthetic",
+            "post_id": "sample-minimal",
+            "content_path": "content"
+          }
+        ]
+      },
+      "topic": {
+        "question_id": "topic",
+        "content_path": "content",
+        "targets": [
+          {
+            "role": "target",
+            "source_kind": "synthetic",
+            "post_id": "sample-minimal",
+            "content_path": "content"
+          }
+        ]
+      },
+      "policy_stance": {
+        "question_id": "policy_stance",
+        "content_path": "content",
+        "targets": [
+          {
+            "role": "target",
+            "source_kind": "synthetic",
+            "post_id": "sample-minimal",
+            "content_path": "content"
+          }
+        ]
+      },
+      "prompt_injection": {
+        "question_id": "prompt_injection",
+        "content_path": "content",
+        "targets": [
+          {
+            "role": "target",
+            "source_kind": "synthetic",
+            "post_id": "sample-minimal",
+            "content_path": "content"
+          }
+        ]
+      }
+    },
+    "question_set_version": "ctn-post.v1",
+    "question_set_fingerprint": "078f3ad2220ef07225d09446f013be2522f8d31867beaa11c3d7b6e7a831ada4",
+    "packing_fingerprint": "32caf7b1f373f9ff340b4c913be2f70f4891f15462832f6a632899602f03f02d",
+    "input_fingerprint": "e0c78c52c0f3fe4d644b02e2d07b8e180dda39038062ebe4e71a84a8819918ea",
+    "request_id": null,
+    "state_bytes": 1199,
+    "request_bytes": 9806,
+    "batch_index": null
+  }
+}
