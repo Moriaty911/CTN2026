@@ -12,6 +12,17 @@ REVIEW_CASES = Path(__file__).parent / "fixtures" / "jev_rubrics" / "review_case
 
 
 class RubricTests(unittest.TestCase):
+    def test_confirmations_are_per_field_not_all_labels_of_reviewed_scenarios(self):
+        cases = json.loads(REVIEW_CASES.read_text(encoding="utf-8"))
+        confirmed = cases["confirmed_reference_fields"]
+        self.assertEqual(set(confirmed), set(cases["reviewed_scenario_cases"]))
+        for group in ("post_cases", "comparison_cases"):
+            for case in cases[group]:
+                fields = set(case.get("expected_labels", {})) | set(case.get("expected_levels", {})) | set(case.get("expected_yes", {})) | set(case["unavailable_answers"])
+                self.assertTrue(set(confirmed.get(case["id"], ())) <= fields)
+        self.assertEqual(confirmed["voluntary_not_mandate"], ["policy_stance"])
+        self.assertNotIn("emotion_intensity", confirmed["voluntary_not_mandate"])
+
     def test_both_rubrics_are_confirmed_baselines_with_separate_versions(self):
         post, comparison = load_rubric("post"), load_rubric("comparison")
         self.assertEqual(post.status, "confirmed")

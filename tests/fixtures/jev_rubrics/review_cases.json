@@ -1,7 +1,44 @@
 {
   "schema_version": "jev-rubric-review.v1",
   "status": "partially_reviewed_human_references",
-  "reviewed_scenario_cases": ["voluntary_not_mandate", "willing_to_reconsider", "specific_assertion_closed_discussion", "same_version_conflict", "different_versions", "quoted_not_endorsed", "quotation_not_endorsed"],
+  "reviewed_scenario_cases": [
+    "voluntary_not_mandate",
+    "willing_to_reconsider",
+    "specific_assertion_closed_discussion",
+    "same_version_conflict",
+    "different_versions",
+    "quoted_not_endorsed",
+    "quotation_not_endorsed"
+  ],
+  "confirmation_date": "2026-10-09",
+  "confirmed_reference_fields": {
+    "voluntary_not_mandate": [
+      "policy_stance"
+    ],
+    "willing_to_reconsider": [
+      "policy_stance",
+      "discussion_openness"
+    ],
+    "specific_assertion_closed_discussion": [
+      "discussion_openness",
+      "response_specificity",
+      "fact_check_needed"
+    ],
+    "same_version_conflict": [
+      "pair_comparability",
+      "claim_attribution",
+      "claim_relation"
+    ],
+    "different_versions": [
+      "pair_comparability",
+      "claim_relation"
+    ],
+    "quoted_not_endorsed": [],
+    "quotation_not_endorsed": [
+      "claim_attribution"
+    ]
+  },
+  "confirmation_scope": "Only listed fields encode the six accepted scenario meanings. A reviewed scenario does not confirm all its auxiliary labels or score anchors. quoted_not_endorsed was reviewed for attribution semantics; its neutral stance annotation remains a candidate, not an explicitly accepted label. Unlisted fields remain candidate references.",
   "description": "Synthetic review cases for the first-version rubric baseline. The user confirmed six boundary-scenario meanings represented by reviewed_scenario_cases; other annotations remain candidate human references. Labels and integer score anchors are human reference expectations, not generated JEV answers or measured accuracy. Provider Scores may be fractional. No service calls are required to validate fixture structure.",
   "post_cases": [
     {
@@ -765,5 +802,28 @@
       "unavailable_answers": [],
       "notes": []
     }
-  ]
+  ],
+  "review_policy": {
+    "confirmed_at": "2026-10-10",
+    "baseline_scope": "Only confirmed_reference_fields within the six accepted boundary meanings; all other annotations remain candidate.",
+    "correction_priorities": [
+      {
+        "priority": 1,
+        "errors": [
+          "missed_injection_risk",
+          "incorrect_relative_alignment",
+          "unendorsed_quote_attributed_to_author",
+          "incomparable_conditions_claimed_as_author_conflict"
+        ]
+      },
+      {
+        "priority": 2,
+        "errors": [
+          "reply_value_score_deviation",
+          "selected_prompt_type_mismatch"
+        ]
+      }
+    ],
+    "action_thresholds_changed": false
+  }
 }

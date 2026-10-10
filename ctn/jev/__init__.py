@@ -43,6 +43,24 @@ from .packing import (
     PackingValidationError,
 )
 from .client import CallAttempt, HttpResponse, HttpTransport, JevCallResult, JevClient, TransportError
+from .parsing import PARSING_SCHEMA_VERSION, JevResponseParser, ParsingIssue, ParsingResult, ParsingValidationError
+from .routing import RouteDecision, RoutingPolicy, RoutingValidationError
+from .evaluator import (
+    FLOW_SCHEMA_VERSION, EvaluationFlow, EvaluationLimits, EvaluationNeed,
+    EvaluatorValidationError, JevEvaluator, StageEvaluation,
+)
+from .handoff import HANDOFF_SCHEMA_VERSION, HandoffPackage, HandoffValidationError, build_handoff, build_comparison_handoff
+from .audit import JevAuditLog
+from .calibration import (
+    CalibrationSample, CalibrationValidationError, HumanReference, ObservedFeedback,
+    replay_routes, review_assessments, compare_assessment_runs,
+)
+from .actions import ActionDecision, ActionPolicy, ActionValidationError
+from .materials import (
+    FactVerification, MaterialBrief, MaterialCheck, MaterialChecker, MaterialUse,
+    MaterialValidationError, TextSpan,
+)
+from .workflow import JevWorkflow, WorkflowValidationError
 
 __all__ = [
     "INPUT_SCHEMA_VERSION",
@@ -86,4 +104,44 @@ __all__ = [
     "JevCallResult",
     "JevClient",
     "TransportError",
+    "PARSING_SCHEMA_VERSION",
+    "JevResponseParser",
+    "ParsingIssue",
+    "ParsingResult",
+    "ParsingValidationError",
+    "RouteDecision",
+    "RoutingPolicy",
+    "RoutingValidationError",
+    "FLOW_SCHEMA_VERSION",
+    "EvaluationFlow",
+    "EvaluationLimits",
+    "EvaluationNeed",
+    "EvaluatorValidationError",
+    "JevEvaluator",
+    "StageEvaluation",
+    "HANDOFF_SCHEMA_VERSION",
+    "HandoffPackage",
+    "HandoffValidationError",
+    "build_handoff",
+    "build_comparison_handoff",
+    "JevAuditLog",
+    "CalibrationSample",
+    "CalibrationValidationError",
+    "HumanReference",
+    "ObservedFeedback",
+    "replay_routes",
+    "review_assessments",
+    "compare_assessment_runs",
+    "ActionDecision",
+    "ActionPolicy",
+    "ActionValidationError",
+    "FactVerification",
+    "MaterialBrief",
+    "MaterialCheck",
+    "MaterialChecker",
+    "MaterialUse",
+    "MaterialValidationError",
+    "TextSpan",
+    "JevWorkflow",
+    "WorkflowValidationError",
 ]

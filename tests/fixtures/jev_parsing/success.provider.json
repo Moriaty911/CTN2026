@@ -1,0 +1,180 @@
+{
+  "model": "jev-synthetic-fixture",
+  "answers": {
+    "claim_kind": {
+      "type": "choice",
+      "choice": "factual",
+      "probabilities": {
+        "factual": 1.0,
+        "mixed": 0.0,
+        "none": 0.0,
+        "policy_proposal": 0.0,
+        "unclear": 0.0,
+        "value_preference": 0.0
+      },
+      "confidence": 1.0
+    },
+    "concrete_concern": {
+      "type": "noul",
+      "noul": 0.0
+    },
+    "direct_question": {
+      "type": "noul",
+      "noul": 0.0
+    },
+    "discussion_openness": {
+      "type": "score",
+      "score": 1.6,
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.4,
+        "2": 0.6,
+        "3": 0.0,
+        "4": 0.0
+      },
+      "confidence": 0.2,
+      "legend": {
+        "0": "0: Explicitly refuses discussion or states that no answer or reason will be considered.",
+        "1": "1: Dismisses alternative views or interlocutors, without an explicit refusal to discuss.",
+        "2": "2: An interpretable statement gives no clear cue of either refusal or an invitation to discussion.",
+        "3": "3: Genuinely asks for explanations or invites relevant perspectives and discussion.",
+        "4": "4: Explicitly expresses willingness to reconsider the position in response to reasons or evidence."
+      }
+    },
+    "emotion_evidence": {
+      "type": "choice",
+      "choice": "sufficient",
+      "probabilities": {
+        "insufficient": 0.0,
+        "sufficient": 1.0,
+        "unclear": 0.0
+      },
+      "confidence": 1.0
+    },
+    "emotion_intensity": {
+      "type": "score",
+      "score": 1.6,
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.4,
+        "2": 0.6,
+        "3": 0.0,
+        "4": 0.0
+      },
+      "confidence": 0.2,
+      "legend": {
+        "0": "0: Matter-of-fact wording with no appreciable emotion expressed.",
+        "1": "1: Mild concern, approval, frustration or another lightly expressed feeling.",
+        "2": "2: Clear emotion that remains moderate and measured.",
+        "3": "3: Strong, emphatic emotional expression, such as pronounced anger, fear or enthusiasm.",
+        "4": "4: Extremely intense or sustained emotional expression dominates the wording."
+      }
+    },
+    "expression_function": {
+      "type": "choice",
+      "choice": "argument",
+      "probabilities": {
+        "argument": 1.0,
+        "assertion": 0.0,
+        "call_to_action": 0.0,
+        "experience": 0.0,
+        "other": 0.0,
+        "question": 0.0,
+        "unclear": 0.0,
+        "venting": 0.0
+      },
+      "confidence": 1.0
+    },
+    "fact_check_needed": {
+      "type": "noul",
+      "noul": 0.0
+    },
+    "openness_evidence": {
+      "type": "choice",
+      "choice": "sufficient",
+      "probabilities": {
+        "insufficient": 0.0,
+        "sufficient": 1.0,
+        "unclear": 0.0
+      },
+      "confidence": 1.0
+    },
+    "policy_stance": {
+      "type": "choice",
+      "choice": "mixed",
+      "probabilities": {
+        "mixed": 1.0,
+        "neutral": 0.0,
+        "no": 0.0,
+        "unclear": 0.0,
+        "yes": 0.0
+      },
+      "confidence": 1.0
+    },
+    "prompt_injection": {
+      "type": "noul",
+      "noul": 0.0
+    },
+    "relevance": {
+      "type": "choice",
+      "choice": "relevant",
+      "probabilities": {
+        "relevant": 1.0,
+        "unclear": 0.0,
+        "unrelated": 0.0
+      },
+      "confidence": 1.0
+    },
+    "response_specificity": {
+      "type": "score",
+      "score": 1.6,
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.4,
+        "2": 0.6,
+        "3": 0.0,
+        "4": 0.0
+      },
+      "confidence": 0.2,
+      "legend": {
+        "0": "0: An interpretable message offers no identifiable substantive issue to address.",
+        "1": "1: A broad slogan or generalized position has little concrete focus.",
+        "2": "2: A concrete claim, proposal or concern gives a recognizable response focus.",
+        "3": "3: The scope of an issue or dispute is clear enough to locate the point a reply would address.",
+        "4": "4: An assertion or question explicitly identifies its subject, scope and specific point needing explanation or verification, so the focus of a reply can be determined directly."
+      }
+    },
+    "specificity_evidence": {
+      "type": "choice",
+      "choice": "sufficient",
+      "probabilities": {
+        "insufficient": 0.0,
+        "sufficient": 1.0,
+        "unclear": 0.0
+      },
+      "confidence": 1.0
+    },
+    "topic": {
+      "type": "choice",
+      "choice": "economic_effects",
+      "probabilities": {
+        "economic_effects": 1.0,
+        "institutional_trust": 0.0,
+        "other_relevant": 0.0,
+        "personal_choice": 0.0,
+        "personal_experience": 0.0,
+        "public_access": 0.0,
+        "public_health": 0.0,
+        "unclear": 0.0,
+        "unrelated": 0.0,
+        "vaccine_evidence": 0.0,
+        "voting_process": 0.0
+      },
+      "confidence": 1.0
+    }
+  },
+  "usage": {
+    "input_tokens": 120,
+    "output_tokens": 24
+  }
+}

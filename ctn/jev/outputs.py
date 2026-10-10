@@ -21,6 +21,21 @@ OUTPUT_SCHEMA_VERSION = "jev-output.v1"
 _TOLERANCE = 1e-6
 
 
+def _score_consistency_tolerance(value: float, probabilities: Mapping[str, float]) -> float:
+    """Bound separately rounded wire scores/distributions; retain the score.
+
+    Live JEV responses can expose two decimal places independently for both.
+    Only that observed precision receives rounding tolerance. With sum(p)=1,
+    centering indices bounds the weighted error by .005*sum(abs(i-center));
+    the score's own rounding adds .005. This is not a decision-threshold margin.
+    """
+    if all(math.isclose(number * 100, round(number * 100), rel_tol=0, abs_tol=1e-8)
+           for number in (value, *probabilities.values())):
+        center = (len(probabilities) - 1) / 2
+        return .005 * (1 + math.fsum(abs(int(key) - center) for key in probabilities)) + _TOLERANCE
+    return _TOLERANCE
+
+
 class OutputValidationError(ValueError):
     def __init__(self, path: str, code: str, message: str) -> None:
         self.path, self.code, self.message = path, code, message
@@ -175,7 +190,8 @@ class AssessmentAnswer:
             _text(description, "legend")
         _number(self.value, "value", 0, len(legend) - 1)
         expected = math.fsum(int(key) * probability for key, probability in probabilities.items())
-        if not math.isclose(self.value, expected, rel_tol=0, abs_tol=_TOLERANCE):
+        if not math.isclose(self.value, expected, rel_tol=0,
+                            abs_tol=_score_consistency_tolerance(self.value, probabilities)):
             raise OutputValidationError("value", "relationship", "score must match the probability-weighted levels")
         object.__setattr__(self, "legend", MappingProxyType(legend))
 

@@ -12,11 +12,13 @@ from typing import Literal
 from .questions import QuestionSet, QuestionValidationError
 
 
-def load_rubric(name: Literal["post", "comparison"]) -> QuestionSet:
+def load_rubric(name: Literal["post", "comparison"], *, version: str = "v1") -> QuestionSet:
     """Load a named baseline explicitly; never enables service calls or actions."""
     if type(name) is not str or name not in {"post", "comparison"}:
         raise QuestionValidationError("name", "enum", "unsupported rubric")
-    return QuestionSet.load(Path(__file__).with_name("rubrics") / f"{name}.v1.json")
+    if type(version) is not str or version not in ({"v1", "v2"} if name == "post" else {"v1"}):
+        raise QuestionValidationError("version", "enum", "unsupported rubric version")
+    return QuestionSet.load(Path(__file__).with_name("rubrics") / f"{name}.{version}.json")
 
 
 def relative_stance(
