@@ -165,8 +165,20 @@ class CalibrationSample:
         request_fields = {"schema_version", "status", "kind", "stage", "targets", "issues", "question_ids",
             "answer_bindings", "question_set_version", "question_set_fingerprint", "packing_fingerprint",
             "input_fingerprint", "request_id", "state_bytes", "request_bytes", "batch_index"}
-        if type(request) is not dict or set(request) != request_fields or request.get("status") != "ready":
+        if (type(request) is not dict or request_fields - request.keys() or
+            request.keys() - request_fields - {"injection_preflight"} or request.get("status") != "ready"):
             raise CalibrationValidationError("request: expected metadata only")
+        if "injection_preflight" in request:
+            check = request["injection_preflight"]
+            keys = {"schema_version", "policy_fingerprint", "status", "complete", "limits_reached", "findings", "scope"}
+            if (type(check) is not dict or set(check) != keys or
+                check["schema_version"] != "jev-injection-preflight.v1" or
+                check["status"] != "no_local_signal" or check["complete"] is not True or
+                check["findings"] != [] or check["limits_reached"] != [] or
+                check["scope"] != "local_heuristics_not_a_safety_guarantee" or
+                type(check["policy_fingerprint"]) is not str or len(check["policy_fingerprint"]) != 64 or
+                any(c not in "0123456789abcdef" for c in check["policy_fingerprint"])):
+                raise CalibrationValidationError("request: invalid preflight metadata")
         targets = request.get("targets")
         if (type(targets) is not list or not targets or type(targets[0]) is not dict or
             targets[0].get("post_id") != output.post_id or targets[0].get("source_kind") != output.source_kind or

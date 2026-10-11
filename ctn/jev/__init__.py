@@ -33,6 +33,9 @@ from .questions import (
     QuestionValidationError,
 )
 from .rubrics import load_rubric, relative_stance
+from .injection import (
+    INJECTION_SCHEMA_VERSION, InjectionLimits, InjectionFinding, InjectionCheck, InjectionPreflight,
+)
 from .packing import (
     PACKING_SCHEMA_VERSION,
     JevPacker,
@@ -61,6 +64,7 @@ from .materials import (
     MaterialValidationError, TextSpan,
 )
 from .workflow import JevWorkflow, WorkflowValidationError
+from .planning import PLANNING_SCHEMA_VERSION, ResponsePlanningTask, build_response_planning
 
 __all__ = [
     "INPUT_SCHEMA_VERSION",
@@ -91,6 +95,11 @@ __all__ = [
     "QuestionValidationError",
     "load_rubric",
     "relative_stance",
+    "INJECTION_SCHEMA_VERSION",
+    "InjectionLimits",
+    "InjectionFinding",
+    "InjectionCheck",
+    "InjectionPreflight",
     "PACKING_SCHEMA_VERSION",
     "JevPacker",
     "PackedTarget",
@@ -144,4 +153,7 @@ __all__ = [
     "TextSpan",
     "JevWorkflow",
     "WorkflowValidationError",
+    "PLANNING_SCHEMA_VERSION",
+    "ResponsePlanningTask",
+    "build_response_planning",
 ]

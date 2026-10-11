@@ -24,6 +24,7 @@ class HandoffPackage:
     _json: str = field(repr=False)
     _materials_json: str | None = field(default=None, repr=False)
     _generation_json: str | None = field(default=None, repr=False)
+    _planning_json: str | None = field(default=None, repr=False)
 
     def to_dict(self, *, include_materials=False):
         if type(include_materials) is not bool:
@@ -33,6 +34,8 @@ class HandoffPackage:
             result["materials"] = json.loads(self._materials_json) if self._materials_json else None
             if self._generation_json is not None:
                 result["generation_materials"] = json.loads(self._generation_json)
+            if self._planning_json is not None:
+                result["response_planning_materials"] = json.loads(self._planning_json)
         return result
 
 
@@ -91,11 +94,15 @@ def build_comparison_handoff(stage: StageEvaluation) -> HandoffPackage:
         raise HandoffValidationError("stage: expected bound comparison")
     materials = _stage_materials(stage)
     packed = stage.parsed._packed
+    local_review = packed.preflight is not None and packed.preflight.requires_review
     payload = {"schema_version": HANDOFF_SCHEMA_VERSION, "kind": "comparison",
                "assessment": stage.to_dict(), "final_stage": stage.stage,
                "targets": [t.to_dict() for t in packed.targets], "materials_available": materials is not None,
                "action_decision": {"status": "pending_rules", "action": None,
                                    "reason": "business_policy_not_configured"},
                "generation_task": None, "execution_authorized": False}
+    if local_review:
+        payload["action_decision"] = {"status": "needs_review", "action": None,
+                                      "reason": "local_injection_preflight"}
     return HandoffPackage(json.dumps(payload, ensure_ascii=False, allow_nan=False),
                           json.dumps(materials, ensure_ascii=False, allow_nan=False) if materials else None)

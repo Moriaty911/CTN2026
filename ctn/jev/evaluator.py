@@ -137,6 +137,9 @@ class JevEvaluator:
                                      (self.comparison_questions, QuestionSet, "comparison_questions")):
             if not isinstance(value, expected):
                 raise EvaluatorValidationError(f"{name}: invalid component")
+        # Custom packers must retain the same credential boundary, including
+        # quarantined review snapshots that will never reach the client.
+        self.packer = self.packer.with_forbidden_values((client.config.api_key,) if client.config.api_key else ())
         if self.packer.model != client.config.model:
             raise EvaluatorValidationError("model: client and packer must agree")
         if self.post_questions.status != "confirmed" or self.comparison_questions.status != "confirmed":
@@ -275,7 +278,11 @@ class JevEvaluator:
         decision = policy.decide(triage.parsed)
         deep = None
         needs = []
-        if packed.status == "deferred":
+        if packed.preflight is not None and packed.preflight.requires_review:
+            status = "needs_review"
+            decision = RouteDecision("review", "local_injection_preflight")
+            needs.append(EvaluationNeed("review", decision.reason))
+        elif packed.status == "deferred":
             status = "deferred"
             decision = RouteDecision("failed", "packing_deferred")
             needs.append(EvaluationNeed("assessment", "packing_deferred"))
@@ -291,7 +298,11 @@ class JevEvaluator:
             deep_packed = replace(self.packer.pack_post(snapshot, stage="deep", question_set=questions), batch_index=batch_index)
             deep = self._evaluate_stage(deep_packed, questions, batch_memo)
             deep_decision = policy.decide(deep.parsed)
-            if deep_packed.status == "deferred":
+            if deep_packed.preflight is not None and deep_packed.preflight.requires_review:
+                status = "needs_review"
+                decision = RouteDecision("review", "local_injection_preflight")
+                needs.append(EvaluationNeed("review", decision.reason))
+            elif deep_packed.status == "deferred":
                 status = "deferred"
                 decision = RouteDecision("failed", "deep_packing_deferred")
                 needs.append(EvaluationNeed("assessment", decision.reason))

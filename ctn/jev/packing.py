@@ -17,6 +17,7 @@ import re
 from typing import Literal
 
 from .inputs import BackgroundReference, InputValidationError, JevInput
+from .injection import InjectionCheck, InjectionPreflight
 from .questions import QuestionSet
 from .rubrics import load_rubric
 
@@ -125,6 +126,8 @@ class PackingResult:
     request_bytes: int | None = None
     batch_index: int | None = None
     _body_json: str | None = field(default=None, repr=False)
+    preflight: InjectionCheck | None = None
+    _review_json: str | None = field(default=None, repr=False)
 
     def to_provider_bytes(self) -> bytes:
         """Exact UTF-8 transport body used for the request byte budget."""
@@ -136,7 +139,9 @@ class PackingResult:
         """Return a detached body containing only model, state and questions."""
         return json.loads(self.to_provider_bytes())
 
-    def to_dict(self, *, include_body: bool = False) -> dict:
+    def to_dict(self, *, include_body: bool = False, include_review_materials: bool = False) -> dict:
+        if type(include_body) is not bool or type(include_review_materials) is not bool:
+            raise PackingValidationError("serialization: expected explicit boolean export options")
         result = {
             "schema_version": PACKING_SCHEMA_VERSION,
             "status": self.status, "kind": self.kind, "stage": self.stage,
@@ -156,8 +161,15 @@ class PackingResult:
             "state_bytes": self.state_bytes, "request_bytes": self.request_bytes,
             "batch_index": self.batch_index,
         }
+        if self.preflight is not None:
+            result["injection_preflight"] = self.preflight.to_dict()
         if include_body and self.status == "ready":
             result["body"] = self.to_provider_body()
+        # Quarantined observations are opt-in for review, never a provider body
+        # or evaluated evidence. Credential checks run before retention.
+        if include_review_materials and self._review_json is not None:
+            result["review_materials"] = {"observations": json.loads(self._review_json),
+                                        "trust": "untrusted_review_only", "execution_authorized": False}
         return result
 
 
@@ -191,10 +203,14 @@ class JevPacker:
 
     def __init__(self, *, limits: PackingLimits | None = None,
                  verified_references: tuple[BackgroundReference, ...] = (),
-                 forbidden_values: tuple[str, ...] = (), model: str = "jev-latest") -> None:
+                 forbidden_values: tuple[str, ...] = (), model: str = "jev-latest",
+                 preflight: InjectionPreflight | None = None) -> None:
         self.limits = limits if limits is not None else PackingLimits()
         if type(self.limits) is not PackingLimits:
             raise PackingValidationError("limits: expected packing limits")
+        self.preflight = preflight if preflight is not None else InjectionPreflight()
+        if type(self.preflight) is not InjectionPreflight:
+            raise PackingValidationError("preflight: expected local injection preflight")
         if type(forbidden_values) is not tuple or any(type(v) is not str or not v for v in forbidden_values):
             raise PackingValidationError("forbidden_values: expected nonempty strings in a tuple")
         self._forbidden_values = forbidden_values
@@ -217,7 +233,13 @@ class JevPacker:
         return _digest({"schema_version": PACKING_SCHEMA_VERSION,
                         "limits": self.limits.to_dict(),
                         "priority": list(self.limits.context_priority),
+                        "injection_preflight": self.preflight.fingerprint,
                         "registry": [_reference_data(r) for _, r in sorted(self._registry.items())]})
+
+    def with_forbidden_values(self, values):
+        return JevPacker(limits=self.limits, verified_references=tuple(self._registry.values()),
+                         forbidden_values=tuple(dict.fromkeys(self._forbidden_values + values)),
+                         model=self.model, preflight=self.preflight)
 
     def _secret(self, text: str) -> bool:
         return any(v in text for v in self._forbidden_values) or any(p.search(text) for p in _SECRET_PATTERNS)
@@ -306,6 +328,18 @@ class JevPacker:
         if credential_issues:
             return PackingResult(status="deferred", targets=targets, issues=credential_issues,
                                  input_fingerprint=input_fingerprint, **common)
+        observations = original[0] if kind == "post" else dict(zip(("current", "historical"), original))
+        preflight = self.preflight.check(observations)
+        common["preflight"] = preflight
+        if preflight.requires_review:
+            # IDs are external strings too; do not echo a detected instruction
+            # through otherwise text-free target metadata. Input hash remains.
+            unsafe_paths = {finding.path for finding in preflight.findings}
+            targets = tuple(replace(target, post_id=None) if not preflight.complete or
+                            target.content_path + ".post.post_id" in unsafe_paths else target for target in targets)
+            return PackingResult(status="deferred", targets=targets,
+                issues=(PackingIssue("content", "local_injection_signal" if preflight.findings else "local_preflight_incomplete"),),
+                input_fingerprint=input_fingerprint, _review_json=_json(observations), **common)
         if kind == "comparison" and (records[0].source.kind, records[0].post.post_id) == (records[1].source.kind, records[1].post.post_id):
             return PackingResult(status="deferred", targets=targets,
                                  issues=(PackingIssue("content", "same_post_pair"),),

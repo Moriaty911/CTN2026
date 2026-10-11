@@ -27,6 +27,11 @@ def _fingerprint(value):
     return value
 
 
+def _planning_meta(task):
+    return {"status": task.status, "mode": task.mode, "prompt_type": task.prompt_type,
+            "need_count": len(task.needs)} if task else None
+
+
 def _stage(stage):
     parsed, packed = stage.parsed, stage.parsed._packed
     output = parsed.output
@@ -36,6 +41,10 @@ def _stage(stage):
             "status": parsed.status, "request_hash": _hash(packed.request_id),
             "input_hash": _hash(packed.input_fingerprint), "questions_hash": _hash(packed.question_set_fingerprint),
             "packing_hash": _hash(packed.packing_fingerprint),
+            "injection_preflight": ({"policy_hash": packed.preflight.policy_fingerprint,
+                "requires_review": packed.preflight.requires_review, "complete": packed.preflight.complete,
+                "finding_count": len(packed.preflight.findings), "limits_reached": list(packed.preflight.limits_reached)}
+                if packed.preflight is not None else None),
             "question_version_hash": _hash(packed.question_set_version),
             "targets": [{"role": _option(t.role, {"target", "current", "historical"}), "post_hash": _hash(t.post_id),
                          "source_kind": _option(t.source_kind, {"platform", "synthetic", "manual"})} for t in packed.targets],
@@ -53,17 +62,20 @@ class JevAuditLog:
     def __init__(self, path: Path):
         self._writer = JsonlWriter(Path(path))
 
-    def record(self, flow: EvaluationFlow, *, action=None, material_check=None, action_policy=None):
+    def record(self, flow: EvaluationFlow, *, action=None, material_check=None, action_policy=None, response_planning=None):
         if type(flow) is not EvaluationFlow:
             raise ValueError("audit: expected evaluation flow")
         from .actions import ActionDecision, ActionPolicy
         from .materials import MaterialCheck
+        from .planning import ResponsePlanningTask
         if action is not None and type(action) is not ActionDecision:
             raise ValueError("audit: expected action decision")
         if material_check is not None and type(material_check) is not MaterialCheck:
             raise ValueError("audit: expected material check")
         if action_policy is not None and type(action_policy) is not ActionPolicy:
             raise ValueError("audit: expected action policy")
+        if response_planning is not None and type(response_planning) is not ResponsePlanningTask:
+            raise ValueError("audit: expected response planning task")
         self._writer.write({"schema_version": "jev-audit.v1", "event": "post_evaluation",
             "run_hash": _hash(flow.run_id), "status": _option(flow.status, {"evaluated", "partial", "observe", "needs_context", "needs_review", "failed", "deferred"}),
             "batch_index": flow.batch_index if type(flow.batch_index) is int and flow.batch_index >= 0 else None,
@@ -77,19 +89,27 @@ class JevAuditLog:
                 "required_account_level": action.required_account_level, "reply_quality": action.reply_quality,
                 "need_count": len(action.needs)} if action else None,
             "material_check": {"status": material_check.status, "prompt_type": material_check.prompt_type,
-                "need_count": len(material_check.needs)} if material_check else None})
+                "need_count": len(material_check.needs)} if material_check else None,
+            "response_planning": _planning_meta(response_planning)})
 
-    def record_preparation(self, package, material_check):
+    def record_preparation(self, package, material_check, *, response_planning=None):
         from .handoff import HandoffPackage
         from .materials import MaterialCheck
-        if type(package) is not HandoffPackage or type(material_check) is not MaterialCheck:
+        from .planning import ResponsePlanningTask
+        if (type(package) is not HandoffPackage or
+            (material_check is not None and type(material_check) is not MaterialCheck) or
+            (response_planning is not None and type(response_planning) is not ResponsePlanningTask) or
+            (material_check is None and response_planning is None)):
             raise ValueError("audit: expected preparation result")
         data = package.to_dict()
         self._writer.write({"schema_version": "jev-audit.v1", "event": "material_preparation",
             "run_hash": _hash(data["flow"]["run_id"]), "new_attempt_count": 0,
-            "action_policy_hash": _fingerprint(data["action_policy_fingerprint"]), "status": material_check.status,
-            "prompt_type": material_check.prompt_type, "need_count": len(material_check.needs),
-            "generation_ready": data["generation_task"] is not None})
+            "action_policy_hash": _fingerprint(data["action_policy_fingerprint"]),
+            "status": response_planning.status if response_planning else material_check.status,
+            "prompt_type": response_planning.prompt_type if response_planning else material_check.prompt_type,
+            "need_count": len(response_planning.needs if response_planning else material_check.needs),
+            "generation_ready": data["generation_task"] is not None,
+            "response_planning": _planning_meta(response_planning)})
 
     def record_comparison(self, stage: StageEvaluation):
         if type(stage) is not StageEvaluation or stage.parsed._packed.kind != "comparison":

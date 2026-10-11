@@ -12,6 +12,7 @@ from .client import JevClient
 from .evaluator import JevEvaluator
 from .handoff import HandoffPackage, build_handoff, build_comparison_handoff
 from .materials import MaterialBrief, MaterialCheck, MaterialChecker
+from .planning import build_response_planning
 from .rubrics import load_rubric
 
 
@@ -53,17 +54,22 @@ class JevWorkflow:
         data["action_policy"] = policy.to_dict()
         data["action_policy_fingerprint"] = policy.fingerprint
         bound = HandoffPackage(json.dumps(data, ensure_ascii=False, allow_nan=False), package._materials_json)
-        result, gate = self._prepare(bound, brief, comparison, checker)
+        result, gate, planning = self._prepare(bound, brief, comparison, checker)
         if audit is not None:
-            audit.record(flow, action=action, material_check=gate, action_policy=policy)
+            audit.record(flow, action=action, material_check=gate, action_policy=policy, response_planning=planning)
         return result
 
     def _prepare(self, package, brief, comparison, checker):
         data = package.to_dict()
         action = data["action_decision"]
         data["generation_task"] = None
-        gate, generation = None, None
-        if brief is not None:
+        gate, generation, planning, planning_materials = None, None, None, None
+        if action["status"] == "needs_llm_assessment":
+            planning = build_response_planning(package, checker=checker, brief=brief, comparison=comparison)
+            gate = planning.material_check
+            if planning.status == "ready":
+                planning_materials = planning.to_dict(include_materials=True)["task"]
+        elif brief is not None:
             if action["action"] != "reply":
                 gate = MaterialCheck("blocked", brief.prompt_type, ("action_is_not_reply",))
             else:
@@ -76,13 +82,16 @@ class JevWorkflow:
                     "schema_version": generation["schema_version"], "purpose": generation["purpose"],
                     "required_account_level": action["required_account_level"], "reply_quality": action["reply_quality"]}
         data["material_check"] = gate.to_dict() if gate else None
+        data["response_planning_task"] = planning.to_dict() if planning else None
+        data["response_planning_needs"] = list(planning.needs) if planning else []
         data["generation_needs"] = ([] if generation else
             list(gate.needs) if gate and gate.status != "ready" else
             list(action["needs"]) if action["needs"] else
             ["downstream_prompt_type_and_material_brief"] if action["action"] == "reply" else [])
         result = HandoffPackage(json.dumps(data, ensure_ascii=False, allow_nan=False), package._materials_json,
-                                json.dumps(generation, ensure_ascii=False, allow_nan=False) if generation else None)
-        return result, gate
+                                json.dumps(generation, ensure_ascii=False, allow_nan=False) if generation else None,
+                                json.dumps(planning_materials, ensure_ascii=False, allow_nan=False) if planning_materials else None)
+        return result, gate, planning
 
     def evaluate(self, content, *, brief: MaterialBrief | None = None, comparison: HandoffPackage | None = None):
         self._check_selection(brief, comparison)
@@ -101,9 +110,9 @@ class JevWorkflow:
         data = package.to_dict()
         if data.get("kind") != "post" or "action_policy_fingerprint" not in data:
             raise WorkflowValidationError("prepare: expected workflow decision handoff")
-        result, gate = self._prepare(package, brief, comparison, self.material_checker)
+        result, gate, planning = self._prepare(package, brief, comparison, self.material_checker)
         if self.audit_log is not None:
-            self.audit_log.record_preparation(result, gate)
+            self.audit_log.record_preparation(result, gate, response_planning=planning)
         return result
 
     def evaluate_batch(self, contents, *, briefs=None, comparisons=None):

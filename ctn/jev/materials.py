@@ -12,6 +12,7 @@ import hashlib
 import json
 
 from .handoff import HandoffPackage
+from .injection import InjectionCheck, InjectionPreflight
 from .packing import _SECRET_PATTERNS
 
 
@@ -181,6 +182,7 @@ class MaterialCheck:
     prompt_type: str
     needs: tuple[str, ...]
     _task_json: str | None = field(default=None, repr=False)
+    preflight: InjectionCheck | None = None
 
     def __post_init__(self):
         if (type(self.status) is not str or self.status not in {"ready", "needs_materials", "needs_review", "blocked"} or
@@ -199,6 +201,8 @@ class MaterialCheck:
                   "downstream_semantic_review_required": True}
         if include_materials:
             result["task"] = json.loads(self._task_json) if self._task_json else None
+        if self.preflight is not None:
+            result["injection_preflight"] = self.preflight.to_dict()
         return result
 
 
@@ -220,7 +224,11 @@ def _resolve(span, materials):
 
 
 class MaterialChecker:
-    def __init__(self, *, verifications: tuple[FactVerification, ...] = (), forbidden_values: tuple[str, ...] = ()):
+    def __init__(self, *, verifications: tuple[FactVerification, ...] = (), forbidden_values: tuple[str, ...] = (),
+                 preflight: InjectionPreflight | None = None):
+        self.preflight = preflight if preflight is not None else InjectionPreflight()
+        if type(self.preflight) is not InjectionPreflight:
+            raise MaterialValidationError("preflight: expected local injection preflight")
         if type(verifications) is not tuple or any(type(v) is not FactVerification for v in verifications):
             raise MaterialValidationError("verifications: expected local review records")
         self._verifications = verifications
@@ -229,7 +237,8 @@ class MaterialChecker:
         self._forbidden_values = forbidden_values
 
     def with_forbidden_values(self, values):
-        return MaterialChecker(verifications=self._verifications, forbidden_values=tuple(dict.fromkeys(self._forbidden_values + values)))
+        return MaterialChecker(verifications=self._verifications, forbidden_values=tuple(dict.fromkeys(self._forbidden_values + values)),
+                               preflight=self.preflight)
 
     def _has_secret(self, value):
         if type(value) is str:
@@ -263,6 +272,11 @@ class MaterialChecker:
             if comparison_data["kind"] != "comparison":
                 raise MaterialValidationError("comparison: expected pair assessment")
         sets = {"target": materials, "comparison": comparison_data["materials"] if comparison_data else None}
+        local = self.preflight.check({"materials": sets, "brief": brief.to_dict(include_quotes=True)}, path="handoff")
+        if local.requires_review:
+            return MaterialCheck("needs_review", brief.prompt_type, ("local_injection_preflight",), preflight=local)
+        if comparison_data and comparison_data["action_decision"]["status"] == "needs_review":
+            return MaterialCheck("needs_review", brief.prompt_type, ("comparison_requires_review",))
         focus = _resolve(brief.focus, materials)
         if focus is None:
             return MaterialCheck("needs_materials", brief.prompt_type, ("focus_quote_mismatch",))
@@ -363,7 +377,7 @@ class MaterialChecker:
                     "Check that the response is supported by the supplied material during downstream review.",
                     "A disagreement does not establish who is wrong or that credibility has decreased.",
                     "Historical alignment is not established by the comparison assessment.",
-                    "The comparison alone provides no standalone historical injection-risk assessment; review all supplied material downstream.",
+                    "Local preflight is heuristic; the comparison provides no standalone historical model-based injection-risk assessment. Review supplied material downstream.",
                     "Use only the supplied comment sample; do not assert a thread-wide consensus.",
                     "Account voice, final prompt assembly and execution review belong downstream."],
                 "execution_authorized": False}

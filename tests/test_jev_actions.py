@@ -89,11 +89,23 @@ class ActionTests(unittest.TestCase):
             flow, _, _ = assessed(side="no", value=4, handler=handler)
             self.assertIsNone(POLICY.decide(flow).action)
 
-    def test_mixed_neutral_and_unknown_assignment_remain_pending(self):
+    def test_mixed_neutral_delegate_without_action_value_gate_or_account_selection(self):
+        for side in ("mixed", "neutral"):
+            flow, _, _ = assessed(side=side, value=0, level=None)
+            decision = POLICY.decide(flow)
+            self.assertEqual(decision.status, "needs_llm_assessment")
+            self.assertIsNone(decision.action)
+            self.assertIsNone(decision.signal_value)
+            self.assertIsNone(decision.required_account_level)
+
+    def test_unknown_and_legacy_mixed_neutral_remain_pending(self):
         for side in ("mixed", "neutral", "unclear"):
             flow, _, _ = assessed(side=side)
-            self.assertEqual(POLICY.decide(flow).status, "pending_rules")
-            self.assertIsNone(POLICY.decide(flow).action)
+            self.assertEqual(replace(POLICY, version="jev-actions.v1").decide(flow).status, "pending_rules")
+        flow, _, _ = assessed(side="unclear")
+        self.assertEqual(POLICY.decide(flow).status, "pending_rules")
+        self.assertNotIn("mixed_neutral_actions", POLICY.to_dict()["pending_rules"])
+        self.assertNotEqual(POLICY.fingerprint, replace(POLICY, version="jev-actions.v1").fingerprint)
 
     def test_unrelated_observation_is_no_interaction_but_failure_is_not(self):
         flow, _, _ = assessed(handler=lambda body, data: choose(data, "relevance", "unrelated"))
@@ -115,7 +127,7 @@ class ActionTests(unittest.TestCase):
         self.assertEqual(POLICY.fingerprint, replace(POLICY).fingerprint)
         self.assertNotEqual(POLICY.fingerprint, replace(POLICY, aligned_reply_above=3).fingerprint)
         for kwargs in ({"aligned_reply_above": True}, {"opposing_reply_from": 4, "opposing_high_above": 1},
-            {"platform_levels": (("x", "high"), ("x", "standard"))}, {"platform_levels": (("x", {}),)}, {"aligned_reply_above": float("nan")}):
+            {"platform_levels": (("x", "high"), ("x", "standard"))}, {"platform_levels": (("x", {}),)}, {"aligned_reply_above": float("nan")}, {"version": {}}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ActionValidationError):
                 ActionPolicy(**kwargs)
         for version in ("../v2", "v3", None):

@@ -15,8 +15,8 @@ The scenario is the fictional Kingstonia referendum on vaccination proof for acc
 | JEV transport | Sends authenticated HTTPS requests with configurable timeouts, bounded retries, shared cooldown, concurrency control, and response-size limits. |
 | Response parsing | Validates Choice, Score, and Noul answers against the exact request; preserves per-answer failures and applies information-sufficiency gates. |
 | Evaluation routing | Runs triage and, when appropriate, deep evaluation. Supports ordered batches, duplicate-request sharing, optional caching, and explicit post-pair comparisons. |
-| Interaction decisions | Selects reply, like, or no interaction under the confirmed rules, and returns required account-level information. |
-| Generation handoff | Checks a caller-selected reply purpose, exact quotations, supporting materials, comparison conditions, and applicable human verification records. |
+| Interaction decisions | Selects reply, like, or no interaction for aligned/opposing posts; delegates neutral/mixed response planning to the downstream LLM. |
+| Generation handoff | Checks a caller-selected purpose and evidence bindings; supplies guided or open response-planning prompts for neutral/mixed posts. |
 | Audit and review | Records metadata-only JSONL events and supports field-level human references, routing replay, feedback records, and comparisons between evaluated rubric versions. |
 
 ## Architecture and ownership
@@ -31,13 +31,15 @@ flowchart LR
     R -->|Observe, review, or failure| H[Bound handoff]
     D --> A[Validated assessment and action decision]
     A --> H
-    H --> M[Caller-selected purpose and material checks]
+    H --> M[Selected-purpose checks or neutral/mixed response planning]
     M --> L[Downstream account selection, LLM, review, and execution]
 ```
 
 The JEV module owns content preparation, evaluation, parsing, internal routing, interaction decisions, and generation-material checks. Other modules own platform fetching and field mapping, historical storage and retrieval, actual account allocation, LLM service calls, draft review, publishing, and outcome collection. Original-post planning remains a separate flow.
 
 `JevWorkflow` is the recommended integration entry point. It uses the confirmed `ctn-post.v2` rubric for new evaluations. Lower-level `JevEvaluator`, `JevPacker`, and `load_rubric("post")` retain their v1 defaults for compatibility; use explicit versions when working below the workflow layer. `build_handoff()` alone preserves a `pending_rules` placeholder and does not apply the workflow's action policy.
+
+The default action policy is `jev-actions.v2`, which adds neutral/mixed delegation. Explicit `ActionPolicy(version="jev-actions.v1")` preserves the previous pending behavior for historical compatibility. The JEV question rubric and aligned/opposing thresholds are unchanged.
 
 ## Requirements and setup
 
@@ -129,9 +131,34 @@ Transport or whole-assessment failures are returned before routing. For usable a
 
 Risk and relevance are checked again after deep evaluation. Account level and engagement do not filter posts out at triage. These routing checks do not replace downstream draft and publishing review.
 
+### Injection preflight and trust boundaries
+
+Before sending a post or comparison, `JevPacker` runs the offline `InjectionPreflight` on all validated observations, including optional material that may later be omitted by packing budgets. Coverage includes post text and identifiers, parent/quoted/comment material, profiles, interaction history, and background references. A local registry match does not exempt background text from inspection. Internal question instructions remain separate from observations; upstream records cannot supply `questions`, model settings, or an instruction override through the input contract.
+
+Preflight detects a limited set of instruction overrides, role delimiters, forced classification/score/JSON requests, secret requests, Chinese instruction patterns, and bidi controls. Inspection normalizes width/case and selected invisible characters without changing source text. It inspects one level of labelled or whole-field Base64/hex content with finite limits; arbitrary encodings, languages, and semantic evasions are not covered comprehensively. Its limits are local engineering defaults configured through `InjectionLimits`, not provider limits. No automatic cleaning, decoding for execution, URL fetching, or rule changes occur.
+
+When a signal is found, or inspection exceeds a configured limit:
+
+- Packing returns `deferred` with `local_injection_signal` or `local_preflight_incomplete`, no transport body, and an `injection_preflight` report containing field paths, original Unicode offsets, and detection views.
+- The single-post evaluator maps this to `needs_review` with reason `local_injection_preflight`, zero network attempts, no selected action, and no automatic generation/planning materials. Comparison handoffs also require review and expose no evaluated material.
+- Original observations remain in a private, immutable review snapshot. Only explicit `packed.to_dict(include_review_materials=True)` exports this snapshot as `untrusted_review_only`; it is not evaluated evidence or a provider request. Default handoffs and audit logs exclude it. Credential checks precede retention, including when a custom packer is supplied to the evaluator.
+- Generation-material checks recheck observations, supplied comparison material, and caller-provided briefs such as `information_gap`. Open/guided response planning also rechecks material before producing a task, including previously saved handoffs. A new suspicious brief cannot fall back to the earlier open task.
+
+The preflight version/settings contribute to the packing fingerprint and cache identity. Audit events record only policy hashes, completeness, and signal counts. The response parser also rejects suspicious free-text provider model metadata; accepted answer values and score legends remain bound to the internally defined questions.
+
+`no_local_signal` means that these heuristics found no signal; it does not mean trusted or safe. Normal quotations of attack instructions can require review, and classification/value manipulation can still evade both preflight and JEV. Model risk checks at `0.5` remain unchanged and run after local preflight. Structured JSON, matching quotations, and low risk scores do not prove semantic correctness. Downstream LLM input separation, output review, tool permissions, account management, and publishing authorization remain the downstream owners' responsibilities.
+
+Run the focused offline regression suite with:
+
+```sh
+python3 -m unittest tests.test_jev_injection -v
+```
+
+The 22-case synthetic corpus includes obvious attacks, seven ordinary controls, one benign quotation intentionally sent for review, and one known semantic evasion that the local rules miss. Tests use fake provider responses to verify routing, source preservation, isolation, evidence handling, and stopping conditions. They do not measure real JEV detection accuracy or demonstrate resistance to novel attacks. Live adversarial calibration remains pending; no additional paid model calls were made for this implementation.
+
 ## Confirmed interaction rules
 
-All action rules require a usable assessment and applicable score. Unavailable scores are not replaced with defaults.
+Score-based action rules require a usable assessment and applicable score. Unavailable scores are not replaced with defaults. Neutral/mixed planning delegation retains assessment guards but has no reply-value cutoff.
 
 | Post alignment | Signal | Condition | Decision |
 |---|---|---|---|
@@ -141,13 +168,43 @@ All action rules require a usable assessment and applicable score. Unavailable s
 | Opposing | `reply_value` | `1–3`, inclusive | Ordinary reply, subject to target-level resolution. |
 | Opposing | `reply_value` | `> 3` | Reply requiring a high-level account and high-quality content. |
 | Opposing, explicitly mapped high-level target | `reply_value` | Meets the reply threshold | Upgrade the reply to a high-level account and high-quality content. |
-| Mixed, neutral, or unknown alignment | — | Rules not confirmed | `pending_rules`, with no selected action. |
+| Mixed or neutral | — | Usable, relevant deep assessment | `needs_llm_assessment`; send a response-planning task downstream, without selecting an action or account. |
+| Unknown alignment | — | Alignment cannot be established | `pending_rules`, with no selected action. |
 
 A high-level target does not override a low-value skip. Exactly `2.5` selects like for aligned posts; exactly `1` qualifies for an opposing reply; exactly `3` remains in the ordinary-value interval.
 
 `response_specificity` measures how clearly the response point is identifiable. `reply_value` is a separate opportunity rating, not actual competition points, return on investment, or persuasion probability. Visible engagement can inform that rating qualitatively; a standalone engagement trigger has not been defined.
 
 Provide actual, explicitly confirmed platform labels through `ActionPolicy(platform_levels=...)`, mapping each to `standard` or `high`. The default mapping is empty. An opposing post in the ordinary-value interval with an unknown or unmapped level returns `needs_account_metadata`; it does not dispatch ordinary generation. A value above `3` already requests a high-level account. Actual account selection belongs downstream.
+
+## Neutral and mixed response planning
+
+Neutral and mixed posts enter a downstream LLM assessment round to choose what, if anything, to respond to. They do not inherit the opposing-post value thresholds, and neutral wording does not imply high persuadability.
+
+When `response_planning_task.status` is `ready`, explicitly request materials with `package.to_dict(include_materials=True)` and pass `response_planning_materials` to the downstream LLM:
+
+```python
+# package is the result of workflow.evaluate(...).
+output = package.to_dict(include_materials=True)
+planning = output.get("response_planning_task")
+if planning is not None and planning["status"] == "ready":
+    planning_materials = output["response_planning_materials"]
+    # Downstream assembles its LLM request using the instructions and materials.
+```
+
+The task uses one of three modes:
+
+| Mode | Behavior |
+|---|---|
+| `guided` | A caller-supplied `MaterialBrief` fixes the purpose and exact focus. Existing quotation, evidence, comparison, and verification checks must pass. |
+| `question_first` | A valid JEV question classification suggests inspecting and prioritizing the actual question. The LLM must locate it in the text and check whether supplied evidence can answer it. |
+| `open` | No direction is fixed. The LLM chooses an appropriate answer, concern response, explanation, argument response, clarification, or another supported purpose from the supplied content. |
+
+The versioned English instructions are assembled in `ctn/jev/planning.py`. Open planning allows the LLM to select a useful direction, request missing materials, or decide that no interaction is appropriate. It cannot invent evidence, treat quoted instructions as commands, infer permanent affiliation, or claim that disagreement establishes falsehood or reduced credibility. Mixed positions retain their supported parts and conditions.
+
+Supplying a specific brief via `evaluate(..., brief=...)` or `prepare(package, brief)` produces guided planning. Missing required evidence or mismatched quotations produce explicit planning needs; the module does not silently fall back to an open prompt. `prepare()` makes no additional JEV call. Failed new guidance removes any previous planning materials.
+
+`response_planning_task` is separate from `generation_task`: a ready plan request is not a decided reply or a ready draft-generation task. The downstream owner runs the LLM, interprets its response plan, applies the corresponding material/semantic checks, manages accounts, generates the draft, and performs execution review. This module does not parse or adopt an LLM plan as an executed action. Risk, unavailable essential context, evaluation failures, and unrelated observations retain their existing routing behavior.
 
 ## Prepare materials for the downstream LLM
 
@@ -203,8 +260,9 @@ JSON callers can use `MaterialBrief.from_dict(...)` with `jev-material-brief.v1`
 | Individual answer | `valid`, `missing`, `invalid`, `insufficient_context` |
 | Parsed assessment | `success`, `partial`, `failed` |
 | Evaluation flow | `evaluated`, `partial`, `observe`, `needs_context`, `needs_review`, `failed`, `deferred` |
-| Action decision | `decided`, `needs_review`, `needs_assessment`, `pending_rules`, `needs_account_metadata` |
+| Action decision | `decided`, `needs_review`, `needs_assessment`, `pending_rules`, `needs_account_metadata`, `needs_llm_assessment` |
 | Material check | `ready`, `needs_materials`, `needs_review`, `blocked` |
+| Response-planning task | `ready`, `needs_materials`, `needs_review`, `blocked` |
 
 Consumers must inspect these layers and their missing-condition records; a successful HTTP response does not imply a usable assessment or generation task. Missing risk is never treated as zero. An unavailable dependent score exposes no usable numeric value. Scores can be fractional. Observed independent two-decimal score/distribution rounding is handled with a bounded consistency tolerance and a `score_rounding_tolerance` warning; the provider score is retained for action comparisons.
 
@@ -216,7 +274,7 @@ Every handoff has `execution_authorized=False`. A ready generation task supplies
 
 The rubric distinguishes agreement, compatible elaboration, value differences, proposal differences, same-condition factual conflict, differing scope/conditions, no comparable issue, and insufficient information. Author disagreement requires attribution to statements each author actually expresses or endorses. Different versions, times, subjects, scopes, or conditions must not be reported as a same-condition factual conflict.
 
-Pass the resulting comparison package to `prepare(..., comparison=pair_package)` for P04 or P05. Material checks also verify that the current post in the comparison matches the evaluated target snapshot. A conflict does not establish which statement is false or that either author's credibility has declined. Pair comparison does not independently perform a historical post's standalone stance or injection-risk evaluation.
+Pass the resulting comparison package to `prepare(..., comparison=pair_package)` for P04 or P05. Material checks also verify that the current post in the comparison matches the evaluated target snapshot. A conflict does not establish which statement is false or that either author's credibility has declined. Both inputs receive local injection preflight, but pair comparison does not independently perform a historical post's standalone stance or model-based injection-risk evaluation.
 
 ## Audit and calibration
 
@@ -251,7 +309,7 @@ Run the offline suite:
 python3 -m unittest discover -s tests -q
 ```
 
-The recorded October 10, 2026 run passed **285 tests**. Coverage includes input contracts, context omission, request binding, transport failures and retry limits, per-answer parsing, sufficiency gates, routing boundaries, batching and caching, action thresholds, material binding, audit handling, and calibration tools.
+The recorded October 10, 2026 run passed **319 tests**. Coverage includes input contracts, context omission, request binding, transport failures and retry limits, per-answer parsing, sufficiency gates, routing boundaries, batching and caching, action thresholds, guided/open response planning, material binding, injection preflight and adversarial boundary cases, audit handling, and calibration tools.
 
 For an explicit live wire-format check:
 
@@ -271,15 +329,19 @@ Neither offline tests nor that synthetic live check establish real-content class
 | `ctn/jev/inputs.py`, `outputs.py` | Standardized input and assessment contracts. |
 | `ctn/jev/questions.py`, `rubrics.py`, `rubrics/` | Typed questions, versioned rubrics, and relative-alignment mapping. |
 | `ctn/jev/packing.py`, `client.py`, `parsing.py` | Content preparation, transport, and response validation. |
+| `ctn/jev/injection.py` | Offline, bounded injection review signals with unchanged original observations. |
 | `ctn/jev/routing.py`, `evaluator.py` | Two-stage routing, batches, duplicate sharing, and optional caching. |
 | `ctn/jev/actions.py` | Confirmed interaction rules and account-level requirements. |
 | `ctn/jev/materials.py`, `handoff.py` | Selected-purpose checks and explicit material transfer. |
+| `ctn/jev/planning.py` | Neutral/mixed response-planning prompts, question hints, and checked guided directions. |
 | `ctn/jev/audit.py`, `calibration.py`, `smoke.py` | Metadata audit, review tools, and explicit live verification. |
 | `ctn/config.py`, `telemetry.py`, `models.py` | Shared configuration, logging, and project data structures. |
 | `ctn/client/base.py`, `mock.py`, `ratelimit.py` | Existing platform protocol, simulation, and rate-control foundations; not a connected production platform adapter. |
 | `ctn/llm/`, `ctn/rag/`, `ctn/pipeline/` | Placeholders for future integration; their current package initializers are empty. |
 | `tests/` | Offline unit tests and contract/workflow fixtures. |
-| `tests/fixtures/jev_handoff/actions-v1.json` | Eight synthetic action examples, including an explicit generation-material example. |
+| `tests/fixtures/jev_handoff/actions-v1.json` | Eight historical v1 synthetic action examples, including an explicit generation-material example; their neutral pending state remains a versioned historical example. |
+| `tests/fixtures/jev_handoff/response-planning-v1.json` | Current synthetic neutral/mixed open, question-first, and guided planning examples. |
+| `tests/fixtures/jev_injection/cases-v1.json`, `tests/test_jev_injection.py` | Synthetic attacks/controls, documented heuristic gaps, and offline boundary regression tests. |
 | `ctn-architecture-en.html`, `ctn-architecture.html` | Broader design references; proposed architecture is not evidence that every subsystem is implemented. |
 | `jev-decision-tree-en.html` | Earlier English v0.3 design; confirmed rules above and current Python code describe implemented behavior. |
 
@@ -289,12 +351,13 @@ Neither offline tests nor that synthetic live check establish real-content class
 |---|---|
 | Platform input mapping | Upstream supplies standardized content through the input contract. |
 | Official account-level labels | Confirm explicit label-to-`standard`/`high` mappings. |
-| Mixed and neutral interaction rules | Confirm business rules; current decisions remain pending. |
+| Neutral/mixed LLM integration | Downstream consumes the response-planning task, selects a supported direction, and resolves reply/no-interaction/material needs; account selection remains with the account module. |
 | Independent engagement triggers | Define and review thresholds before enabling overrides. |
 | Historical retrieval and frequency statistics | Another module supplies candidate pairs and manages storage/counting. |
 | LLM and account execution | Downstream selects the purpose and actual account, generates and reviews text, checks execution limits, and publishes. |
 | Real feedback | The feedback owner provides linked observations with source, time, and missing-data information. |
 | T10 calibration | Review real samples and outcome feedback, compare concrete versions, and explicitly decide which changes to adopt. |
+| Injection resilience | Calibrate with real JEV adversarial assessments, track missed attacks and benign review burden, and integrate downstream permission/output safeguards. |
 
 General platform/fleet/budget defaults and older policy sketches elsewhere in the repository are development scaffolding, not verified 2026 quotas, scoring formulas, or the active JEV action policy. Confirm applicable competition data-handling requirements before using real competition materials with external services.
 

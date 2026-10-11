@@ -13,6 +13,7 @@ import math
 
 from .client import JevCallResult
 from .inputs import ContextIssue, JevInput
+from .injection import InjectionPreflight
 from .outputs import AnswerIssue, AssessmentAnswer, EvaluationError, JevOutput, OutputValidationError, TokenUsage
 from .packing import PackingResult
 from .questions import QuestionSet, QuestionValidationError
@@ -211,6 +212,10 @@ class JevResponseParser:
             raw["model"].encode("utf-8")
         except UnicodeError:
             return fail("invalid_response_envelope", "Provider model identifier is not valid UTF-8 text.")
+        # The provider's free-text model identifier is not an instruction. Other
+        # accepted answer strings are bound to our exact options/score legends.
+        if InjectionPreflight().check(raw["model"], path="response.model").requires_review:
+            return fail("response_metadata_requires_review", "Provider metadata requires review before use.")
         if type(raw.get("answers")) is not dict:
             return fail("invalid_response_envelope", "Provider response needs a named answers object.")
         if set(raw) - {"model", "answers", "usage"}:
