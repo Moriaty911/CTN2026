@@ -1,22 +1,26 @@
 # ============================================================================
-#  CTN 2026 —— pip 依赖
+#  CTN 2026 — pip dependencies
 # ============================================================================
-#  这是 pip 侧依赖的事实来源（Docker 镜像与 venv 都用它）。
-#  conda 用户请用 environment.yml —— 它引用本文件，避免两处漂移。
+#  This is the source of truth for pip-side dependencies; both the Docker image
+#  and plain venvs install from it. Conda users should use environment.yml,
+#  which references this file so the two cannot drift.
 #
-#  版本策略：**精确钉住**。
-#  理由：我们已经因为解释器版本差异吃过一次「同一份代码 319 通过 / 359 失败」，
-#  依赖版本同理。比赛期间（2026-10-19 → 11-02）不要升级任何依赖。
+#  Version policy: **exact pins**.
+#  Rationale: we already lost a day to a version difference (the same code
+#  passing 319 tests on one interpreter and failing 359 on another).
+#  Dependency versions carry the same risk. Do not upgrade anything during the
+#  competition (2026-10-19 -> 11-02).
 #
-#  升级流程：本地改版本 → 跑 ./scripts/setup_env.sh（或 docker compose 的 verify）
-#           → 319 个测试通过 → 才提交。
+#  Upgrade procedure: change the version locally -> run ./scripts/setup_env.sh
+#  (or the compose `verify` service) -> 319 tests pass -> only then commit.
 # ============================================================================
 
-# 平台 API / LLM 调用的异步 HTTP 客户端
+# Async HTTP client for the platform API and LLM calls
 httpx==0.28.1
 
-# ── 尚未添加，等实际需要时再加 ──────────────────────────────────────
-# 官方 Legit Social Python client：等主办方发放后，按本地 wheel 安装
+# ── Not added yet; add only when actually needed ────────────────────────
+# Official Legit Social Python client: install from a local wheel once the
+# organisers release it:
 #   ./vendor/legit_api_client-*.whl
-# 若确认「图片上传只能走网页 UI」：
-#   playwright==<钉住>
+# If image upload turns out to be UI-only:
+#   playwright==<pinned>

@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  CTN 2026 —— 容器健康检查
+#  CTN 2026 — container health check
 # ============================================================================
-#  两层判断：
+#  Two layers:
 #
-#    1. 若 $CTN_STATE_DIR/heartbeat 存在，以它的新鲜度为准 —— 这才是真正的
-#       **存活**检查：主循环在跑，就会定期 touch 它。进程卡死但没退出时，
-#       只有心跳能发现。
+#    1. If $CTN_STATE_DIR/heartbeat exists, judge liveness by its freshness.
+#       This is the honest signal: while the main loop runs, it touches the
+#       file periodically. A process that is wedged but has not exited can only
+#       be detected this way.
 #
-#    2. 心跳不存在（主循环尚未实现），退化为环境预检 —— 至少能抓住
-#       「解释器版本不对 / 依赖装坏」这类问题。
+#    2. If no heartbeat exists yet (main loop not implemented), degrade to the
+#       environment pre-check — which at least catches "wrong interpreter" and
+#       "broken install".
 #
-#  为什么不用 `pgrep python`：主循环卡在网络等待里时进程仍然活着，
-#  pgrep 会报健康，而实际上舰队已经停止产出。心跳是唯一诚实的信号。
+#  Why not `pgrep python`: while the main loop is blocked on a network wait the
+#  process is still alive, so pgrep reports healthy while the fleet has in fact
+#  stopped producing. The heartbeat is the only signal that does not lie.
 # ============================================================================
 set -euo pipefail
 
@@ -21,7 +24,7 @@ HEARTBEAT="$STATE_DIR/heartbeat"
 MAX_AGE="${CTN_HEARTBEAT_MAX_AGE_S:-300}"
 
 mtime_of() {
-  # GNU stat 与 BSD stat 的取法不同，两者都试
+  # GNU stat and BSD stat differ; try both
   stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
 }
 
@@ -37,6 +40,6 @@ if [ -f "$HEARTBEAT" ]; then
   exit 1
 fi
 
-# 心跳尚未实现 —— 退化为环境预检
+# Heartbeat not implemented yet — degrade to the environment pre-check
 echo "note: no heartbeat at $HEARTBEAT (main loop not implemented yet); falling back to env preflight"
 exec python scripts/check_env.py

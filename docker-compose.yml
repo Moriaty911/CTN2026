@@ -1,23 +1,25 @@
 # ============================================================================
-#  CTN 2026 —— 部署编排
+#  CTN 2026 — deployment orchestration
 # ============================================================================
-#  常用命令：
-#      ./scripts/docker.sh build      # 构建运行时镜像
-#      ./scripts/docker.sh verify     # 构建自检镜像（跑全部测试）
-#      ./scripts/docker.sh up         # 后台启动
-#      ./scripts/docker.sh logs       # 跟随日志
-#      ./scripts/docker.sh shell      # 进容器排查
-#      ./scripts/docker.sh down       # 停止
+#  Common commands:
+#      ./scripts/docker.sh build     # build the runtime image
+#      ./scripts/docker.sh verify    # build the self-check image and run all tests
+#      ./scripts/docker.sh up        # start in the background
+#      ./scripts/docker.sh logs      # follow logs
+#      ./scripts/docker.sh shell     # open a shell for debugging
+#      ./scripts/docker.sh down      # stop
 #
-#  首次部署前必须做一次（否则容器写不进挂载目录）：
+#  Run this once before the first deployment (otherwise the container cannot
+#  write to the mounted directories):
 #      mkdir -p state logs && sudo chown -R 10001:10001 state logs
 #
-#  ── 为什么用 compose 而不是 docker run ──────────────────────────────
-#  它把架构里的三向切分**变成强制**：
-#      代码 → 镜像（来自 git）
-#      状态 → 卷（可单独备份，进不了 git）
-#      密钥 → env_file（进不了镜像）
-#  手工 docker run 很容易把 .env 或 state/ 带进镜像，这里从结构上避免。
+#  ── Why compose instead of plain `docker run` ──────────────────────────
+#  It makes the three-way split from the architecture *enforced*:
+#      code    -> image   (from git)
+#      state   -> volume  (backed up separately, cannot reach git)
+#      secrets -> env_file (cannot reach the image)
+#  A hand-written `docker run` easily drags .env or state/ into the image;
+#  this structure prevents that by construction.
 # ============================================================================
 
 name: ctn2026
@@ -25,7 +27,7 @@ name: ctn2026
 services:
 
   # -------------------------------------------------------------------------
-  # 舰队主进程
+  # Fleet main process
   # -------------------------------------------------------------------------
   fleet:
     build:
@@ -33,9 +35,10 @@ services:
       target: runtime
     image: ctn2026/fleet:${CTN_IMAGE_TAG:-local}
 
-    # 密钥只从 .env 注入，绝不 COPY 进镜像（规则 5.6）。
-    # required: false 让 `docker compose config/build` 在没有 .env 时也能用；
-    # 真正启动前的检查由 scripts/docker.sh 的 require_env 负责。
+    # Secrets are injected from .env only; never COPYed into the image
+    # (Rule 5.6). `required: false` lets `docker compose config/build` work
+    # before .env exists; the real check before starting lives in
+    # scripts/docker.sh (require_env).
     env_file:
       - path: .env
         required: false
@@ -46,23 +49,26 @@ services:
       TZ: Australia/Sydney
 
     volumes:
-      # 状态：sqlite / 曝光日志 / 检查点。**必须单独备份。**
+      # State: sqlite / exposure log / checkpoints. **Back this up separately.**
       - ./state:/state
-      # 遥测 JSONL：校准燃料 + 答辩素材
+      # Telemetry JSONL: calibration fuel plus presentation material
       - ./logs:/logs
 
-    # 两周无人值守运行：崩了必须自己起来
+    # Two weeks unattended: if it dies, it must come back on its own
     restart: unless-stopped
 
-    # 收到 SIGTERM 后给主循环时间把状态落盘，再 SIGKILL。
-    # 与 2 周赛程相比，30 秒的停机完全可以忽略；数据丢失则不可逆。
+    # Give the main loop time to flush state to disk after SIGTERM, before
+    # SIGKILL. Compared with a two-week run, 30 seconds of downtime is
+    # negligible; losing data is not.
     stop_grace_period: 30s
 
-    # 正确转发信号、回收僵尸进程（Python 作为 PID 1 的经典问题）
+    # Correct signal forwarding and zombie reaping (the classic problem when
+    # Python runs as PID 1)
     init: true
 
-    # 限速设计里不需要高吞吐（每队约 0.6 req/s），
-    # 上限只用来防止 bug 导致的失控循环拖垮宿主机。
+    # The rate-limit design needs no high throughput (~0.6 req/s per team).
+    # These caps exist only to stop a bug-driven runaway loop from taking down
+    # the host.
     deploy:
       resources:
         limits:
@@ -75,13 +81,14 @@ services:
         max-size: "20m"
         max-file: "5"
 
-    # 主循环就位后启用；当前默认 CMD 已在 Dockerfile 中说明
+    # Enable once the main loop exists; the current default CMD is documented
+    # in the Dockerfile.
     # command: ["python", "-m", "ctn.main"]
 
   # -------------------------------------------------------------------------
-  # 自检（不进默认启动，按需运行）
+  # Self-check (not started by default; run on demand)
   #     docker compose --profile test run --rm verify
-  #     或 ./scripts/docker.sh verify
+  #     or ./scripts/docker.sh verify
   # -------------------------------------------------------------------------
   verify:
     profiles: ["test"]
@@ -89,5 +96,5 @@ services:
       context: .
       target: verify
     image: ctn2026/verify:${CTN_IMAGE_TAG:-local}
-    # 纯离线：不需要 .env、不需要网络、不挂任何卷
+    # Fully offline: no .env, no network, no volumes
     network_mode: none

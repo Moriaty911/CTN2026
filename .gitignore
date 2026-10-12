@@ -1,29 +1,34 @@
 # ============================================================================
 #  CTN 2026 — .gitignore
 # ============================================================================
-#  两条规则决定了这个文件的内容，请勿随意删减：
+#  Two competition rules drive the contents of this file. Do not remove
+#  entries without reading them.
 #
-#  规则 5.6  绝不能把比赛 API key / 凭证泄漏到队伍之外。
-#            → 硬编码后 push 即违规，事后再删也没用（git 历史里还在）。
-#            → 发现泄漏必须立刻轮换 key 并通知主办方。
+#  Rule 5.6  Never share competition API keys or credentials beyond your team.
+#            -> Hardcoding a key and pushing is itself a breach; deleting it
+#               afterwards does not help, because it stays in git history.
+#            -> If a key leaks, rotate it immediately and notify the organisers.
 #
-#  规则 5.2  不得把比赛材料（规则 PDF、选手简报、Discord 截图等）
-#            泄漏到队伍之外。
+#  Rule 5.2  Do not leak competition materials (rules PDFs, participant
+#            briefings, Discord screenshots, ...) beyond your team.
 #
-#  另外：本仓库在比赛期间必须保持 **private**。
-#        公开你的代码 = 把策略白送给对手（尤其你还被允许对他人 agent 做 prompt injection）。
-#        赛后如需开源（规则 10.4 允许），请先确认历史里没有以下任何内容。
+#  Also: this repository MUST stay **private** for the duration of the
+#  competition. Publishing your code hands your strategy to the other teams
+#  (especially since prompt injection against other agents is permitted).
+#  If you open-source it afterwards (allowed by Rule 10.4), first confirm that
+#  none of the categories below ever entered the history.
 # ============================================================================
 
 
 # ---------------------------------------------------------------------------
-#  密钥与凭证  ← 最高优先级（规则 5.6）
+#  Secrets and credentials  <- highest priority (Rule 5.6)
 # ---------------------------------------------------------------------------
 .env
 .env.*
-# 只保留无密钥模板（变量名在、值不在）
-# ⚠️ 注释必须独立成行：gitignore 里行尾的 # 不是注释，
-#    会被并入模式，导致这条否定规则静默失效。
+# Keep the value-free template only (variable names present, values absent).
+# NOTE: the comment must be on its own line. A trailing `#` in a .gitignore
+#       pattern is NOT a comment — it becomes part of the pattern and the
+#       negation below silently stops matching.
 !.env.example
 
 *.pem
@@ -42,11 +47,12 @@ service-account*.json
 
 
 # ---------------------------------------------------------------------------
-#  运行时状态  ← 绝不进 git
+#  Runtime state  <- never committed
 # ---------------------------------------------------------------------------
-#  理由：状态每秒都在变（巨大且无意义的 diff），体量大，
-#        且 `git pull` 到有状态文件的目录会冲突 —— 你的 bot 会停在半路，
-#        而比赛正在跑。状态需要的是「备份」，不是「版本控制」。
+#  Rationale: state changes every second (huge, meaningless diffs), it is
+#  large, and `git pull` into a directory that holds live state files causes
+#  conflicts — which stops the fleet mid-run while the competition is live.
+#  State needs *backups*, not *version control*.
 state/
 *.db
 *.db-wal
@@ -60,19 +66,21 @@ checkpoint*
 
 
 # ---------------------------------------------------------------------------
-#  遥测与日志  ← 绝不进 git
+#  Telemetry and logs  <- never committed
 # ---------------------------------------------------------------------------
-#  理由：体量大；且含平台内容与遥测数据（规则 4.3 / 6.4 涉及数据处理）。
+#  Rationale: large, and contains platform content plus telemetry data
+#  (Rules 4.3 / 6.4 cover data handling).
 logs/
 *.log
 *.jsonl
-!strategy/**/*.jsonl   # 例外：手工维护的策略语料可以入库
+!strategy/**/*.jsonl   # exception: hand-maintained strategy corpora may be tracked
 
 
 # ---------------------------------------------------------------------------
-#  比赛材料  ← 绝不进 git（规则 5.2）
+#  Competition materials  <- never committed (Rule 5.2)
 # ---------------------------------------------------------------------------
-#  规则文件、选手信息表、官方客户端模板若来自主办方，先确认可否入库再放。
+#  For rules documents, participant sheets and official client templates:
+#  confirm with the organisers before tracking anything they supplied.
 materials/
 briefings/
 official/
@@ -85,14 +93,16 @@ screenshots/
 
 
 # ---------------------------------------------------------------------------
-#  Conda / 环境
+#  Conda / environments
 # ---------------------------------------------------------------------------
-#  环境由 environment.yml + scripts/setup_env.sh 定义，是仓库的一部分。
-#  但本地建出来的环境目录、导出的锁文件、conda 缓存不入库。
+#  The environment is defined by environment.yml + scripts/setup_env.sh and is
+#  part of the repository. Locally created environment directories, exported
+#  lock files and the conda cache are not.
 .conda/
 envs/
 environment.lock.yml
 *.conda.lock
+
 
 # ---------------------------------------------------------------------------
 #  Python
@@ -127,7 +137,7 @@ junit*.xml
 
 
 # ---------------------------------------------------------------------------
-#  本地缓存 / 临时文件
+#  Local caches / scratch
 # ---------------------------------------------------------------------------
 .cache/
 tmp/
@@ -142,10 +152,13 @@ scratch/
 playground/
 *.local.*
 local_*
+# Local JEV task lists and decision notes (user requirement: never commit)
+/JEV_TASKS.local.md
+/JEV_INPUT_CONTRACT.local.md
 
 
 # ---------------------------------------------------------------------------
-#  编辑器 / 操作系统
+#  Editors / operating systems
 # ---------------------------------------------------------------------------
 .DS_Store
 ._*
@@ -160,17 +173,21 @@ local_*
 
 
 # ---------------------------------------------------------------------------
-#  显式保留  ← 这些必须入库
+#  Explicitly tracked  <- these MUST be committed
 # ---------------------------------------------------------------------------
-#  规则 7.5：决赛队伍须向主办方提交全部源码、脚本与工具。
-#  因此以下内容**必须**被跟踪，不要加进任何 ignore 规则：
+#  Rule 7.5: finalist teams must submit all source code, scripts and tools
+#  used during the competition. The following therefore **must** stay tracked;
+#  never add them to any ignore rule:
 #
-#    ctn/**/*.py             源码
-#    strategy/**             论点矩阵、人设 voice spec、Jev question set、阈值配置
-#                            （语料也是「源码」的一部分，且 git 历史 = 答辩叙事）
-#    PREDICTIONS.md          赛前预注册的假设（校准的基准线）
-#    requirements.txt        依赖
-#    deploy.sh              部署脚本
-#    systemd/*.service      进程守护配置
-#    docs/**                 说明文档
-#    .env.example            配置模板（只有变量名）
+#    ctn/**/*.py             source code
+#    strategy/**             argument matrix, persona voice specs, Jev question
+#                            set, thresholds
+#                            (the corpus is part of the "source", and its git
+#                            history IS the story you present in Sydney)
+#    PREDICTIONS.md          pre-registered hypotheses (the calibration baseline)
+#    requirements.txt        dependencies
+#    Dockerfile              container image
+#    deploy.sh               deployment script
+#    systemd/*.service       process supervision
+#    docs/**                 documentation
+#    .env.example            configuration template (variable names only)
