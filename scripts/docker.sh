@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  CTN 2026 —— Docker 便捷入口
+#  CTN 2026 — Docker convenience entry point
 # ============================================================================
-#      ./scripts/docker.sh build     构建运行时镜像
-#      ./scripts/docker.sh verify    构建自检镜像并跑全部测试（离线）
-#      ./scripts/docker.sh up        后台启动舰队
-#      ./scripts/docker.sh down      停止
-#      ./scripts/docker.sh restart   重启
-#      ./scripts/docker.sh logs      跟随日志
-#      ./scripts/docker.sh ps        状态
-#      ./scripts/docker.sh shell     进容器排查
-#      ./scripts/docker.sh prepare   修好 state/logs 的属主（首次部署必做）
+#      ./scripts/docker.sh build     build the runtime image
+#      ./scripts/docker.sh verify    build the self-check image and run the full offline suite
+#      ./scripts/docker.sh up        start the fleet in the background
+#      ./scripts/docker.sh down      stop
+#      ./scripts/docker.sh restart   restart
+#      ./scripts/docker.sh logs      follow logs
+#      ./scripts/docker.sh ps        status
+#      ./scripts/docker.sh shell     open a shell for debugging
+#      ./scripts/docker.sh prepare   fix ownership of state/logs (required before first deploy)
 # ============================================================================
 set -euo pipefail
 
@@ -18,27 +18,28 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$HERE"
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "❌ 找不到 docker" >&2
+  echo "FAIL: docker not found" >&2
   exit 1
 fi
 
-# compose v2 插件优先，回退到老版 docker-compose
+# Prefer the compose v2 plugin, fall back to the legacy docker-compose binary
 if docker compose version >/dev/null 2>&1; then
   DC=(docker compose)
 elif command -v docker-compose >/dev/null 2>&1; then
   DC=(docker-compose)
 else
-  echo "❌ 找不到 docker compose" >&2
+  echo "FAIL: docker compose not found" >&2
   exit 1
 fi
 
 require_daemon() {
   if ! docker info >/dev/null 2>&1; then
     cat >&2 <<'EOF'
-❌ Docker daemon 未运行。
+FAIL: the Docker daemon is not running.
 
-  macOS:  打开 Docker Desktop，或执行  open -a Docker
-  Linux:  sudo systemctl start docker
+  macOS (Docker Desktop):  open -a Docker
+  macOS (OrbStack):        open -a OrbStack
+  Linux:                   sudo systemctl start docker
 EOF
     exit 1
   fi
@@ -47,11 +48,11 @@ EOF
 require_env() {
   if [ ! -f .env ]; then
     cat >&2 <<'EOF'
-❌ 缺少 .env（密钥从这里注入容器，不进镜像）
+FAIL: .env is missing (secrets are injected from it and never enter the image)
 
   cp -n .env.example .env
   chmod 600 .env
-  # 然后填入 TYPESAFE_API_KEY 等
+  # then fill in TYPESAFE_API_KEY and the rest
 EOF
     exit 1
   fi
@@ -60,29 +61,32 @@ EOF
 case "${1:-}" in
   build)
     require_daemon
-    # 构建目标（runtime / verify）写在 docker-compose.yml 的 build.target 里；
-    # `docker compose build` 本身没有 --target 参数（那是 docker build 的）。
+    # The build target (runtime / verify) lives in docker-compose.yml under
+    # build.target. `docker compose build` has no --target flag of its own
+    # (that belongs to `docker build`).
     "${DC[@]}" build fleet
-    echo "✅ 镜像已构建"
+    echo "OK: image built"
     ;;
 
   verify)
     require_daemon
-    # 纯离线自检：版本守卫 + 全部测试。不需要 .env，不需要网络。
+    # Fully offline self-check: version guard plus the full test suite.
+    # Needs no .env and no network.
     "${DC[@]}" --profile test build verify
     "${DC[@]}" --profile test run --rm verify
     ;;
 
   prepare)
-    # 容器以 UID/GID 10001 运行；宿主目录属主不对就写不进去。
-    # 这是挂卷部署最常见的坑。
+    # The container runs as UID/GID 10001; if the host directories are owned by
+    # anyone else it cannot write to them. This is the most common pitfall when
+    # deploying with bind mounts (on Linux; macOS mount layers map ownership).
     mkdir -p state logs
     if [ "$(id -u)" -eq 0 ]; then
       chown -R 10001:10001 state logs
     else
       sudo chown -R 10001:10001 state logs
     fi
-    echo "✅ state/ 与 logs/ 属主已设为 10001:10001"
+    echo "OK: state/ and logs/ now owned by 10001:10001"
     ;;
 
   up)
@@ -90,7 +94,7 @@ case "${1:-}" in
     "${DC[@]}" up -d fleet
     "${DC[@]}" ps
     echo
-    echo "日志:  ./scripts/docker.sh logs"
+    echo "logs:  ./scripts/docker.sh logs"
     ;;
 
   down)     require_daemon; "${DC[@]}" down ;;
@@ -102,7 +106,7 @@ case "${1:-}" in
 
   shell)
     require_daemon; require_env
-    # 复用运行中的容器；没有则临时起一个
+    # Reuse the running container when there is one; otherwise start a temporary one
     if "${DC[@]}" ps --status running --services 2>/dev/null | grep -qx fleet; then
       "${DC[@]}" exec fleet bash
     else

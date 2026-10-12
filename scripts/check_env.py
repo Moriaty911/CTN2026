@@ -1,26 +1,28 @@
 #!/usr/bin/env python3
-"""CTN 2026 环境预检。
+"""CTN 2026 environment pre-check.
 
-用途：
-    python scripts/check_env.py            # 只检查解释器
-    python scripts/check_env.py --tests    # 检查并跑离线测试
+Usage:
+    python scripts/check_env.py            # interpreter check only
+    python scripts/check_env.py --tests    # check, then run the offline suite
 
-可同时用于：
-  · 本地 setup_env.sh
-  · CI（push / PR 时先跑这个）
-  · 服务器部署前的 preflight
-  · 运行时自检（见文末 __main__ 之外的 require_supported_python）
+Intended for:
+  * local setup via scripts/setup_env.sh
+  * CI (run this before anything else on push / PR)
+  * server preflight before deployment
+  * runtime self-check (see require_supported_python below)
 
-为什么需要硬性版本守卫
-----------------------
-ctn/jev/inputs.py 的 Optional 解包依赖 `typing.Union is types.UnionType`
-这一同一性，而它只在 Python 3.14+ 成立。2026-10 实测同一份代码：
+Why a hard version guard is necessary
+-------------------------------------
+The Optional unwrapping in ctn/jev/inputs.py depends on
+`typing.Union is types.UnionType`, which only holds on Python 3.14+.
+Measured 2026-10 on the same unchanged code:
 
-    Python 3.14.8   → 319/319 测试通过
-    Python 3.13.13  → 229 failures + 130 errors
+    Python 3.14.8   -> 319/319 tests pass
+    Python 3.13.13  -> 229 failures + 130 errors
 
-代码已修复为兼容两种 union 形式，但守卫保留：那只是我们发现的那一处
-差异，未必是唯一一处。比赛期间宁可早失败、失败得响亮。
+The code has been fixed to accept both union flavours, but the guard stays:
+that was the one difference we found, not necessarily the only one. During the
+competition it is better to fail early and loudly.
 """
 
 from __future__ import annotations
@@ -37,52 +39,53 @@ def version_string() -> str:
 
 
 def check_python() -> int:
-    print(f"  解释器: {sys.executable}")
-    print(f"  版本:   {version_string()}")
+    print(f"  interpreter: {sys.executable}")
+    print(f"  version:     {version_string()}")
     if sys.version_info < MINIMUM:
         print(
-            f"\n❌ 需要 Python {MINIMUM[0]}.{MINIMUM[1]}+，当前 {version_string()}\n"
-            "   原因见 scripts/check_env.py 顶部注释。\n"
-            "   修复:  ./scripts/setup_env.sh   （会创建/切换到正确的环境）\n",
+            f"\nFAIL: Python {MINIMUM[0]}.{MINIMUM[1]}+ required, found {version_string()}\n"
+            "      See the module docstring in scripts/check_env.py for the reason.\n"
+            "      Fix:  ./scripts/setup_env.sh   (creates / switches to the right env)\n",
             file=sys.stderr,
         )
         return 1
-    print("  ✅ 版本符合要求")
+    print("  OK: version is supported")
     return 0
 
 
 def run_tests(repo_root: Path) -> int:
     tests_dir = repo_root / "tests"
     if not tests_dir.is_dir():
-        print("  ⚠ 没有 tests/ 目录，跳过测试")
+        print("  WARN: no tests/ directory, skipping the test suite")
         return 0
-    print("\n  运行离线测试套件 …")
+    print("\n  running the offline test suite ...")
     proc = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-q"],
         cwd=repo_root,
     )
     if proc.returncode != 0:
-        print("\n❌ 测试未通过。不要在此状态下提交或部署。", file=sys.stderr)
+        print("\nFAIL: tests did not pass. Do not commit or deploy in this state.",
+              file=sys.stderr)
     return proc.returncode
 
 
 def require_supported_python() -> None:
-    """供运行时调用：在不支持的解释器上立刻失败，而不是静默算错。
+    """Fail immediately on an unsupported interpreter instead of misbehaving.
 
-    用法（放在入口模块最顶部）::
+    Call this from a runtime entry point, e.g. at the top of the main module::
 
         from scripts.check_env import require_supported_python
         require_supported_python()
     """
     if sys.version_info < MINIMUM:
         raise RuntimeError(
-            f"CTN 需要 Python {MINIMUM[0]}.{MINIMUM[1]}+，当前 {version_string()}；"
-            "请运行 ./scripts/setup_env.sh"
+            f"CTN requires Python {MINIMUM[0]}.{MINIMUM[1]}+, found {version_string()}; "
+            "run ./scripts/setup_env.sh"
         )
 
 
 def main(argv: list[str]) -> int:
-    print("▸ CTN 环境预检")
+    print("CTN environment pre-check")
     code = check_python()
     if code == 0 and "--tests" in argv:
         code = run_tests(Path(__file__).resolve().parent.parent)
