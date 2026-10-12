@@ -60,14 +60,16 @@ EOF
 case "${1:-}" in
   build)
     require_daemon
-    "${DC[@]}" build --target runtime fleet
+    # 构建目标（runtime / verify）写在 docker-compose.yml 的 build.target 里；
+    # `docker compose build` 本身没有 --target 参数（那是 docker build 的）。
+    "${DC[@]}" build fleet
     echo "✅ 镜像已构建"
     ;;
 
   verify)
     require_daemon
     # 纯离线自检：版本守卫 + 全部测试。不需要 .env，不需要网络。
-    "${DC[@]}" --profile test build --target verify verify
+    "${DC[@]}" --profile test build verify
     "${DC[@]}" --profile test run --rm verify
     ;;
 
