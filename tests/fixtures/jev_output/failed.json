@@ -1,0 +1,13 @@
+{
+  "schema_version": "jev-output.v1",
+  "evaluation_id": "sample-evaluation-failed",
+  "post_id": "sample-minimal",
+  "source_kind": "synthetic",
+  "stage": "triage",
+  "question_set_version": "sample-questions-v1",
+  "status": "failed",
+  "request_id": "sample-request-timeout",
+  "evaluated_at": "2026-10-09T10:01:00+11:00",
+  "answers": {},
+  "error": {"code": "timeout", "message": "Jev request timed out.", "retryable": true}
+}

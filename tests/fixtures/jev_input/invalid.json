@@ -1,0 +1,14 @@
+{
+  "schema_version": "jev-input.v1",
+  "post": {
+    "post_id": "",
+    "text": "   "
+  },
+  "source": {
+    "kind": "synthetic",
+    "observed_at": "2026-10-09T10:00:00"
+  },
+  "metrics": {
+    "likes": -1
+  }
+}

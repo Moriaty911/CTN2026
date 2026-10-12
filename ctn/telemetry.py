@@ -18,6 +18,7 @@ import json
 import logging
 import sys
 import time
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -33,15 +34,20 @@ class JsonlWriter:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._fh = self.path.open("a", encoding="utf-8")
+        self._lock = threading.Lock()
 
     def write(self, record: dict[str, Any]) -> None:
-        record.setdefault("ts", time.time())
-        self._fh.write(json.dumps(to_jsonable(record), ensure_ascii=False) + "\n")
-        self._fh.flush()
+        snapshot = dict(record)
+        snapshot.setdefault("ts", time.time())
+        line = json.dumps(to_jsonable(snapshot), ensure_ascii=False, allow_nan=False) + "\n"
+        with self._lock:
+            self._fh.write(line)
+            self._fh.flush()
 
     def close(self) -> None:
         try:
-            self._fh.close()
+            with self._lock:
+                self._fh.close()
         except Exception:
             pass
 

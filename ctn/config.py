@@ -18,8 +18,10 @@ Design notes
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 # --------------------------------------------------------------------------- #
@@ -144,16 +146,76 @@ class JevConfig:
     """
 
     base_url: str = "https://api.typesafe.ai/v1/systemone"
-    api_key: str = ""
+    api_key: str = field(default="", repr=False)
     model: str = "jev-latest"
-    # Posts per batched triage request. One state, N questions, evaluated in
-    # parallel. Larger batches amortise better but degrade instruction
-    # following, so this is measured, not guessed.
+    # Reserved for T07 scheduling. T05 sends one T04 packed body per call;
+    # it does not combine posts into shared-state batches.
     triage_batch_size: int = 24
-    max_concurrency: int = 8
+    max_concurrency: int = 4
     request_timeout_s: float = 30.0
-    max_retries: int = 3
+    max_retries: int = 2
+    # Local queue/backoff budget; socket/DNS operations cannot be hard-cancelled.
+    total_wait_budget_s: float = 60.0
+    retry_initial_s: float = 1.0
+    retry_max_s: float = 8.0
+    max_response_bytes: int = 1_048_576
     enabled: bool = True
+
+    def __post_init__(self) -> None:
+        try:
+            url = urlsplit(self.base_url)
+            valid_url = (url.scheme == "https" and bool(url.hostname) and
+                         url.username is None and url.password is None and
+                         not url.query and not url.fragment and url.port != 0 and
+                         not any(ord(c) <= 32 or c == "\\" for c in self.base_url))
+        except (ValueError, TypeError):
+            valid_url = False
+        if not valid_url:
+            raise ValueError("JevConfig.base_url: expected an HTTPS endpoint without credentials or query")
+        if type(self.api_key) is not str or any(not 33 <= ord(c) <= 126 for c in self.api_key):
+            raise ValueError("JevConfig.api_key: invalid header credential")
+        if type(self.model) is not str or not self.model or any(ord(c) < 32 for c in self.model):
+            raise ValueError("JevConfig.model: invalid model")
+        if self.api_key and (self.api_key in self.base_url or self.api_key in self.model):
+            raise ValueError("JevConfig: credential outside authentication field")
+        for name in ("triage_batch_size", "max_concurrency", "max_response_bytes", "max_retries"):
+            value = getattr(self, name)
+            if type(value) is not int or value < (0 if name == "max_retries" else 1):
+                raise ValueError(f"JevConfig.{name}: invalid integer limit")
+        for name in ("request_timeout_s", "total_wait_budget_s", "retry_initial_s", "retry_max_s"):
+            value = getattr(self, name)
+            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"JevConfig.{name}: expected a finite positive duration")
+        if self.retry_initial_s > self.retry_max_s:
+            raise ValueError("JevConfig.retry_initial_s: exceeds retry_max_s")
+        if type(self.enabled) is not bool:
+            raise ValueError("JevConfig.enabled: expected boolean")
+
+    @classmethod
+    def load(cls, env_file: str | Path = ".env") -> "JevConfig":
+        """Load only JEV configuration; create no runtime directories."""
+        _load_dotenv(Path(env_file))
+        def number(name, default, convert):
+            try:
+                return convert(os.environ.get(name, str(default)))
+            except (ValueError, TypeError):
+                raise ValueError(f"{name}: invalid JEV configuration") from None
+        enabled = os.environ.get("CTN_JEV_ENABLED", "true").strip().lower()
+        if enabled not in {"true", "false", "1", "0", "yes", "no", "on", "off"}:
+            raise ValueError("CTN_JEV_ENABLED: invalid JEV configuration")
+        return cls(
+            base_url=_env_str("TYPESAFE_BASE_URL", cls.base_url),
+            api_key=_env_str("TYPESAFE_API_KEY"), model=_env_str("TYPESAFE_MODEL", cls.model),
+            triage_batch_size=number("CTN_JEV_BATCH", cls.triage_batch_size, int),
+            max_concurrency=number("CTN_JEV_CONCURRENCY", cls.max_concurrency, int),
+            request_timeout_s=number("CTN_JEV_TIMEOUT_S", cls.request_timeout_s, float),
+            max_retries=number("CTN_JEV_MAX_RETRIES", cls.max_retries, int),
+            total_wait_budget_s=number("CTN_JEV_WAIT_BUDGET_S", cls.total_wait_budget_s, float),
+            retry_initial_s=number("CTN_JEV_RETRY_INITIAL_S", cls.retry_initial_s, float),
+            retry_max_s=number("CTN_JEV_RETRY_MAX_S", cls.retry_max_s, float),
+            max_response_bytes=number("CTN_JEV_MAX_RESPONSE_BYTES", cls.max_response_bytes, int),
+            enabled=enabled in {"true", "1", "yes", "on"},
+        )
 
 
 @dataclass(frozen=True)
@@ -248,14 +310,7 @@ class Settings:
                 total_requests=_env_int("CTN_TOTAL_REQUESTS", 700_000),
                 read_share=_env_float("CTN_READ_SHARE", 0.75),
             ),
-            jev=JevConfig(
-                base_url=_env_str("TYPESAFE_BASE_URL", JevConfig.base_url),
-                api_key=_env_str("TYPESAFE_API_KEY"),
-                model=_env_str("TYPESAFE_MODEL", "jev-latest"),
-                triage_batch_size=_env_int("CTN_JEV_BATCH", 24),
-                max_concurrency=_env_int("CTN_JEV_CONCURRENCY", 8),
-                enabled=_env_bool("CTN_JEV_ENABLED", True),
-            ),
+            jev=JevConfig.load(env_file),
             llm=LLMConfig(
                 base_url=_env_str("CTN_LLM_BASE_URL"),
                 api_key=_env_str("CTN_LLM_API_KEY"),

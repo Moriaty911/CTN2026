@@ -8,7 +8,8 @@ all speak the same vocabulary.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field, asdict
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 from typing import Any
 
@@ -169,11 +170,15 @@ class ActionResult:
 
 def to_jsonable(obj: Any) -> Any:
     """Dataclass/enum aware JSON conversion for logging."""
-    if hasattr(obj, "__dataclass_fields__"):
-        return {k: to_jsonable(v) for k, v in asdict(obj).items()}
+    if is_dataclass(obj) and not isinstance(obj, type):
+        # Input/output records define their own wire format and audit policy.
+        serializer = getattr(obj, "to_dict", None)
+        if callable(serializer):
+            return to_jsonable(serializer())
+        return {f.name: to_jsonable(getattr(obj, f.name)) for f in fields(obj)}
     if isinstance(obj, Enum):
         return obj.value
-    if isinstance(obj, dict):
+    if isinstance(obj, Mapping):
         return {str(k): to_jsonable(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [to_jsonable(v) for v in obj]

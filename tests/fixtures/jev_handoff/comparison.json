@@ -1,0 +1,482 @@
+{
+  "fixture_kind": "synthetic_transport_handoff",
+  "note": "Offline pair binding example; response labels are mocked, not a reference judgment.",
+  "package": {
+    "schema_version": "jev-handoff.v1",
+    "kind": "comparison",
+    "assessment": {
+      "stage": "deep",
+      "source": "network",
+      "new_attempt_count": 1,
+      "cache_age_s": 0.0,
+      "assessment": {
+        "schema_version": "jev-parsing.v1",
+        "status": "success",
+        "output": {
+          "schema_version": "jev-output.v1",
+          "evaluation_id": "0cd989cf-e3ff-4b76-948d-32832c5cabab",
+          "post_id": "synthetic-current",
+          "source_kind": "synthetic",
+          "stage": "deep",
+          "question_set_version": "ctn-comparison.v1",
+          "status": "success",
+          "answers": {
+            "pair_comparability": {
+              "type": "choice",
+              "status": "valid",
+              "value": "comparable",
+              "probabilities": {
+                "comparable": 1.0,
+                "different_conditions": 0.0,
+                "different_subject": 0.0,
+                "different_time_or_version": 0.0,
+                "missing_context": 0.0,
+                "unclear": 0.0
+              },
+              "confidence": 1.0,
+              "legend": null,
+              "issue": null
+            },
+            "claim_attribution": {
+              "type": "choice",
+              "status": "valid",
+              "value": "both_endorsed",
+              "probabilities": {
+                "both_endorsed": 1.0,
+                "not_both_endorsed": 0.0,
+                "unclear": 0.0
+              },
+              "confidence": 1.0,
+              "legend": null,
+              "issue": null
+            },
+            "comparison_basis": {
+              "type": "choice",
+              "status": "valid",
+              "value": "factual",
+              "probabilities": {
+                "factual": 1.0,
+                "mixed": 0.0,
+                "no_substantive_claim": 0.0,
+                "policy_proposal": 0.0,
+                "unclear": 0.0,
+                "value_priority": 0.0
+              },
+              "confidence": 1.0,
+              "legend": null,
+              "issue": null
+            },
+            "claim_relation": {
+              "type": "choice",
+              "status": "valid",
+              "value": "agreement",
+              "probabilities": {
+                "agreement": 1.0,
+                "different_scope_or_conditions": 0.0,
+                "elaboration": 0.0,
+                "factual_conflict": 0.0,
+                "not_comparable": 0.0,
+                "proposal_difference": 0.0,
+                "unclear": 0.0,
+                "value_difference": 0.0
+              },
+              "confidence": 1.0,
+              "legend": null,
+              "issue": null
+            }
+          },
+          "request_id": "f80e494a7b035250deb68f248cad0904eee858264ab028917b72f8554b151920",
+          "model": "synthetic-test-model",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 6
+          },
+          "latency_ms": 0.10575004853308201,
+          "evaluated_at": "2026-10-10T01:46:45.506989+00:00",
+          "context_issues": [
+            {
+              "path": "content.current.post.author_id",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.post.created_at",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.author",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.metrics",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.conversation",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.interaction_history",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.post.kind",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.post.text_complete",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.task_context.assigned_side",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.current.trusted_background",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.post.author_id",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.post.created_at",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.author",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.metrics",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.conversation",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.interaction_history",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.post.kind",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.post.text_complete",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.task_context.assigned_side",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.historical.trusted_background",
+              "reason": "unknown"
+            }
+          ],
+          "error": null
+        },
+        "request": {
+          "schema_version": "jev-packing.v1",
+          "status": "ready",
+          "kind": "comparison",
+          "stage": "deep",
+          "targets": [
+            {
+              "role": "current",
+              "source_kind": "synthetic",
+              "post_id": "synthetic-current",
+              "content_path": "content.current"
+            },
+            {
+              "role": "historical",
+              "source_kind": "synthetic",
+              "post_id": "synthetic-historical",
+              "content_path": "content.historical"
+            }
+          ],
+          "issues": [],
+          "question_ids": [
+            "pair_comparability",
+            "claim_attribution",
+            "comparison_basis",
+            "claim_relation"
+          ],
+          "answer_bindings": {
+            "pair_comparability": {
+              "question_id": "pair_comparability",
+              "content_path": "content",
+              "targets": [
+                {
+                  "role": "current",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-current",
+                  "content_path": "content.current"
+                },
+                {
+                  "role": "historical",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-historical",
+                  "content_path": "content.historical"
+                }
+              ]
+            },
+            "claim_attribution": {
+              "question_id": "claim_attribution",
+              "content_path": "content",
+              "targets": [
+                {
+                  "role": "current",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-current",
+                  "content_path": "content.current"
+                },
+                {
+                  "role": "historical",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-historical",
+                  "content_path": "content.historical"
+                }
+              ]
+            },
+            "comparison_basis": {
+              "question_id": "comparison_basis",
+              "content_path": "content",
+              "targets": [
+                {
+                  "role": "current",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-current",
+                  "content_path": "content.current"
+                },
+                {
+                  "role": "historical",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-historical",
+                  "content_path": "content.historical"
+                }
+              ]
+            },
+            "claim_relation": {
+              "question_id": "claim_relation",
+              "content_path": "content",
+              "targets": [
+                {
+                  "role": "current",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-current",
+                  "content_path": "content.current"
+                },
+                {
+                  "role": "historical",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-historical",
+                  "content_path": "content.historical"
+                }
+              ]
+            }
+          },
+          "question_set_version": "ctn-comparison.v1",
+          "question_set_fingerprint": "7de3bdadd817a4609102c7dac8ada8c799957e98f33d7aaa1a80af8ee8bcf050",
+          "packing_fingerprint": "3b009c9737d770d1ff1f99a2380f47ba543803f3e8ed5b3cfa609dff000d62cd",
+          "input_fingerprint": "94168bfb2056dbbe08f82f75a3a17584bff51c9f54e6e2ce7b1377e673f76e59",
+          "request_id": "f80e494a7b035250deb68f248cad0904eee858264ab028917b72f8554b151920",
+          "state_bytes": 2425,
+          "request_bytes": 11067,
+          "batch_index": null
+        },
+        "issues": [],
+        "error": null
+      },
+      "original_call": {
+        "schema_version": "jev-call.v1",
+        "status": "success",
+        "call_id": "0cd989cf-e3ff-4b76-948d-32832c5cabab",
+        "request_id": "f80e494a7b035250deb68f248cad0904eee858264ab028917b72f8554b151920",
+        "error_code": null,
+        "retryable": false,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "number": 1,
+            "http_status": 200,
+            "error_code": null,
+            "elapsed_s": 4.733400419354439e-05
+          }
+        ],
+        "elapsed_s": 0.00010575004853308201,
+        "retry_after_s": null,
+        "response_bytes": 1032
+      }
+    },
+    "final_stage": "deep",
+    "targets": [
+      {
+        "role": "current",
+        "source_kind": "synthetic",
+        "post_id": "synthetic-current",
+        "content_path": "content.current"
+      },
+      {
+        "role": "historical",
+        "source_kind": "synthetic",
+        "post_id": "synthetic-historical",
+        "content_path": "content.historical"
+      }
+    ],
+    "materials_available": true,
+    "generation_task": null,
+    "execution_authorized": false,
+    "materials": {
+      "content": {
+        "current": {
+          "author": null,
+          "conversation": null,
+          "interaction_history": null,
+          "metrics": null,
+          "post": {
+            "author_id": null,
+            "created_at": null,
+            "hashtags": null,
+            "kind": null,
+            "parent_id": null,
+            "post_id": "synthetic-current",
+            "text": "Can someone explain what this proposal would change?",
+            "text_complete": null
+          },
+          "schema_version": "jev-input.v1",
+          "source": {
+            "kind": "synthetic",
+            "observed_at": "2026-10-09T10:00:00+11:00",
+            "source_id": null
+          },
+          "task_context": null,
+          "trusted_background": null
+        },
+        "historical": {
+          "author": null,
+          "conversation": null,
+          "interaction_history": null,
+          "metrics": null,
+          "post": {
+            "author_id": null,
+            "created_at": null,
+            "hashtags": null,
+            "kind": null,
+            "parent_id": null,
+            "post_id": "synthetic-historical",
+            "text": "Can someone explain what this proposal would change?",
+            "text_complete": null
+          },
+          "schema_version": "jev-input.v1",
+          "source": {
+            "kind": "synthetic",
+            "observed_at": "2026-10-09T10:00:00+11:00",
+            "source_id": null
+          },
+          "task_context": null,
+          "trusted_background": null
+        }
+      },
+      "verified_background": {
+        "current": {
+          "items": [],
+          "status": "not_provided",
+          "verification": "local_registry_match"
+        },
+        "historical": {
+          "items": [],
+          "status": "not_provided",
+          "verification": "local_registry_match"
+        }
+      },
+      "packing": {
+        "context_issues": [
+          {
+            "path": "content.current.post.author_id",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.current.post.created_at",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.current.author",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.current.metrics",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.current.conversation",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.current.interaction_history",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.current.post.kind",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.current.post.text_complete",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.current.task_context.assigned_side",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.post.author_id",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.post.created_at",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.author",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.metrics",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.conversation",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.interaction_history",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.post.kind",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.post.text_complete",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.historical.task_context.assigned_side",
+            "reason": "unknown"
+          }
+        ],
+        "limitations": [],
+        "policy_fingerprint": "3b009c9737d770d1ff1f99a2380f47ba543803f3e8ed5b3cfa609dff000d62cd",
+        "schema_version": "jev-packing.v1"
+      },
+      "trust": "untrusted_content_as_data",
+      "background_verification": "registry_match_is_not_factual_verification"
+    },
+    "action_decision": {
+      "status": "pending_rules",
+      "action": null,
+      "reason": "business_policy_not_configured"
+    }
+  }
+}

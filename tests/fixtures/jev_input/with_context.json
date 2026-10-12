@@ -1,0 +1,77 @@
+{
+  "schema_version": "jev-input.v1",
+  "post": {
+    "post_id": "sample-reply",
+    "text": "What evidence supports that claim?",
+    "author_id": "sample-author",
+    "created_at": "2026-10-09T09:55:00+11:00",
+    "kind": "reply",
+    "parent_id": "sample-parent",
+    "hashtags": [],
+    "text_complete": true
+  },
+  "source": {
+    "kind": "synthetic",
+    "observed_at": "2026-10-09T10:00:00+11:00",
+    "source_id": "test-fixtures"
+  },
+  "author": {
+    "profile_text": "Fictional test account.",
+    "followers_count": 18,
+    "observed_at": "2026-10-09T09:50:00+11:00"
+  },
+  "metrics": {
+    "likes": 2,
+    "reposts": 0,
+    "replies": 1,
+    "observed_at": "2026-10-09T10:00:00+11:00"
+  },
+  "conversation": {
+    "status": "partial",
+    "items": [
+      {
+        "role": "parent",
+        "post_id": "sample-parent",
+        "text": "I have not shared my sources yet.",
+        "source": {
+          "kind": "synthetic",
+          "observed_at": "2026-10-09T10:00:00+11:00"
+        },
+        "text_complete": true
+      },
+      {
+        "role": "comment",
+        "post_id": "sample-comment",
+        "text": "I also want to see the sources.",
+        "source": {
+          "kind": "synthetic",
+          "observed_at": "2026-10-09T10:00:00+11:00"
+        },
+        "text_complete": false
+      }
+    ]
+  },
+  "interaction_history": {
+    "status": "partial",
+    "events": [
+      {
+        "kind": "reply",
+        "target_post_id": "sample-parent",
+        "acted_at": "2026-10-09T09:52:00+11:00",
+        "text": "Which part would you like to discuss?"
+      }
+    ]
+  },
+  "task_context": {
+    "assigned_side": "unknown"
+  },
+  "trusted_background": {
+    "items": [
+      {
+        "reference_id": "sample-reference",
+        "text": "A synthetic reference for testing, not a competition fact.",
+        "source_id": "unverified-test-source"
+      }
+    ]
+  }
+}

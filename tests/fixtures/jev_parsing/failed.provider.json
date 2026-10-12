@@ -1,0 +1,8 @@
+{
+  "model": "jev-synthetic-fixture",
+  "answers": [],
+  "usage": {
+    "input_tokens": 120,
+    "output_tokens": 24
+  }
+}

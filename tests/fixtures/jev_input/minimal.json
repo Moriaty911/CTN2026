@@ -1,0 +1,11 @@
+{
+  "schema_version": "jev-input.v1",
+  "post": {
+    "post_id": "sample-minimal",
+    "text": "Can someone explain what this proposal would change?"
+  },
+  "source": {
+    "kind": "synthetic",
+    "observed_at": "2026-10-09T10:00:00+11:00"
+  }
+}

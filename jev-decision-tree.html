@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JEV Decision Tree · CTN 2026</title>
+<style>
+  :root{
+    --bg:#fafaf9; --panel:#fff; --ink:#1c1917; --muted:#57534e; --faint:#a8a29e;
+    --line:#e7e5e4; --line-strong:#d6d3d1; --wire:#b8b3ae;
+    --accent:#0f766e; --accent-bg:#f0fdfa; --accent-line:#99f6e4;
+    --danger:#b91c1c; --danger-bg:#fef2f2; --danger-line:#fecaca;
+    --warn:#b45309;  --warn-bg:#fffbeb;  --warn-line:#fde68a;
+    --good:#15803d;  --good-bg:#f0fdf4;  --good-line:#bbf7d0;
+    --blue:#1d4ed8;  --blue-bg:#eff6ff;  --blue-line:#bfdbfe;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+
+  header.top{background:linear-gradient(180deg,#0f766e,#115e59);color:#f0fdfa;padding:28px 26px 24px}
+  header.top h1{margin:0 0 4px;font-size:23px;letter-spacing:-.3px}
+  header.top .sub{opacity:.85;font-size:13.5px}
+  header.top .meta{margin-top:14px;display:flex;gap:9px;flex-wrap:wrap}
+  .chip{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);
+        padding:3px 10px;border-radius:99px;font-size:11.5px;font-family:var(--mono)}
+
+  nav.toc{position:sticky;top:0;z-index:20;background:rgba(250,250,249,.94);
+          backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+          padding:9px 26px;overflow-x:auto;white-space:nowrap}
+  nav.toc a{color:var(--muted);text-decoration:none;font-size:13px;margin-right:16px;
+            padding:3px 0;border-bottom:2px solid transparent;display:inline-block}
+  nav.toc a:hover{color:var(--accent);border-bottom-color:var(--accent-line)}
+
+  main{max-width:1100px;margin:0 auto;padding:28px 26px 80px}
+  section{margin:0 0 44px;scroll-margin-top:58px}
+  h2{font-size:20px;margin:0 0 6px;padding-bottom:9px;border-bottom:2px solid var(--line)}
+  h2 .num{font-family:var(--mono);font-size:12.5px;color:var(--accent);background:var(--accent-bg);
+          border:1px solid var(--accent-line);padding:1px 7px;border-radius:5px;margin-right:9px;vertical-align:2px}
+  .lead{color:var(--muted);font-size:14px;margin:10px 0 18px}
+  h3{font-size:16px;margin:24px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:#f5f5f4;border:1px solid var(--line);
+       padding:1px 5px;border-radius:4px}
+  p{margin:9px 0}
+
+  /* ---------- callouts ---------- */
+  .callout{border-left:4px solid;border-radius:0 var(--r) var(--r) 0;padding:12px 16px;margin:14px 0;font-size:14px}
+  .callout .t{font-weight:700;display:block;margin-bottom:3px;font-size:13px;letter-spacing:.2px}
+  .c-key{background:var(--accent-bg);border-color:var(--accent);color:#134e4a}
+  .c-key .t{color:var(--accent)}
+  .c-warn{background:var(--warn-bg);border-color:var(--warn);color:#78350f}
+  .c-warn .t{color:var(--warn)}
+  .c-danger{background:var(--danger-bg);border-color:var(--danger);color:#7f1d1d}
+  .c-danger .t{color:var(--danger)}
+
+  /* ---------- vertical rule flow ---------- */
+  .tree{display:flex;flex-direction:column;margin:18px 0}
+  .step{display:grid;grid-template-columns:54px 1fr;align-items:stretch}
+  .rail{position:relative}
+  .rail::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:2px;
+                transform:translateX(-50%);background:var(--wire)}
+  .step:first-child .rail::before{top:19px}
+  .step:last-child  .rail::before{bottom:calc(100% - 19px)}
+  .dot{position:relative;z-index:1;width:30px;height:30px;border-radius:50%;
+       background:var(--accent);color:#fff;font-family:var(--mono);font-size:12.5px;font-weight:700;
+       display:flex;align-items:center;justify-content:center;margin:4px auto 0;
+       box-shadow:0 0 0 4px var(--bg)}
+  .dot.stop{background:var(--danger)}
+  .dot.act{background:var(--good)}
+  .dot.branch{background:var(--blue)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+        padding:12px 15px;margin:0 0 11px 0}
+  .card .cond{font-family:var(--mono);font-size:13px;color:var(--ink);line-height:1.6}
+  .card .why{font-size:12.5px;color:var(--muted);margin-top:5px}
+  .arrow{color:var(--faint);font-family:var(--mono);padding:0 7px}
+
+  /* ---------- outcome badges ---------- */
+  .badge{display:inline-block;font-family:var(--mono);font-size:12px;font-weight:600;
+         padding:2px 9px;border-radius:6px;border:1px solid;white-space:nowrap;margin:2px 3px 2px 0}
+  .b-stop{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-line)}
+  .b-wait{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line)}
+  .b-act{background:var(--good-bg);color:var(--good);border-color:var(--good-line)}
+  .b-route{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-line)}
+  .b-info{background:var(--blue-bg);color:var(--blue);border-color:var(--blue-line)}
+
+  .thr{font-family:var(--mono);font-weight:700;color:var(--danger);
+       background:var(--danger-bg);border:1px solid var(--danger-line);
+       padding:1px 6px;border-radius:5px}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.8px}
+  th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:#f5f5f4;font-weight:600;font-size:12.5px;color:var(--muted)}
+  tbody tr:nth-child(even){background:#fcfcfb}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.4px}
+
+  pre{background:#1c1917;color:#e7e5e4;padding:14px 16px;border-radius:var(--r);
+      overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6;margin:12px 0}
+  pre .c{color:#78716c}
+  pre .k{color:#5eead4}
+  pre .s{color:#fcd34d}
+
+  .pipe{display:flex;flex-wrap:wrap;align-items:center;gap:0;
+        background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px;margin:16px 0}
+  .pipe .n{font-family:var(--mono);font-size:11.5px;background:#f5f5f4;border:1px solid var(--line-strong);
+           border-radius:99px;padding:3px 10px;white-space:nowrap}
+  .pipe .a{color:var(--faint);font-family:var(--mono);padding:0 6px}
+
+  footer{border-top:1px solid var(--line);padding:20px 26px 40px;color:var(--faint);
+         font-size:12.5px;text-align:center;line-height:1.8}
+
+  @media (max-width:820px){
+    main{padding:20px 15px 60px}
+    header.top,nav.toc,footer{padding-left:15px;padding-right:15px}
+    .step{grid-template-columns:42px 1fr}
+    .dot{width:26px;height:26px;font-size:11.5px}
+  }
+  @media print{
+    @page{size:A3;margin:10mm}
+    body{background:#fff;font-size:10px}
+    nav.toc{display:none}
+    header.top{background:#115e59!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    section{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>JEV Decision Tree</h1>
+  <div class="sub">Capture the Narrative 2026 · how a post becomes an interaction decision</div>
+  <div class="meta">
+    <span class="chip">ctn/jev/routing.py · jev-routing.v1</span>
+    <span class="chip">ctn/jev/actions.py · jev-actions.v2</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#pipeline">Pipeline</a>
+  <a href="#tree1">Tree 1 · Routing</a>
+  <a href="#tree2">Tree 2 · Action</a>
+  <a href="#boundaries">Boundaries</a>
+  <a href="#states">State vocabulary</a>
+  <a href="#gaps">Defaults &amp; gaps</a>
+</nav>
+
+<main>
+
+<!-- ══════════════════ PIPELINE ══════════════════ -->
+<section id="pipeline">
+  <h2><span class="num">00</span>Where the two trees sit</h2>
+  <p class="lead">Both trees are pure functions of the parsed JEV response. Neither one touches the
+     platform, an account, or an LLM — they only decide, and record why.</p>
+
+  <div class="pipe">
+    <span class="n">validate input</span><span class="a">→</span>
+    <span class="n">injection preflight<br>(offline, no network)</span><span class="a">→</span>
+    <span class="n">pack</span><span class="a">→</span>
+    <span class="n">JEV triage · 4 questions</span><span class="a">→</span>
+    <span class="n" style="background:var(--accent-bg);border-color:var(--accent-line);color:var(--accent)"><b>TREE 1</b></span><span class="a">→</span>
+    <span class="n">JEV deep · 17 questions<br><i>conditional</i></span><span class="a">→</span>
+    <span class="n" style="background:var(--accent-bg);border-color:var(--accent-line);color:var(--accent)"><b>TREE 2</b></span><span class="a">→</span>
+    <span class="n">handoff<br><code>execution_authorized=False</code></span>
+  </div>
+
+  <div class="callout c-key">
+    <span class="t">The one invariant</span>
+    Every handoff carries <code>execution_authorized=False</code>. A ready generation task supplies
+    materials for the next module; it never authorises publication.
+  </div>
+</section>
+
+<!-- ══════════════════ TREE 1 ══════════════════ -->
+<section id="tree1">
+  <h2><span class="num">01</span>Tree 1 · Routing — which evaluation path to take</h2>
+  <p class="lead"><code>RoutingPolicy.decide()</code> · first match wins · evaluated top to bottom.</p>
+
+  <div class="tree">
+
+    <div class="step">
+      <div class="rail"><div class="dot stop">1</div></div>
+      <div class="card">
+        <div class="cond">parsed.status == "failed" &nbsp;or&nbsp; error is not None &nbsp;or&nbsp; output is None</div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-stop">failed</span> <code>evaluation_failed</code></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="dot stop">2</div></div>
+      <div class="card">
+        <div class="cond">prompt_injection answer missing &nbsp;or&nbsp; not of type <code>noul</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-stop">review</span> <code>risk_unavailable</code>
+          &nbsp;·&nbsp; missing risk is never treated as zero</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="dot stop">3</div></div>
+      <div class="card">
+        <div class="cond">prompt_injection &nbsp;<span class="thr">≥ 0.5</span></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-stop">review</span> <code>injection_signal</code>
+          &nbsp;·&nbsp; threshold <code>injection_review_threshold</code></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="dot stop">4</div></div>
+      <div class="card">
+        <div class="cond">relevance missing, wrong type, or not in <code>{relevant, unrelated, unclear}</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-stop">failed</span> <code>relevance_unavailable</code>
+          &nbsp;·&nbsp; deliberately <b>failed</b>, not <b>unrelated</b>: a missing answer must not silently drop a post</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="dot branch">5</div></div>
+      <div class="card">
+        <div class="cond">relevance == <code>"unclear"</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-route">deep</span> <code>relevance_unclear</code>
+          &nbsp;·&nbsp; controlled by <code>unclear_to_deep = true</code></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="dot branch">6</div></div>
+      <div class="card">
+        <div class="cond">relevance == <code>"relevant"</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-route">deep</span> <code>relevant</code></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="dot branch">7</div></div>
+      <div class="card">
+        <div class="cond">P(unrelated) &nbsp;<span class="thr">≥ 0.8</span></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-route">observe</span> <code>clearly_unrelated</code>
+          &nbsp;·&nbsp; skips deep evaluation entirely · threshold <code>unrelated_min_probability</code></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="rail"><div class="dot branch">8</div></div>
+      <div class="card">
+        <div class="cond">otherwise — an <code>unrelated</code> label below the probability floor</div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-route">deep</span> <code>weak_unrelated_signal</code></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="callout c-warn">
+    <span class="t">Note the ordering</span>
+    Risk is checked <b>before</b> relevance, so even a post that would be dropped as unrelated is
+    still scanned for injection. Account level and engagement do <b>not</b> filter posts at this stage.
+  </div>
+</section>
+
+<!-- ══════════════════ TREE 2 ══════════════════ -->
+<section id="tree2">
+  <h2><span class="num">02</span>Tree 2 · Action — like, reply, or do nothing</h2>
+  <p class="lead"><code>ActionPolicy.decide()</code> · phase A runs first and short-circuits; only survivors reach the score comparisons.</p>
+
+  <h3>Phase A · Guards (first match wins, no score is read yet)</h3>
+  <div class="tree">
+    <div class="step">
+      <div class="rail"><div class="dot stop">A1</div></div>
+      <div class="card">
+        <div class="cond">route == <code>"review"</code> &nbsp;or&nbsp; flow.status == <code>"needs_review"</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-stop">needs_review</span> action=<code>None</code> <code>assessment_requires_review</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="dot stop">A2</div></div>
+      <div class="card">
+        <div class="cond">flow.status ∈ <code>{failed, deferred, needs_context}</code> &nbsp;or&nbsp; route == <code>"failed"</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-stop">needs_assessment</span> <code>assessment_unavailable</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="dot act">A3</div></div>
+      <div class="card">
+        <div class="cond">route == <code>"observe"</code> &nbsp;and&nbsp; flow.status == <code>"observe"</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-act">decided</span> action=<code>no_interaction</code> <code>clearly_unrelated</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="dot stop">A4</div></div>
+      <div class="card">
+        <div class="cond">flow.status ∉ <code>{evaluated, partial}</code> &nbsp;or&nbsp; flow.deep is None</div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-stop">needs_assessment</span> <code>deep_assessment_required</code></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Phase B · v2 delegation</h3>
+  <div class="tree">
+    <div class="step">
+      <div class="rail"><div class="dot branch">B1</div></div>
+      <div class="card">
+        <div class="cond">relative_stance ∈ <code>{neutral, mixed}</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-info">needs_llm_assessment</span> <code>downstream_response_planning_required</code>
+          <div style="margin-top:6px">No action and no account is selected. The downstream LLM chooses what, if anything, to answer.
+          Neutral wording does <b>not</b> imply high persuadability.</div></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="dot stop">B2</div></div>
+      <div class="card">
+        <div class="cond">relative_stance is neither <code>aligned</code> nor <code>opposing</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-wait">pending_rules</span> <code>alignment_action_rules_pending</code></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Phase C · Score gate</h3>
+  <div class="tree">
+    <div class="step">
+      <div class="rail"><div class="dot stop">C1</div></div>
+      <div class="card">
+        <div class="cond">answer missing &nbsp;or&nbsp; type ≠ <code>score</code> &nbsp;or&nbsp; legend ≠ exactly <code>{0,1,2,3,4}</code></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-stop">needs_assessment</span> <code>action_score_unavailable</code>
+          &nbsp;·&nbsp; an unavailable score never falls back to a default</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="dot branch">C2</div></div>
+      <div class="card">
+        <div class="cond">aligned &nbsp;→&nbsp; read <code>response_specificity</code> &nbsp;&nbsp;|&nbsp;&nbsp; opposing &nbsp;→&nbsp; read <code>reply_value</code></div>
+        <div class="why">These are two different signals. <code>response_specificity</code> measures how clearly the
+          response point is identifiable; <code>reply_value</code> is a separate opportunity rating.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Phase D · The thresholds</h3>
+
+  <h4 style="font-size:14.5px;color:var(--accent);margin:16px 0 6px">D-1 · aligned</h4>
+  <div class="tree">
+    <div class="step">
+      <div class="rail"><div class="dot act">1</div></div>
+      <div class="card">
+        <div class="cond">response_specificity &nbsp;<span class="thr">&gt; 2.5</span></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-act">decided · reply</span> <code>aligned_specificity_above_threshold</code> · quality=<code>ordinary</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="dot act">2</div></div>
+      <div class="card">
+        <div class="cond">response_specificity &nbsp;<span class="thr">≤ 2.5</span></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-act">decided · like</span> <code>aligned_specificity_not_above_threshold</code></div>
+      </div>
+    </div>
+  </div>
+
+  <h4 style="font-size:14.5px;color:var(--accent);margin:20px 0 6px">D-2 · opposing</h4>
+  <div class="tree">
+    <div class="step">
+      <div class="rail"><div class="dot act">1</div></div>
+      <div class="card">
+        <div class="cond">reply_value &nbsp;<span class="thr">&lt; 1.0</span></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-act">decided · no_interaction</span> <code>opposing_value_below_threshold</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="dot act">2</div></div>
+      <div class="card">
+        <div class="cond">reply_value &nbsp;<span class="thr">&gt; 3.0</span></div>
+        <div class="why"><span class="arrow">→</span> <span class="badge b-act">decided · reply</span> <code>opposing_high_account_required</code><br>
+          required_account_level=<code>high</code> · minimum=<code>high</code> · reply_quality=<code>high</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="rail"><div class="dot branch">3</div></div>
+      <div class="card">
+        <div class="cond">1.0 ≤ reply_value ≤ 3.0 &nbsp;→&nbsp; branch on the target's platform level</div>
+        <div class="why" style="margin-top:8px">
+          <table style="margin:6px 0 0">
+            <thead><tr><th class="mono">platform_level mapped to</th><th class="mono">outcome</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">high</td><td><span class="badge b-act">decided · reply</span> high / high / high</td></tr>
+              <tr><td class="mono">unknown (or unmapped)</td><td><span class="badge b-wait">needs_account_metadata</span> action=<code>reply</code> · <code>opposing_target_level_unknown</code></td></tr>
+              <tr><td class="mono">standard</td><td><span class="badge b-act">decided · reply</span> <code>opposing_standard_reply</code> · ordinary</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout c-key">
+    <span class="t">A high-level target cannot rescue a skip</span>
+    The high-level upgrade is evaluated <b>after</b> the <code>reply_value &lt; 1.0</code> gate, so a
+    high-profile target with a worthless reply opportunity is still skipped.
+  </div>
+</section>
+
+<!-- ══════════════════ BOUNDARIES ══════════════════ -->
+<section id="boundaries">
+  <h2><span class="num">03</span>Boundary semantics</h2>
+  <p class="lead">Locked by <code>tests/test_jev_actions.py</code>, not by prose. These are the cases that silently break if a comparison flips between <code>&gt;</code> and <code>≥</code>.</p>
+
+  <table>
+    <thead><tr><th class="mono">signal</th><th class="mono">value</th><th class="mono">outcome</th><th>note</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">response_specificity</td><td class="mono">0</td><td class="mono">like</td><td>aligned, far below the bar</td></tr>
+      <tr><td class="mono">response_specificity</td><td class="mono"><b>2.5</b></td><td class="mono"><b>like</b></td><td>exactly at the threshold → <code>like</code></td></tr>
+      <tr><td class="mono">response_specificity</td><td class="mono">2.5001</td><td class="mono">reply</td><td>strictly greater required</td></tr>
+      <tr><td class="mono">response_specificity</td><td class="mono">4</td><td class="mono">reply</td><td>maximum</td></tr>
+      <tr><td class="mono">reply_value</td><td class="mono">0</td><td class="mono">no_interaction</td><td>opposing</td></tr>
+      <tr><td class="mono">reply_value</td><td class="mono">0.9999</td><td class="mono">no_interaction</td><td>still below</td></tr>
+      <tr><td class="mono">reply_value</td><td class="mono"><b>1</b></td><td class="mono"><b>reply · standard</b></td><td>lower bound is <b>inclusive</b></td></tr>
+      <tr><td class="mono">reply_value</td><td class="mono">2</td><td class="mono">reply · standard</td><td>ordinary interval</td></tr>
+      <tr><td class="mono">reply_value</td><td class="mono"><b>3</b></td><td class="mono"><b>reply · standard</b></td><td>exactly 3 is still ordinary</td></tr>
+      <tr><td class="mono">reply_value</td><td class="mono">3.0001</td><td class="mono">reply · high</td><td>strictly greater required</td></tr>
+      <tr><td class="mono">reply_value</td><td class="mono">4</td><td class="mono">reply · high</td><td>maximum</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout c-danger">
+    <span class="t">Asymmetry worth remembering</span>
+    The aligned threshold uses <code>&gt;</code> (2.5 → like), while the opposing lower bound uses an
+    inclusive comparison (1 → reply). Scores are fractional, so neither boundary is theoretical.
+  </div>
+</section>
+
+<!-- ══════════════════ STATES ══════════════════ -->
+<section id="states">
+  <h2><span class="num">04</span>State vocabulary</h2>
+  <p class="lead">Consumers must inspect every layer. A successful HTTP response does <b>not</b> imply a usable assessment or a ready task.</p>
+
+  <table>
+    <thead><tr><th class="mono">layer</th><th class="mono">states</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">individual answer</td><td class="mono">valid · missing · invalid · insufficient_context</td></tr>
+      <tr><td class="mono">parsed assessment</td><td class="mono">success · partial · failed</td></tr>
+      <tr><td class="mono">evaluation flow</td><td class="mono">evaluated · partial · observe · needs_context · needs_review · failed · deferred</td></tr>
+      <tr><td class="mono">action decision</td><td class="mono">decided · needs_review · needs_assessment · pending_rules · needs_account_metadata · needs_llm_assessment</td></tr>
+      <tr><td class="mono">material check</td><td class="mono">ready · needs_materials · needs_review · blocked</td></tr>
+      <tr><td class="mono">response planning</td><td class="mono">ready · needs_materials · needs_review · blocked</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════ GAPS ══════════════════ -->
+<section id="gaps">
+  <h2><span class="num">05</span>Defaults and known gaps</h2>
+  <p class="lead">Two defaults decide whether Tree 2 actually acts. Both are deliberate, and both need external input.</p>
+
+  <table>
+    <thead><tr><th class="mono">setting</th><th class="mono">default</th><th>consequence</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">platform_levels</td>
+        <td class="mono">{}</td>
+        <td>Every opposing post in the ordinary interval returns <span class="badge b-wait">needs_account_metadata</span>
+            instead of dispatching a reply. <b>This path does nothing until real label mappings are supplied.</b></td>
+      </tr>
+      <tr>
+        <td class="mono">pending_rules</td>
+        <td class="mono">['engagement_trigger_thresholds']</td>
+        <td>Engagement has <b>no standalone trigger</b>. Visible likes and reposts can only inform
+            <code>reply_value</code> qualitatively; they never override a decision on their own.</td>
+      </tr>
+      <tr>
+        <td class="mono">mixed_neutral_policy</td>
+        <td class="mono">downstream_response_planning</td>
+        <td>Neutral and mixed posts never inherit the opposing-post value thresholds — they are delegated.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Changing the thresholds</h3>
+  <p>They are frozen dataclass fields, not literals scattered through the code:</p>
+<pre><code><span class="k">from</span> ctn.jev.routing <span class="k">import</span> RoutingPolicy
+<span class="k">from</span> ctn.jev.actions <span class="k">import</span> ActionPolicy
+
+routing = RoutingPolicy(
+    unrelated_min_probability=<span class="s">0.8</span>,     <span class="c"># Tree 1 step 7</span>
+    injection_review_threshold=<span class="s">0.5</span>,    <span class="c"># Tree 1 step 3</span>
+)
+actions = ActionPolicy(
+    aligned_reply_above=<span class="s">2.5</span>,          <span class="c"># D-1</span>
+    opposing_reply_from=<span class="s">1.0</span>,          <span class="c"># D-2 lower bound (inclusive)</span>
+    opposing_high_above=<span class="s">3.0</span>,          <span class="c"># D-2 upper bound (strict)</span>
+    platform_levels=(( <span class="s">"&lt;real label&gt;"</span>, <span class="s">"high"</span> ),),
+)</code></pre>
+
+  <div class="callout c-key">
+    <span class="t">Every change is traceable</span>
+    Both policies expose a <code>fingerprint</code> (sha256 of the canonical settings). Audit events
+    record which fingerprint produced each decision, so you can answer afterwards: "which thresholds
+    were live when that reply went out?"
+  </div>
+
+  <div class="callout c-warn">
+    <span class="t">What is not implemented</span>
+    Tree 2 decides <b>what kind</b> of interaction is warranted and <b>what account level</b> it needs.
+    It does not choose an actual account, generate text, or publish. Those belong to the downstream
+    account / LLM / review modules, which do not exist yet.
+  </div>
+</section>
+
+</main>
+
+<footer>
+  Source of truth: <code>ctn/jev/routing.py</code>, <code>ctn/jev/actions.py</code>, and the boundary
+  tests in <code>tests/test_jev_actions.py</code>.<br>
+  The earlier design sketch lives in <code>jev-design-proposal.html</code> (v0.3); where the two
+  disagree, the code and the README table win.<br>
+  CTN 2026 · generated 2026-10-12
+</footer>
+
+</body>
+</html>

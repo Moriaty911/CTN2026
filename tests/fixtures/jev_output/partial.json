@@ -1,0 +1,26 @@
+{
+  "schema_version": "jev-output.v1",
+  "evaluation_id": "sample-evaluation-partial",
+  "post_id": "sample-minimal",
+  "source_kind": "synthetic",
+  "stage": "deep",
+  "question_set_version": "sample-questions-v1",
+  "status": "partial",
+  "evaluated_at": "2026-10-09T10:01:00+11:00",
+  "context_issues": [{"path": "conversation.parent", "reason": "unknown"}],
+  "answers": {
+    "is_question": {"type": "noul", "status": "valid", "value": 0.95},
+    "reply_value": {
+      "type": "score", "status": "insufficient_context", "value": null,
+      "issue": {
+        "code": "insufficient_context",
+        "message": "Parent text is needed for this judgment.",
+        "fields": ["conversation.parent"]
+      }
+    },
+    "risk": {
+      "type": "noul", "status": "missing",
+      "issue": {"code": "missing", "message": "No answer was supplied."}
+    }
+  }
+}

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JEV 交互决策树草案：对帖子进行分类、比较相互对立的观点、选择动作，并将回复候选路由到聚焦的 LLM 提示词类型。">
+  <title>CTN 2026 · JEV 交互决策树</title>
+  <style>
+    :root {
+      --bg: #f6f7f4; --paper: #fff; --ink: #182d2a; --muted: #536763;
+      --line: #d8e2dc; --teal: #0f766e; --teal-bg: #edf8f4;
+      --blue: #245d99; --blue-bg: #edf4fc; --amber: #89540b; --amber-bg: #fff6e6;
+      --rose: #994d48; --rose-bg: #fcf1ee;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 var(--sans); }
+    a { color: var(--teal); text-underline-offset: 3px; }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+    .skip-link { position: fixed; left: 16px; top: -100px; z-index: 20; padding: 10px; background: white; }
+    .skip-link:focus { top: 10px; }
+    header { padding: 44px 24px 36px; background: #123e37; color: #f2faf6; }
+    .wrap { max-width: 1180px; margin: auto; }
+    .eyebrow { font: 12px var(--mono); text-transform: uppercase; letter-spacing: .15em; }
+    h1 { font-size: clamp(28px, 4vw, 44px); line-height: 1.16; letter-spacing: -.035em; margin: 14px 0; }
+    .intro { max-width: 760px; margin: 0; color: #d2e9df; font-size: 17px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .chip { padding: 5px 11px; border: 1px solid #52756b; border-radius: 30px; font-size: 12px; }
+    .chip.draft { color: #ffdeb0; border-color: #a28a60; }
+    nav { position: sticky; top: 0; z-index: 10; background: #f6f7f4; border-bottom: 1px solid var(--line); }
+    nav .wrap { padding: 12px 24px; display: flex; gap: 20px; flex-wrap: wrap; }
+    nav a { font-size: 13px; text-decoration: none; font-weight: 650; }
+    main { max-width: 1180px; margin: auto; padding: 30px 24px 60px; }
+    section { margin-bottom: 36px; }
+    .section-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 22px; }
+    .section-number { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--teal-bg); color: var(--teal); font: 13px var(--mono); border: 1px solid #b9d8cd; }
+    h2 { font-size: 25px; letter-spacing: -.025em; line-height: 1.25; margin: 0 0 6px; }
+    h3 { font-size: 16px; line-height: 1.35; margin: 0 0 8px; }
+    p { margin: 0 0 10px; }
+    .muted, .section-head p { color: var(--muted); }
+    .section-head p { margin: 0; }
+    .notice { padding: 16px 20px; border: 1px solid #ead5ac; background: var(--amber-bg); border-radius: 12px; color: #66491e; margin-bottom: 28px; }
+    .notice p { margin: 0; }
+    .diagram { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 28px; }
+    .node { position: relative; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 16px; }
+    .node p:last-child { margin-bottom: 0; }
+    .node p, .node li { font-size: 13px; }
+    .node ul { padding-left: 18px; margin: 8px 0 0; }
+    .node li { margin: 4px 0; }
+    .center-node { max-width: 560px; margin: auto; text-align: center; }
+    .label { display: block; font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+    .arrow { text-align: center; padding: 8px 0; color: #698b7f; font-size: 22px; line-height: 1; }
+    .arrow small { display: block; color: var(--muted); font: 11px/1.4 var(--sans); margin-bottom: 3px; }
+    .teal { background: var(--teal-bg); border-color: #b9d8cd; }
+    .blue { background: var(--blue-bg); border-color: #c3d6ec; }
+    .amber { background: var(--amber-bg); border-color: #ead5ac; }
+    .rose { background: var(--rose-bg); border-color: #e5c9c4; }
+    .fork { position: relative; display: grid; gap: 14px; padding-top: 20px; }
+    .fork.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .fork.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .fork.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fork::before { content: ""; position: absolute; top: 0; height: 1px; background: #a6beb3; }
+    .fork.four::before { left: 12%; right: 12%; }
+    .fork.three::before { left: 16%; right: 16%; }
+    .fork.two::before { left: 25%; right: 25%; }
+    .fork > .node::before { content: ""; position: absolute; width: 1px; height: 20px; background: #a6beb3; top: -21px; left: 50%; }
+    .merge { margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 12px; }
+    .outcome { display: block; margin-top: 12px; font-weight: 650; font-size: 12px; }
+    .route-code { display: inline-block; font: 10px var(--mono); letter-spacing: .04em; color: var(--teal); background: #edf8f4; padding: 3px 6px; border-radius: 4px; margin-bottom: 8px; }
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 22px 0 12px; }
+    button { font: 12px var(--sans); padding: 8px 12px; border: 1px solid #b6cbbf; background: #fff; color: var(--ink); border-radius: 7px; cursor: pointer; }
+    button:hover { background: var(--teal-bg); }
+    .controls span { font-size: 12px; color: var(--muted); }
+    .recipes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .recipe { border-top: 3px solid #659b84; }
+    .recipe .requirement { padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); }
+    details { margin-top: 12px; }
+    summary { color: var(--teal); cursor: pointer; font-size: 12px; font-weight: 650; }
+    details p { margin-top: 10px; }
+    .table-wrap { overflow-x: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { padding: 14px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { background: #edf1ec; font-size: 12px; }
+    tr:last-child td { border-bottom: 0; }
+    .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .example { background: #fff; border: 1px solid var(--line); padding: 22px; border-radius: 12px; }
+    blockquote { margin: 12px 0; padding-left: 14px; border-left: 3px solid #b6cbbf; color: var(--muted); font-size: 13px; }
+    .handoff { list-style: none; padding: 0; margin: 0; }
+    .handoff li { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .handoff li:last-child { border: 0; }
+    .handoff strong { display: inline-block; min-width: 155px; }
+    footer { border-top: 1px solid var(--line); padding: 22px 24px; color: var(--muted); font-size: 12px; }
+    footer .wrap { display: flex; gap: 20px; justify-content: space-between; flex-wrap: wrap; }
+    @media (max-width: 900px) {
+      .fork.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .fork::before, .fork > .node::before { display: none; }
+      .fork { padding-top: 0; }
+      .recipes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 600px) {
+      header { padding: 32px 18px; }
+      main { padding: 24px 16px 40px; }
+      nav .wrap { gap: 10px 16px; padding: 10px 16px; }
+      .diagram { padding: 16px; }
+      .fork.four, .fork.three, .fork.two, .recipes, .columns { grid-template-columns: 1fr; }
+      .handoff strong { display: block; margin-bottom: 3px; }
+      th, td { padding: 10px 12px; }
+      .table-wrap table { min-width: 600px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print {
+      @page { margin: 12mm; }
+      body { background: white; font-size: 11px; }
+      header { color: var(--ink); background: white; padding: 10px 0 20px; }
+      .intro { color: var(--muted); font-size: 13px; }
+      .chip, .chip.draft { border-color: var(--line); color: var(--ink); }
+      nav, .controls, .skip-link { display: none; }
+      main { padding: 0; max-width: none; }
+      .diagram { padding: 16px; }
+      .fork.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .fork.three, .recipes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .fork.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .columns { grid-template-columns: 1fr 1fr; }
+      .node, .example, tr { break-inside: avoid; }
+      .table-wrap { overflow: visible; }
+      .table-wrap table { min-width: 0; }
+      h2, h3 { break-after: avoid; }
+      footer { padding: 12px 0; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳转到决策树</a>
+  <header>
+    <div class="wrap">
+      <div class="eyebrow">Capture the Narrative 2026 / JEV 模块</div>
+      <h1>分类。比较。选择回应。</h1>
+      <p class="intro">面向帖子和评论的两层决策树：先评估是否值得互动，再为每个回复候选分配一个聚焦的 LLM 提示词。</p>
+      <div class="meta">
+        <span class="chip draft">Draft v0.3 · 拟议工作流</span>
+        <span class="chip">2026 年 10 月 9 日</span>
+        <span class="chip">针对已有帖子的互动</span>
+        <span class="chip">虚构的竞赛平台</span>
+      </div>
+    </div>
+  </header>
+  <nav aria-label="Document sections"><div class="wrap">
+    <a href="#actions">1 · 互动决策</a>
+    <a href="#prompts">2 · 回复与提示词路由</a>
+    <a href="#comparison">主张比较</a>
+    <a href="#handoff">下游交接</a>
+  </div></nav>
+  <main id="main">
+    <div class="notice"><p><strong>设计状态。</strong>问题集框架已经存在。本工作流、提示词要点与路由规则均为设计提案。评分档位、账号层级定义、历史窗口与动作阈值仍需进一步商定。本页面不实现服务调用或发布。</p></div>
+
+    <section id="actions" aria-labelledby="actions-title">
+      <div class="section-head"><span class="section-number" aria-hidden="true">01</span><div>
+        <h2 id="actions-title">决定是否互动</h2>
+        <p>对帖子进行分类，检查可用证据，并比较回复、点赞与不采取行动三种选择。</p>
+      </div></div>
+      <div class="diagram" aria-label="Interaction decision tree">
+        <div class="node center-node"><span class="label">上游输入</span><h3>帖子 + 评论 + 可用上下文</h3><p>平台抓取与 API 映射属于上游模块的职责。</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node"><span class="label">程序</span><h3>校验、去重、标记风险并保留历史记录</h3><p>保留原文、ID、来源与版本。复用未发生变化的评估；当相关内容或上下文变化时重新评估。</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node teal"><span class="label">JEV 判断</span><h3>这条帖子表达了什么立场？</h3><p>将表述出的立场映射到我方被分配的阵营。帖子的立场并不能确定作者的身份或长期归属。</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="fork four">
+          <div class="node teal"><span class="label">立场一致</span><h3>支持、补充还是回答？</h3><ul><li>寻找有价值的补充点。</li><li>留意尚未被回答的问题。</li><li>检查我方此前的互动记录。</li></ul><span class="outcome">继续进入目标选择 ↓</span></div>
+          <div class="node blue"><span class="label">立场对立</span><h3>检查主张与讨论信号</h3><ul><li>将论证与情绪强度区分开。</li><li>把账号影响力与讨论串活跃度区分开。</li><li>检索其他对立作者的相关帖子。</li><li>以明确的成对方式比较他们的主张。</li></ul><span class="outcome">使用下方比较规则 ↓</span></div>
+          <div class="node"><span class="label">中立 / 混合</span><h3>识别疑问与关切</h3><ul><li>找到一个具体议题。</li><li>考察讨论的开放程度。</li><li>找出一项有用的解释。</li></ul><span class="outcome">继续进入目标选择 ↓</span></div>
+          <div class="node amber"><span class="label">不明确</span><h3>保留不确定性</h3><ul><li>继续做出文本可支撑的判断。</li><li>限制依赖立场得出的结论。</li><li>在必要时请求补充上下文。</li></ul><span class="outcome">在证据限制范围内继续 ↓</span></div>
+        </div>
+        <p class="merge">所有分支在此汇合。历史观点分歧只是可能的回应机会之一；即便没有分歧，回复也可能是有价值的。</p>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node"><span class="label">目标选择</span><h3>回复主帖还是某条具体评论？</h3><p>综合考虑具体问题、已有讨论以及我方此前的回应。记录所选目标的 ID 与文本。保留评论抽样的限制。</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node teal"><span class="label">程序综合评估信号</span><h3>哪种动作能带来足够的价值？</h3><p>综合考虑回应机会、附加价值、讨论开放度、活跃度、叙事相关性、证据就绪度、成本与风险。</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="fork four">
+          <div class="node teal"><span class="label">回复候选</span><h3>具有明确的附加价值</h3><p>针对具体对象的回复可以贡献有用内容。继续进入提示词路由，并核对其证据要求。</p><a class="outcome" href="#prompts">前往第 2 层 →</a></div>
+          <div class="node blue"><span class="label">点赞候选</span><h3>适合表达支持</h3><p>有明确依据可以表达支持，而回复能增加的内容很少。</p><span class="outcome">不生成公开文本</span></div>
+          <div class="node rose"><span class="label">不互动</span><h3>价值低或风险高</h3><p>附加价值很小、讨论重复，或风险大于机会。</p><span class="outcome">不生成公开文本</span></div>
+          <div class="node amber"><span class="label">暂缓 / 请求上下文</span><h3>关键证据缺失</h3><p>记录所需内容，并将请求回传给上游。</p><span class="outcome">不生成公开文本</span></div>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:12px;font-size:12px">账号影响力和可见互动量会影响优先级，但它们并不能确定事实准确性或实际竞赛得分。估算价值仍是一组需要借助反馈来校准的信号。</p>
+    </section>
+
+    <section id="prompts" aria-labelledby="prompts-title">
+      <div class="section-head"><span class="section-number" aria-hidden="true">02</span><div>
+        <h2 id="prompts-title">选择回复目的与提示词类型</h2>
+        <p>为选定的目标选择一项主要任务。语气、话题与账号口吻是相互独立的参数。</p>
+      </div></div>
+      <div class="diagram" aria-label="Reply and prompt routing tree">
+        <div class="node center-node teal"><span class="label">来自第 1 层的回复候选</span><h3>这条回复应当达成什么？</h3><p>确定要回应的一个疑问或主张，然后选择合适的提示词类型。以下要点是拟议的模板任务。</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="controls" hidden id="prompt-controls"><button type="button" id="expand-prompts">展开全部提示词要点</button><button type="button" id="collapse-prompts">收起全部提示词要点</button><span>每张卡片都包含其证据要求与回退方案。</span></div>
+        <div class="recipes">
+          <article class="node recipe" id="support"><span class="route-code">P01 · 支持与补充</span><h3>支持与补充</h3><p><strong>适用时机：</strong>帖子与我方立场一致，且存在有价值的补充内容。</p><p class="requirement"><strong>所需条件：</strong>具备明确的支持依据，以及一个具体的补充要点。</p><details><summary>提示词要点与回退方案</summary><p>简要支持相关要点，并基于所提供材料补充一条有用的说明。</p><p><strong>回退方案：</strong>如果没有可补充的有用内容，则重新评估为点赞或不互动。</p></details></article>
+          <article class="node recipe" id="answer"><span class="route-code">P02 · 回答问题</span><h3>回答直接提出的疑问</h3><p><strong>适用时机：</strong>有具体问题可以依据现有材料回答。</p><p class="requirement"><strong>所需条件：</strong>确切的问题以及足够的支撑信息。</p><details><summary>提示词要点与回退方案</summary><p>先回答问题，再给出必要依据。保留来源中的限定条件。</p><p><strong>回退方案：</strong>如有可能，提出具体的澄清问题；否则请求补充材料或暂缓。</p></details></article>
+          <article class="node recipe" id="argument"><span class="route-code">P03 · 回应论点</span><h3>回应某项论证</h3><p><strong>适用时机：</strong>存在明确的论证，且有依据充分的回应。</p><p class="requirement"><strong>所需条件：</strong>原始主张以及相关理由或证据。</p><details><summary>提示词要点与回退方案</summary><p>准确复述该主张，并利用所提供材料回应其中一个核心理由。</p><p><strong>回退方案：</strong>对不清晰的主张进行澄清，或请求提供证据；不要臆造反例。</p></details></article>
+          <article class="node recipe" id="proposal"><span class="route-code">P04 · 比较方案</span><h3>比较政策提案</h3><p><strong>适用时机：</strong>立场对立的作者针对同一政策议题提出了不同做法。</p><p class="requirement"><strong>所需条件：</strong>双方的提案，以及足以比较其适用范围的上下文。</p><details><summary>提示词要点与回退方案</summary><p>呈现具体提案，并询问其适用条件、例外情况或如何协调。结论应始终限定在这些作者的范围内。</p><p><strong>回退方案：</strong>适用范围缺失时先予以澄清。仅凭提案不同并不能证明事实有误。</p></details></article>
+          <article class="node recipe" id="cross-check"><span class="route-code">P05 · 交叉核对</span><h3>交叉核对相互冲突的帖子</h3><p><strong>适用时机：</strong>可比较的事实性陈述相互冲突，但尚无法判定其准确性。</p><p class="requirement"><strong>所需条件：</strong>双方的原始帖子、一致的主题，以及相关时间或条件。</p><details><summary>提示词要点与回退方案</summary><p>准确对照这两项陈述，并询问哪一种说法或哪些证据支持它们。保留关于何者正确的未确定性。</p><p><strong>回退方案：</strong>如果两项陈述无法比较，则澄清缺失的条件，或放弃该路由。</p></details></article>
+          <article class="node recipe" id="correct"><span class="route-code">P06 · 证据纠正</span><h3>依据已核实证据进行纠正</h3><p><strong>适用时机：</strong>已核实的材料支持对某项具体事实性主张进行纠正。</p><p class="requirement"><strong>所需条件：</strong>适用于同一主题、时间和范围的已核实来源。</p><details><summary>提示词要点与回退方案</summary><p>说明具体的纠正内容及其来源。结论不得超出该来源所能确立的范围。</p><p><strong>回退方案：</strong>改用交叉核对或澄清，或暂缓处理。仅凭模型置信度无法确立事实。</p></details></article>
+          <article class="node recipe" id="concern"><span class="route-code">P07 · 回应顾虑</span><h3>回应已表达的关切</h3><p><strong>适用时机：</strong>强烈情绪伴随着具体关切，且存在回应机会。</p><p class="requirement"><strong>所需条件：</strong>可识别的关切，以及用于实质回应的材料。</p><details><summary>提示词要点与回退方案</summary><p>先认可对方实际表达的关切，再以平和、有据的方式回应其具体问题。</p><p><strong>回退方案：</strong>对于反复辱骂或没有任何有效回应机会的讨论串，重新评估为不互动。</p></details></article>
+          <article class="node recipe" id="clarify"><span class="route-code">P08 · 请求澄清</span><h3>提出聚焦的澄清问题</h3><p><strong>适用时机：</strong>主张、范围或依据不清晰，但可以提出一个具体问题。</p><p class="requirement"><strong>所需条件：</strong>明确的提问对象，以及可识别的信息缺口。</p><details><summary>提示词要点与回退方案</summary><p>围绕缺失的范围、条件或依据提出一个聚焦问题。避免预设答案。</p><p><strong>回退方案：</strong>如果因缺少关键上下文而连提问对象都不清楚，则向上游请求补充，或暂缓处理。</p></details></article>
+          <article class="node recipe" id="summarize"><span class="route-code">P09 · 总结讨论</span><h3>梳理讨论</h3><p><strong>适用时机：</strong>若干相关评论可以被有效地归纳整理。</p><p class="requirement"><strong>所需条件：</strong>可追溯的评论以及已知的抽样范围。</p><details><summary>提示词要点与回退方案</summary><p>对所提供评论中的共识、分歧和未解决的问题加以区分。在相关处说明抽样范围。</p><p><strong>回退方案：</strong>不要依据有限的抽样声称整个讨论串已达成共识。</p></details></article>
+        </div>
+        <p class="merge">选择一种主要类型。账号口吻、话题、情绪基调和回复长度可以与同一模板组合使用。</p>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node amber"><span class="label">证据闸口</span><h3>该提示词类型的要求是否已满足？</h3><p>核对实际材料、不确定性以及缺失的上下文。无法给出答案并不等于零分。</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="fork three">
+          <div class="node teal"><span class="label">是</span><h3>准备生成任务</h3><p>附带目标文本、证据、限制条件、目的、提示词类型和表达要求。</p><span class="outcome">继续进入下游生成 ↓</span></div>
+          <div class="node blue"><span class="label">否 · 可以提出具体问题</span><h3>使用澄清或交叉核对</h3><p>只有当备选方案自身的要求也满足时才选择它。明确保留不确定性。</p><span class="outcome">生成前重新核对要求</span></div>
+          <div class="node amber"><span class="label">否 · 目标或依据未确定</span><h3>请求上下文或暂缓</h3><p>将缺失信息的需求回传给上游。</p><span class="outcome">不生成公开文本</span></div>
+        </div>
+        <div class="arrow" aria-hidden="true"><small>针对通过证据闸口的候选</small>↓</div>
+        <div class="node center-node"><span class="label">下游职责归属</span><h3>匹配账号口吻 → 构建提示词 → 生成 → 审核</h3><p>账号模块选择合适的可用账号。LLM 模块构建并发送提示词。审核环节检查目标、引用、事实支撑与格式。</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="fork two">
+          <div class="node teal"><span class="label">审核通过</span><h3>交接执行</h3><p>发布模块进行最终执行与平台限制检查。</p></div>
+          <div class="node amber"><span class="label">审核未通过</span><h3>修订或重新评估</h3><p>根据失败原因，返回生成环节或决策评估环节。</p></div>
+        </div>
+        <div class="arrow" aria-hidden="true"><small>执行成功之后</small>↓</div>
+        <div class="node center-node"><span class="label">反馈</span><h3>记录观察到的结果</h3><p>用实际结果进行校准。检测到的观点分歧并不等于观察到的公信力损失。</p></div>
+      </div>
+    </section>
+
+    <section id="comparison" aria-labelledby="comparison-title">
+      <div class="section-head"><span class="section-number" aria-hidden="true">03</span><div><h2 id="comparison-title">在选择回应之前解读观点分歧</h2><p>比较明确的成对帖子。保留当前与历史帖子的 ID、作者、原文、条件、评估版本以及检索范围。</p></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">关系</th><th scope="col">含义</th><th scope="col">可能的回应路由</th></tr></thead>
+        <tbody>
+          <tr><td><strong>一致 / 补充细化</strong></td><td>双方主张一致，或其中一方补充了相容的细节。</td><td>继续常规的回应评估。</td></tr>
+          <tr><td><strong>价值优先级不同</strong></td><td>作者关注的考量因素不同；两者可能并不冲突。</td><td>回应具体的关切或论证。此类差异并不能证明事实有误。</td></tr>
+          <tr><td><strong>政策提案不同</strong></td><td>作者针对可比议题建议了不同的行动方案。</td><td>P04 · 比较提案，并询问适用条件或如何协调。</td></tr>
+          <tr><td><strong>事实性陈述互不相容</strong></td><td>在同一主题、时间和条件下，两项陈述不可能同时成立。</td><td>P05 · 在准确性尚未确定时进行交叉核对。P06 · 仅在具备适用且已核实的证据时进行纠正。</td></tr>
+          <tr><td><strong>条件不同 / 上下文不清晰</strong></td><td>版本、时间、范围、引述或含义方面的因素导致无法可靠比较。</td><td>P08 · 在可以提出具体问题时进行澄清；否则请求补充上下文。</td></tr>
+          <tr><td><strong>无历史记录 / 未找到匹配</strong></td><td>未提供历史材料意味着情况未知；未检测到冲突仅限于已检索的样本范围。</td><td>继续其他评估，并保留比较的适用范围限制。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="columns" style="margin-top:16px">
+        <div class="example"><span class="label">假设示例 · 提案分歧</span><h3>不同的建议方案</h3><blockquote>A：“在所有公共场所取消证明要求。”<br>B：“公园可以取消，但医院仍要保留。”</blockquote><p><strong>路由：</strong>P04 · 询问所提议的例外应如何运作。该分歧关注的是应当采取什么行动。</p></div>
+        <div class="example"><span class="label">假设示例 · 事实冲突</span><h3>对同一政策的不同描述</h3><blockquote>A：“该政策版本涵盖公园。”<br>B：“同一政策版本不涵盖公园。”</blockquote><p><strong>路由：</strong>P05 · 索取政策文本。只有当已核实材料支持某项具体纠正时，才使用 P06。</p></div>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:14px">本设计优先考虑跨作者的比较。同一作者的变化单独跟踪。不同作者并不自动代表同一个组织或统一的官方立场。将平台观察结果与已核实的参考资料区分开。</p>
+    </section>
+
+    <section id="handoff" aria-labelledby="handoff-title">
+      <div class="section-head"><span class="section-number" aria-hidden="true">04</span><div><h2 id="handoff-title">交付有依据的生成任务</h2><p>LLM 接收所选任务及其材料，同时接收评估结果。仅提供提示词类型标签和分数是不够的。</p></div></div>
+      <div class="columns">
+        <div class="node"><h3>拟议的交接内容</h3><ul class="handoff">
+          <li><strong>动作与目标</strong>候选动作、目标帖子或评论 ID、原文与上下文。</li>
+          <li><strong>目的与提示词类型</strong>一项主要任务，以及要回应的确切疑问或主张。</li>
+          <li><strong>证据</strong>成对的历史帖子、来源引用与核实状态。</li>
+          <li><strong>限制条件</strong>缺失的上下文、不确定性以及比较的适用范围。</li>
+          <li><strong>表达</strong>账号要求、下游确认的口吻、语气与长度。</li>
+          <li><strong>版本</strong>决策版本、问题集版本与提示词模板版本。</li>
+        </ul></div>
+        <div class="node teal"><h3>提示词构成</h3><p>通用任务要求<br>↓<br>所选提示词类型的指令<br>↓<br>目标文本与证据，明确作为数据处理<br>↓<br>账号口吻与表达参数<br>↓<br>输出要求</p><p class="muted">JEV 提供独立判断。程序规则负责选择路由并打包材料。LLM 调用、账号选择、审核与发布由下游模块负责。</p></div>
+      </div>
+    </section>
+  </main>
+  <footer><div class="wrap"><span>CTN 2026 · JEV 交互设计 · Draft v0.3</span><span>独立 HTML · 无外部资源或服务调用 · 阈值待评审</span></div></footer>
+  <script>
+    (() => {
+      const briefs = [...document.querySelectorAll('.recipe details')];
+      document.getElementById('prompt-controls').hidden = false;
+      document.getElementById('expand-prompts').addEventListener('click', () => {
+        briefs.forEach(brief => { brief.open = true; });
+      });
+      document.getElementById('collapse-prompts').addEventListener('click', () => {
+        briefs.forEach(brief => { brief.open = false; });
+      });
+      const restore = () => { briefs.forEach(brief => { brief.open = brief.dataset.wasOpen === 'true'; }); };
+      window.addEventListener('beforeprint', () => {
+        briefs.forEach(brief => { brief.dataset.wasOpen = String(brief.open); brief.open = true; });
+      });
+      window.addEventListener('afterprint', restore);
+    })();
+  </script>
+</body>
+</html>

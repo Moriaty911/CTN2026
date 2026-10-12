@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Draft JEV interaction decision tree: classify posts, compare opposing claims, select an action, and route reply candidates to focused LLM prompt types.">
+  <title>CTN 2026 · JEV Interaction Decision Tree</title>
+  <style>
+    :root {
+      --bg: #f6f7f4; --paper: #fff; --ink: #182d2a; --muted: #536763;
+      --line: #d8e2dc; --teal: #0f766e; --teal-bg: #edf8f4;
+      --blue: #245d99; --blue-bg: #edf4fc; --amber: #89540b; --amber-bg: #fff6e6;
+      --rose: #994d48; --rose-bg: #fcf1ee;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 var(--sans); }
+    a { color: var(--teal); text-underline-offset: 3px; }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+    .skip-link { position: fixed; left: 16px; top: -100px; z-index: 20; padding: 10px; background: white; }
+    .skip-link:focus { top: 10px; }
+    header { padding: 44px 24px 36px; background: #123e37; color: #f2faf6; }
+    .wrap { max-width: 1180px; margin: auto; }
+    .eyebrow { font: 12px var(--mono); text-transform: uppercase; letter-spacing: .15em; }
+    h1 { font-size: clamp(28px, 4vw, 44px); line-height: 1.16; letter-spacing: -.035em; margin: 14px 0; }
+    .intro { max-width: 760px; margin: 0; color: #d2e9df; font-size: 17px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .chip { padding: 5px 11px; border: 1px solid #52756b; border-radius: 30px; font-size: 12px; }
+    .chip.draft { color: #ffdeb0; border-color: #a28a60; }
+    nav { position: sticky; top: 0; z-index: 10; background: #f6f7f4; border-bottom: 1px solid var(--line); }
+    nav .wrap { padding: 12px 24px; display: flex; gap: 20px; flex-wrap: wrap; }
+    nav a { font-size: 13px; text-decoration: none; font-weight: 650; }
+    main { max-width: 1180px; margin: auto; padding: 30px 24px 60px; }
+    section { margin-bottom: 36px; }
+    .section-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 22px; }
+    .section-number { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--teal-bg); color: var(--teal); font: 13px var(--mono); border: 1px solid #b9d8cd; }
+    h2 { font-size: 25px; letter-spacing: -.025em; line-height: 1.25; margin: 0 0 6px; }
+    h3 { font-size: 16px; line-height: 1.35; margin: 0 0 8px; }
+    p { margin: 0 0 10px; }
+    .muted, .section-head p { color: var(--muted); }
+    .section-head p { margin: 0; }
+    .notice { padding: 16px 20px; border: 1px solid #ead5ac; background: var(--amber-bg); border-radius: 12px; color: #66491e; margin-bottom: 28px; }
+    .notice p { margin: 0; }
+    .diagram { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 28px; }
+    .node { position: relative; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 16px; }
+    .node p:last-child { margin-bottom: 0; }
+    .node p, .node li { font-size: 13px; }
+    .node ul { padding-left: 18px; margin: 8px 0 0; }
+    .node li { margin: 4px 0; }
+    .center-node { max-width: 560px; margin: auto; text-align: center; }
+    .label { display: block; font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+    .arrow { text-align: center; padding: 8px 0; color: #698b7f; font-size: 22px; line-height: 1; }
+    .arrow small { display: block; color: var(--muted); font: 11px/1.4 var(--sans); margin-bottom: 3px; }
+    .teal { background: var(--teal-bg); border-color: #b9d8cd; }
+    .blue { background: var(--blue-bg); border-color: #c3d6ec; }
+    .amber { background: var(--amber-bg); border-color: #ead5ac; }
+    .rose { background: var(--rose-bg); border-color: #e5c9c4; }
+    .fork { position: relative; display: grid; gap: 14px; padding-top: 20px; }
+    .fork.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .fork.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .fork.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fork::before { content: ""; position: absolute; top: 0; height: 1px; background: #a6beb3; }
+    .fork.four::before { left: 12%; right: 12%; }
+    .fork.three::before { left: 16%; right: 16%; }
+    .fork.two::before { left: 25%; right: 25%; }
+    .fork > .node::before { content: ""; position: absolute; width: 1px; height: 20px; background: #a6beb3; top: -21px; left: 50%; }
+    .merge { margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 12px; }
+    .outcome { display: block; margin-top: 12px; font-weight: 650; font-size: 12px; }
+    .route-code { display: inline-block; font: 10px var(--mono); letter-spacing: .04em; color: var(--teal); background: #edf8f4; padding: 3px 6px; border-radius: 4px; margin-bottom: 8px; }
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 22px 0 12px; }
+    button { font: 12px var(--sans); padding: 8px 12px; border: 1px solid #b6cbbf; background: #fff; color: var(--ink); border-radius: 7px; cursor: pointer; }
+    button:hover { background: var(--teal-bg); }
+    .controls span { font-size: 12px; color: var(--muted); }
+    .recipes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .recipe { border-top: 3px solid #659b84; }
+    .recipe .requirement { padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); }
+    details { margin-top: 12px; }
+    summary { color: var(--teal); cursor: pointer; font-size: 12px; font-weight: 650; }
+    details p { margin-top: 10px; }
+    .table-wrap { overflow-x: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { padding: 14px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { background: #edf1ec; font-size: 12px; }
+    tr:last-child td { border-bottom: 0; }
+    .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .example { background: #fff; border: 1px solid var(--line); padding: 22px; border-radius: 12px; }
+    blockquote { margin: 12px 0; padding-left: 14px; border-left: 3px solid #b6cbbf; color: var(--muted); font-size: 13px; }
+    .handoff { list-style: none; padding: 0; margin: 0; }
+    .handoff li { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .handoff li:last-child { border: 0; }
+    .handoff strong { display: inline-block; min-width: 155px; }
+    footer { border-top: 1px solid var(--line); padding: 22px 24px; color: var(--muted); font-size: 12px; }
+    footer .wrap { display: flex; gap: 20px; justify-content: space-between; flex-wrap: wrap; }
+    @media (max-width: 900px) {
+      .fork.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .fork::before, .fork > .node::before { display: none; }
+      .fork { padding-top: 0; }
+      .recipes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 600px) {
+      header { padding: 32px 18px; }
+      main { padding: 24px 16px 40px; }
+      nav .wrap { gap: 10px 16px; padding: 10px 16px; }
+      .diagram { padding: 16px; }
+      .fork.four, .fork.three, .fork.two, .recipes, .columns { grid-template-columns: 1fr; }
+      .handoff strong { display: block; margin-bottom: 3px; }
+      th, td { padding: 10px 12px; }
+      .table-wrap table { min-width: 600px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print {
+      @page { margin: 12mm; }
+      body { background: white; font-size: 11px; }
+      header { color: var(--ink); background: white; padding: 10px 0 20px; }
+      .intro { color: var(--muted); font-size: 13px; }
+      .chip, .chip.draft { border-color: var(--line); color: var(--ink); }
+      nav, .controls, .skip-link { display: none; }
+      main { padding: 0; max-width: none; }
+      .diagram { padding: 16px; }
+      .fork.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .fork.three, .recipes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .fork.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .columns { grid-template-columns: 1fr 1fr; }
+      .node, .example, tr { break-inside: avoid; }
+      .table-wrap { overflow: visible; }
+      .table-wrap table { min-width: 0; }
+      h2, h3 { break-after: avoid; }
+      footer { padding: 12px 0; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to the decision tree</a>
+  <header>
+    <div class="wrap">
+      <div class="eyebrow">Capture the Narrative 2026 / JEV module</div>
+      <h1>Classify. Compare. Choose a response.</h1>
+      <p class="intro">A two-layer decision tree for posts and comments: evaluate the interaction first, then assign a focused LLM prompt to each reply candidate.</p>
+      <div class="meta">
+        <span class="chip draft">Draft v0.3 · Proposed workflow</span>
+        <span class="chip">09 October 2026</span>
+        <span class="chip">Existing-post interactions</span>
+        <span class="chip">Fictional competition platform</span>
+      </div>
+    </div>
+  </header>
+  <nav aria-label="Document sections"><div class="wrap">
+    <a href="#actions">1 · Interaction decision</a>
+    <a href="#prompts">2 · Reply &amp; prompt routing</a>
+    <a href="#comparison">Claim comparison</a>
+    <a href="#handoff">Downstream handoff</a>
+  </div></nav>
+  <main id="main">
+    <div class="notice"><p><strong>Design status.</strong> The question-set framework exists. This workflow, prompt briefs and routing rules are a design proposal. Score levels, account-tier definitions, history windows and action thresholds still need to be agreed. This page does not implement service calls or publishing.</p></div>
+
+    <section id="actions" aria-labelledby="actions-title">
+      <div class="section-head"><span class="section-number" aria-hidden="true">01</span><div>
+        <h2 id="actions-title">Decide whether to interact</h2>
+        <p>Classify the post, inspect the available evidence, and compare replying, liking and taking no action.</p>
+      </div></div>
+      <div class="diagram" aria-label="Interaction decision tree">
+        <div class="node center-node"><span class="label">Upstream input</span><h3>Post + comments + available context</h3><p>Platform fetching and API mapping belong to the upstream module.</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node"><span class="label">Program</span><h3>Validate, deduplicate, mark risks and retain history</h3><p>Keep original text, IDs, provenance and versions. Reuse unchanged assessments; reassess when relevant content or context changes.</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node teal"><span class="label">JEV judgment</span><h3>What position does this post express?</h3><p>Map the expressed position to our assigned side. A post's position does not establish the author's identity or permanent affiliation.</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="fork four">
+          <div class="node teal"><span class="label">Aligned</span><h3>Support, supplement or answer?</h3><ul><li>Find a useful addition.</li><li>Look for unanswered questions.</li><li>Check our prior interactions.</li></ul><span class="outcome">Continue to target selection ↓</span></div>
+          <div class="node blue"><span class="label">Opposing</span><h3>Inspect claims and discussion signals</h3><ul><li>Separate the argument from emotional intensity.</li><li>Keep account influence and thread activity distinct.</li><li>Retrieve relevant posts by other opposing authors.</li><li>Compare their claims in explicit pairs.</li></ul><span class="outcome">Use comparison rules below ↓</span></div>
+          <div class="node"><span class="label">Neutral / mixed</span><h3>Identify questions and concerns</h3><ul><li>Find a concrete issue.</li><li>Inspect discussion openness.</li><li>Identify a useful explanation.</li></ul><span class="outcome">Continue to target selection ↓</span></div>
+          <div class="node amber"><span class="label">Unclear</span><h3>Preserve uncertainty</h3><ul><li>Continue judgments supported by the text.</li><li>Limit position-dependent conclusions.</li><li>Request context when essential.</li></ul><span class="outcome">Continue within evidence limits ↓</span></div>
+        </div>
+        <p class="merge">All branches converge. Historical disagreement is one possible response opportunity; a reply can be useful without it.</p>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node"><span class="label">Target selection</span><h3>Reply to the main post or a specific comment?</h3><p>Consider the exact question, available discussion and our prior response. Record the chosen target ID and text. Retain comment-sample limits.</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node teal"><span class="label">Program combines assessment signals</span><h3>Which action adds enough value?</h3><p>Consider response opportunity, added value, discussion openness, activity, narrative relevance, evidence readiness, cost and risk.</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="fork four">
+          <div class="node teal"><span class="label">Reply candidate</span><h3>Clear added value</h3><p>A specific response could contribute something useful. Continue to prompt routing and check its evidence requirements.</p><a class="outcome" href="#prompts">Go to Layer 2 →</a></div>
+          <div class="node blue"><span class="label">Like candidate</span><h3>Support is appropriate</h3><p>There is a clear basis for support, while a reply would add little.</p><span class="outcome">No public-text generation</span></div>
+          <div class="node rose"><span class="label">No interaction</span><h3>Low value or high risk</h3><p>Little added value, repeated discussion, or a risk that outweighs the opportunity.</p><span class="outcome">No public-text generation</span></div>
+          <div class="node amber"><span class="label">Defer / request context</span><h3>Essential evidence is missing</h3><p>Record what is needed and return the request upstream.</p><span class="outcome">No public-text generation</span></div>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:12px;font-size:12px">Account influence and visible engagement inform priority. They do not establish factual accuracy or actual competition points. Estimated value remains a set of signals to be calibrated with feedback.</p>
+    </section>
+
+    <section id="prompts" aria-labelledby="prompts-title">
+      <div class="section-head"><span class="section-number" aria-hidden="true">02</span><div>
+        <h2 id="prompts-title">Choose the reply purpose and prompt type</h2>
+        <p>Choose one primary task for the selected target. Tone, topic and account voice are separate parameters.</p>
+      </div></div>
+      <div class="diagram" aria-label="Reply and prompt routing tree">
+        <div class="node center-node teal"><span class="label">Reply candidate from Layer 1</span><h3>What should this reply accomplish?</h3><p>Identify one question or claim to address, then select a suitable prompt type. The briefs below are proposed template tasks.</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="controls" hidden id="prompt-controls"><button type="button" id="expand-prompts">Expand all prompt briefs</button><button type="button" id="collapse-prompts">Collapse all prompt briefs</button><span>Each card includes its evidence requirement and fallback.</span></div>
+        <div class="recipes">
+          <article class="node recipe" id="support"><span class="route-code">P01 · SUPPORT</span><h3>Support &amp; supplement</h3><p><strong>When:</strong> The post aligns with our position and there is a useful addition.</p><p class="requirement"><strong>Requires:</strong> A clear basis for support and a specific additional point.</p><details><summary>Prompt brief &amp; fallback</summary><p>Briefly support the relevant point and add one useful explanation drawn from the supplied material.</p><p><strong>Fallback:</strong> If nothing useful can be added, reassess a like or no interaction.</p></details></article>
+          <article class="node recipe" id="answer"><span class="route-code">P02 · ANSWER</span><h3>Answer a direct question</h3><p><strong>When:</strong> A concrete question can be answered from available material.</p><p class="requirement"><strong>Requires:</strong> The exact question and sufficient supporting information.</p><details><summary>Prompt brief &amp; fallback</summary><p>Answer the question first, then give the necessary basis. Preserve qualifications in the source.</p><p><strong>Fallback:</strong> Ask a specific clarification if possible; otherwise request material or defer.</p></details></article>
+          <article class="node recipe" id="argument"><span class="route-code">P03 · ARGUMENT</span><h3>Respond to an argument</h3><p><strong>When:</strong> There is a clear argument and a supported response.</p><p class="requirement"><strong>Requires:</strong> The original claim and relevant reasons or evidence.</p><details><summary>Prompt brief &amp; fallback</summary><p>Represent the claim accurately and respond to one central reason using the supplied material.</p><p><strong>Fallback:</strong> Clarify an unclear claim or request evidence; do not invent a counterexample.</p></details></article>
+          <article class="node recipe" id="proposal"><span class="route-code">P04 · PROPOSALS</span><h3>Compare policy proposals</h3><p><strong>When:</strong> Opposing authors suggest different approaches to the same policy issue.</p><p class="requirement"><strong>Requires:</strong> Both proposals and enough context to compare their scope.</p><details><summary>Prompt brief &amp; fallback</summary><p>Present the specific proposals and ask about their conditions, exceptions or reconciliation. Keep the conclusion tied to those authors.</p><p><strong>Fallback:</strong> Clarify scope when missing. Proposal differences alone do not prove factual error.</p></details></article>
+          <article class="node recipe" id="cross-check"><span class="route-code">P05 · CROSS-CHECK</span><h3>Cross-check conflicting posts</h3><p><strong>When:</strong> Comparable factual statements conflict, but their accuracy is unresolved.</p><p class="requirement"><strong>Requires:</strong> Both original posts, matching subject and relevant time or conditions.</p><details><summary>Prompt brief &amp; fallback</summary><p>Accurately contrast the two statements and ask which version or evidence supports them. Preserve uncertainty about which is correct.</p><p><strong>Fallback:</strong> If the statements cannot be compared, clarify the missing condition or drop this route.</p></details></article>
+          <article class="node recipe" id="correct"><span class="route-code">P06 · CORRECT</span><h3>Correct with verified evidence</h3><p><strong>When:</strong> Verified material supports a correction to a specific factual claim.</p><p class="requirement"><strong>Requires:</strong> A verified source applicable to the same subject, time and scope.</p><details><summary>Prompt brief &amp; fallback</summary><p>State the specific correction and its source. Keep the conclusion within what the source establishes.</p><p><strong>Fallback:</strong> Use cross-checking or clarification, or defer. Model confidence alone cannot establish truth.</p></details></article>
+          <article class="node recipe" id="concern"><span class="route-code">P07 · CONCERN</span><h3>Address an expressed concern</h3><p><strong>When:</strong> Strong emotion accompanies a concrete concern and a response opportunity.</p><p class="requirement"><strong>Requires:</strong> An identifiable concern and material for the substantive response.</p><details><summary>Prompt brief &amp; fallback</summary><p>Acknowledge the concern actually expressed, then address its specific issue in a calm, grounded way.</p><p><strong>Fallback:</strong> Reassess no interaction for repeated abuse or a thread with no useful response opportunity.</p></details></article>
+          <article class="node recipe" id="clarify"><span class="route-code">P08 · CLARIFY</span><h3>Ask a focused clarification</h3><p><strong>When:</strong> The claim, scope or basis is unclear, but a concrete question can be formulated.</p><p class="requirement"><strong>Requires:</strong> A clear question target and an identifiable information gap.</p><details><summary>Prompt brief &amp; fallback</summary><p>Ask one focused question about the missing scope, condition or basis. Avoid assuming the answer.</p><p><strong>Fallback:</strong> If the target itself is unclear because essential context is absent, request it upstream or defer.</p></details></article>
+          <article class="node recipe" id="summarize"><span class="route-code">P09 · SUMMARIZE</span><h3>Organize the discussion</h3><p><strong>When:</strong> Several relevant comments can be usefully organized.</p><p class="requirement"><strong>Requires:</strong> Traceable comments and a known sample scope.</p><details><summary>Prompt brief &amp; fallback</summary><p>Separate agreement, disagreement and unresolved questions in the supplied comments. State the sample scope where relevant.</p><p><strong>Fallback:</strong> Do not claim a thread-wide consensus from a limited sample.</p></details></article>
+        </div>
+        <p class="merge">Select one primary type. Account voice, topic, emotional tone and response length can be combined with the same template.</p>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="node center-node amber"><span class="label">Evidence gate</span><h3>Are this prompt type's requirements satisfied?</h3><p>Check the actual materials, uncertainty and missing context. An unavailable answer is not a zero score.</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="fork three">
+          <div class="node teal"><span class="label">Yes</span><h3>Prepare the generation task</h3><p>Attach the target text, evidence, limits, purpose, prompt type and expression requirements.</p><span class="outcome">Continue to downstream generation ↓</span></div>
+          <div class="node blue"><span class="label">No · specific question possible</span><h3>Use clarification or cross-checking</h3><p>Choose the alternative only when its own requirements are met. Keep the uncertainty explicit.</p><span class="outcome">Recheck requirements before generation</span></div>
+          <div class="node amber"><span class="label">No · target or basis unresolved</span><h3>Request context or defer</h3><p>Return the missing information requirement upstream.</p><span class="outcome">No public-text generation</span></div>
+        </div>
+        <div class="arrow" aria-hidden="true"><small>For candidates that pass the evidence gate</small>↓</div>
+        <div class="node center-node"><span class="label">Downstream ownership</span><h3>Match account voice → build prompt → generate → review</h3><p>The account module selects an available account. The LLM module builds and sends the prompt. Review checks target, quotations, factual support and format.</p></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="fork two">
+          <div class="node teal"><span class="label">Review passes</span><h3>Hand off for execution</h3><p>The publishing module makes final execution and platform-limit checks.</p></div>
+          <div class="node amber"><span class="label">Review fails</span><h3>Revise or reassess</h3><p>Return to generation or decision evaluation, according to the failure.</p></div>
+        </div>
+        <div class="arrow" aria-hidden="true"><small>After successful execution</small>↓</div>
+        <div class="node center-node"><span class="label">Feedback</span><h3>Record observed outcomes</h3><p>Use actual outcomes for calibration. A detected disagreement is not an observed credibility loss.</p></div>
+      </div>
+    </section>
+
+    <section id="comparison" aria-labelledby="comparison-title">
+      <div class="section-head"><span class="section-number" aria-hidden="true">03</span><div><h2 id="comparison-title">Interpret disagreement before choosing a response</h2><p>Compare explicit post pairs. Preserve current and historical post IDs, authors, original text, conditions, assessment versions and search scope.</p></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Relationship</th><th scope="col">Meaning</th><th scope="col">Possible response route</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Agreement / elaboration</strong></td><td>The claims align or one adds compatible detail.</td><td>Continue ordinary response evaluation.</td></tr>
+          <tr><td><strong>Different value priorities</strong></td><td>The authors care about different considerations; both may be compatible.</td><td>Respond to a concrete concern or argument. This difference does not establish inaccuracy.</td></tr>
+          <tr><td><strong>Different policy proposals</strong></td><td>The authors recommend different actions for a comparable issue.</td><td>P04 · Compare proposals and ask about conditions or reconciliation.</td></tr>
+          <tr><td><strong>Incompatible factual statements</strong></td><td>Both statements cannot be correct under the same subject, time and conditions.</td><td>P05 · Cross-check while accuracy is unresolved. P06 · Correct only with applicable verified evidence.</td></tr>
+          <tr><td><strong>Different conditions / unclear context</strong></td><td>Version, time, scope, quotation or meaning prevents a reliable comparison.</td><td>P08 · Clarify when a concrete question is possible; otherwise request context.</td></tr>
+          <tr><td><strong>No history / no match found</strong></td><td>No supplied historical material means unknown; no detected conflict is limited to the searched sample.</td><td>Continue other evaluations and retain the comparison limits.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="columns" style="margin-top:16px">
+        <div class="example"><span class="label">Hypothetical example · proposal disagreement</span><h3>Different recommendations</h3><blockquote>A: “Remove proof requirements from every public venue.”<br>B: “Remove them from parks, but keep them in hospitals.”</blockquote><p><strong>Route:</strong> P04 · Ask how the proposed exceptions should work. The disagreement concerns what should be done.</p></div>
+        <div class="example"><span class="label">Hypothetical example · factual conflict</span><h3>Different descriptions of one policy</h3><blockquote>A: “This policy version includes parks.”<br>B: “The same policy version excludes parks.”</blockquote><p><strong>Route:</strong> P05 · Ask for the policy text. Use P06 only if verified material supports a specific correction.</p></div>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:14px">Prioritize cross-author comparisons for this design. Track changes by the same author separately. Different authors do not automatically represent one organization or a unified official position. Keep platform observations separate from verified reference material.</p>
+    </section>
+
+    <section id="handoff" aria-labelledby="handoff-title">
+      <div class="section-head"><span class="section-number" aria-hidden="true">04</span><div><h2 id="handoff-title">Deliver a grounded generation task</h2><p>The LLM receives the selected task and its materials, alongside the assessment. Prompt-type labels and scores alone are insufficient.</p></div></div>
+      <div class="columns">
+        <div class="node"><h3>Proposed handoff contents</h3><ul class="handoff">
+          <li><strong>Action &amp; target</strong> Candidate action, target post or comment ID, original text and context.</li>
+          <li><strong>Purpose &amp; prompt type</strong> One primary task and the exact question or claim to address.</li>
+          <li><strong>Evidence</strong> Paired historical posts, source references and verification status.</li>
+          <li><strong>Limits</strong> Missing context, uncertainty and the scope of the comparison.</li>
+          <li><strong>Expression</strong> Account requirements, downstream-confirmed voice, tone and length.</li>
+          <li><strong>Versions</strong> Decision, question-set and prompt-template versions.</li>
+        </ul></div>
+        <div class="node teal"><h3>Prompt composition</h3><p>Common task requirements<br>↓<br>Selected prompt-type instructions<br>↓<br>Target text and evidence, clearly treated as data<br>↓<br>Account voice and expression parameters<br>↓<br>Output requirements</p><p class="muted">JEV supplies independent judgments. Program rules select the route and package materials. The downstream modules own LLM calls, account selection, review and publishing.</p></div>
+      </div>
+    </section>
+  </main>
+  <footer><div class="wrap"><span>CTN 2026 · JEV interaction design · Draft v0.3</span><span>Standalone HTML · No external assets or service calls · Thresholds pending review</span></div></footer>
+  <script>
+    (() => {
+      const briefs = [...document.querySelectorAll('.recipe details')];
+      document.getElementById('prompt-controls').hidden = false;
+      document.getElementById('expand-prompts').addEventListener('click', () => {
+        briefs.forEach(brief => { brief.open = true; });
+      });
+      document.getElementById('collapse-prompts').addEventListener('click', () => {
+        briefs.forEach(brief => { brief.open = false; });
+      });
+      const restore = () => { briefs.forEach(brief => { brief.open = brief.dataset.wasOpen === 'true'; }); };
+      window.addEventListener('beforeprint', () => {
+        briefs.forEach(brief => { brief.dataset.wasOpen = String(brief.open); brief.open = true; });
+      });
+      window.addEventListener('afterprint', restore);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,395 @@
+{
+  "fixture_kind": "synthetic_transport_handoff",
+  "note": "Offline simulated service; not model accuracy, live integration or action authorization.",
+  "package": {
+    "schema_version": "jev-handoff.v1",
+    "kind": "post",
+    "flow": {
+      "schema_version": "jev-flow.v1",
+      "run_id": "0d17f7f3-9e5a-40e9-a880-0b1076f212c6",
+      "status": "needs_review",
+      "batch_index": null,
+      "decision": {
+        "route": "review",
+        "reason": "injection_signal",
+        "answer_ids": [
+          "prompt_injection"
+        ]
+      },
+      "relative_stance": "unknown",
+      "needs": [
+        {
+          "kind": "review",
+          "reason": "injection_signal",
+          "answer_ids": [
+            "prompt_injection"
+          ]
+        }
+      ],
+      "new_attempt_count": 1,
+      "policy": {
+        "version": "jev-routing.v1",
+        "unrelated_min_probability": 0.8,
+        "injection_review_threshold": 0.5,
+        "unclear_to_deep": true
+      },
+      "policy_fingerprint": "99eb14331272045eac5d43c7ece7c09d9c66be5a02fb000ecdeb1c1cf59b1cdc",
+      "triage": {
+        "stage": "triage",
+        "source": "network",
+        "new_attempt_count": 1,
+        "cache_age_s": 0.0,
+        "assessment": {
+          "schema_version": "jev-parsing.v1",
+          "status": "success",
+          "output": {
+            "schema_version": "jev-output.v1",
+            "evaluation_id": "96ff5229-9625-497c-8f38-612953a0a055",
+            "post_id": "sample-reply",
+            "source_kind": "synthetic",
+            "stage": "triage",
+            "question_set_version": "ctn-post.v1",
+            "status": "success",
+            "answers": {
+              "relevance": {
+                "type": "choice",
+                "status": "valid",
+                "value": "relevant",
+                "probabilities": {
+                  "relevant": 1.0,
+                  "unclear": 0.0,
+                  "unrelated": 0.0
+                },
+                "confidence": 1.0,
+                "legend": null,
+                "issue": null
+              },
+              "topic": {
+                "type": "choice",
+                "status": "valid",
+                "value": "economic_effects",
+                "probabilities": {
+                  "economic_effects": 1.0,
+                  "institutional_trust": 0.0,
+                  "other_relevant": 0.0,
+                  "personal_choice": 0.0,
+                  "personal_experience": 0.0,
+                  "public_access": 0.0,
+                  "public_health": 0.0,
+                  "unclear": 0.0,
+                  "unrelated": 0.0,
+                  "vaccine_evidence": 0.0,
+                  "voting_process": 0.0
+                },
+                "confidence": 1.0,
+                "legend": null,
+                "issue": null
+              },
+              "policy_stance": {
+                "type": "choice",
+                "status": "valid",
+                "value": "yes",
+                "probabilities": {
+                  "mixed": 0.0,
+                  "neutral": 0.0,
+                  "no": 0.0,
+                  "unclear": 0.0,
+                  "yes": 1.0
+                },
+                "confidence": 1.0,
+                "legend": null,
+                "issue": null
+              },
+              "prompt_injection": {
+                "type": "noul",
+                "status": "valid",
+                "value": 0.5,
+                "probabilities": null,
+                "confidence": null,
+                "legend": null,
+                "issue": null
+              }
+            },
+            "request_id": "7baa4f9cd587292d3f12c56e430ad32294596fc0e54a8a4b08992de474e15b25",
+            "model": "synthetic-test-model",
+            "usage": {
+              "input_tokens": 12,
+              "output_tokens": 6
+            },
+            "latency_ms": 0.1320410519838333,
+            "evaluated_at": "2026-10-10T01:46:45.503015+00:00",
+            "context_issues": [
+              {
+                "path": "content.author.platform_level",
+                "reason": "unknown"
+              },
+              {
+                "path": "content.task_context.assigned_side",
+                "reason": "unknown"
+              },
+              {
+                "path": "content.conversation",
+                "reason": "partial"
+              },
+              {
+                "path": "content.interaction_history",
+                "reason": "partial"
+              },
+              {
+                "path": "content.conversation.items[1].text_complete",
+                "reason": "truncated"
+              },
+              {
+                "path": "content.trusted_background",
+                "reason": "unverified"
+              }
+            ],
+            "error": null
+          },
+          "request": {
+            "schema_version": "jev-packing.v1",
+            "status": "ready",
+            "kind": "post",
+            "stage": "triage",
+            "targets": [
+              {
+                "role": "target",
+                "source_kind": "synthetic",
+                "post_id": "sample-reply",
+                "content_path": "content"
+              }
+            ],
+            "issues": [
+              {
+                "path": "content.trusted_background.items[0]",
+                "reason": "unverified_reference"
+              }
+            ],
+            "question_ids": [
+              "relevance",
+              "topic",
+              "policy_stance",
+              "prompt_injection"
+            ],
+            "answer_bindings": {
+              "relevance": {
+                "question_id": "relevance",
+                "content_path": "content",
+                "targets": [
+                  {
+                    "role": "target",
+                    "source_kind": "synthetic",
+                    "post_id": "sample-reply",
+                    "content_path": "content"
+                  }
+                ]
+              },
+              "topic": {
+                "question_id": "topic",
+                "content_path": "content",
+                "targets": [
+                  {
+                    "role": "target",
+                    "source_kind": "synthetic",
+                    "post_id": "sample-reply",
+                    "content_path": "content"
+                  }
+                ]
+              },
+              "policy_stance": {
+                "question_id": "policy_stance",
+                "content_path": "content",
+                "targets": [
+                  {
+                    "role": "target",
+                    "source_kind": "synthetic",
+                    "post_id": "sample-reply",
+                    "content_path": "content"
+                  }
+                ]
+              },
+              "prompt_injection": {
+                "question_id": "prompt_injection",
+                "content_path": "content",
+                "targets": [
+                  {
+                    "role": "target",
+                    "source_kind": "synthetic",
+                    "post_id": "sample-reply",
+                    "content_path": "content"
+                  }
+                ]
+              }
+            },
+            "question_set_version": "ctn-post.v1",
+            "question_set_fingerprint": "078f3ad2220ef07225d09446f013be2522f8d31867beaa11c3d7b6e7a831ada4",
+            "packing_fingerprint": "3b009c9737d770d1ff1f99a2380f47ba543803f3e8ed5b3cfa609dff000d62cd",
+            "input_fingerprint": "7b5d0c8f87f38c943e699317957b6db13eb39f64956947d7d693ba621e218681",
+            "request_id": "7baa4f9cd587292d3f12c56e430ad32294596fc0e54a8a4b08992de474e15b25",
+            "state_bytes": 2026,
+            "request_bytes": 10633,
+            "batch_index": null
+          },
+          "issues": [],
+          "error": null
+        },
+        "original_call": {
+          "schema_version": "jev-call.v1",
+          "status": "success",
+          "call_id": "96ff5229-9625-497c-8f38-612953a0a055",
+          "request_id": "7baa4f9cd587292d3f12c56e430ad32294596fc0e54a8a4b08992de474e15b25",
+          "error_code": null,
+          "retryable": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "number": 1,
+              "http_status": 200,
+              "error_code": null,
+              "elapsed_s": 5.545897874981165e-05
+            }
+          ],
+          "elapsed_s": 0.0001320410519838333,
+          "retry_after_s": null,
+          "response_bytes": 804
+        }
+      },
+      "deep": null
+    },
+    "final_stage": "triage",
+    "targets": [
+      {
+        "role": "target",
+        "source_kind": "synthetic",
+        "post_id": "sample-reply",
+        "content_path": "content"
+      }
+    ],
+    "materials_available": true,
+    "generation_task": null,
+    "execution_authorized": false,
+    "materials": {
+      "content": {
+        "author": {
+          "followers_count": 18,
+          "observed_at": "2026-10-09T09:50:00+11:00",
+          "platform_level": null,
+          "profile_text": "Fictional test account."
+        },
+        "conversation": {
+          "items": [
+            {
+              "author_id": null,
+              "created_at": null,
+              "post_id": "sample-parent",
+              "role": "parent",
+              "source": {
+                "kind": "synthetic",
+                "observed_at": "2026-10-09T10:00:00+11:00",
+                "source_id": null
+              },
+              "text": "I have not shared my sources yet.",
+              "text_complete": true
+            },
+            {
+              "author_id": null,
+              "created_at": null,
+              "post_id": "sample-comment",
+              "role": "comment",
+              "source": {
+                "kind": "synthetic",
+                "observed_at": "2026-10-09T10:00:00+11:00",
+                "source_id": null
+              },
+              "text": "I also want to see the sources.",
+              "text_complete": false
+            }
+          ],
+          "status": "partial"
+        },
+        "interaction_history": {
+          "events": [
+            {
+              "acted_at": "2026-10-09T09:52:00+11:00",
+              "kind": "reply",
+              "target_post_id": "sample-parent",
+              "text": "Which part would you like to discuss?"
+            }
+          ],
+          "status": "partial"
+        },
+        "metrics": {
+          "likes": 2,
+          "observed_at": "2026-10-09T10:00:00+11:00",
+          "replies": 1,
+          "reposts": 0
+        },
+        "post": {
+          "author_id": "sample-author",
+          "created_at": "2026-10-09T09:55:00+11:00",
+          "hashtags": [],
+          "kind": "reply",
+          "parent_id": "sample-parent",
+          "post_id": "sample-reply",
+          "text": "What evidence supports that claim?",
+          "text_complete": true
+        },
+        "schema_version": "jev-input.v1",
+        "source": {
+          "kind": "synthetic",
+          "observed_at": "2026-10-09T10:00:00+11:00",
+          "source_id": "test-fixtures"
+        },
+        "task_context": {
+          "assigned_side": "unknown"
+        },
+        "trusted_background": null
+      },
+      "verified_background": {
+        "items": [],
+        "status": "unavailable",
+        "verification": "local_registry_match"
+      },
+      "packing": {
+        "context_issues": [
+          {
+            "path": "content.author.platform_level",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.task_context.assigned_side",
+            "reason": "unknown"
+          },
+          {
+            "path": "content.conversation",
+            "reason": "partial"
+          },
+          {
+            "path": "content.interaction_history",
+            "reason": "partial"
+          },
+          {
+            "path": "content.conversation.items[1].text_complete",
+            "reason": "truncated"
+          }
+        ],
+        "limitations": [
+          {
+            "count": 1,
+            "path": "content.trusted_background.items",
+            "reason": "unverified_reference"
+          }
+        ],
+        "policy_fingerprint": "3b009c9737d770d1ff1f99a2380f47ba543803f3e8ed5b3cfa609dff000d62cd",
+        "schema_version": "jev-packing.v1"
+      },
+      "trust": "untrusted_content_as_data",
+      "background_verification": "registry_match_is_not_factual_verification"
+    },
+    "action_decision": {
+      "status": "pending_rules",
+      "action": null,
+      "reason": "business_policy_not_configured"
+    }
+  }
+}

@@ -1,0 +1,270 @@
+{
+  "fixture_kind": "synthetic_transport_flow",
+  "note": "Offline wire responses for routing tests; not model reference judgments or real service calls.",
+  "input": {
+    "schema_version": "jev-input.v1",
+    "post": {
+      "post_id": "synthetic-observe",
+      "text": "Can someone explain what this proposal would change?"
+    },
+    "source": {
+      "kind": "synthetic",
+      "observed_at": "2026-10-09T10:00:00+11:00"
+    }
+  },
+  "flow": {
+    "schema_version": "jev-flow.v1",
+    "run_id": "synthetic-flow-observe",
+    "status": "observe",
+    "batch_index": null,
+    "decision": {
+      "route": "observe",
+      "reason": "clearly_unrelated",
+      "answer_ids": [
+        "relevance"
+      ]
+    },
+    "relative_stance": "unknown",
+    "needs": [],
+    "new_attempt_count": 1,
+    "policy": {
+      "version": "jev-routing.v1",
+      "unrelated_min_probability": 0.8,
+      "injection_review_threshold": 0.5,
+      "unclear_to_deep": true
+    },
+    "policy_fingerprint": "99eb14331272045eac5d43c7ece7c09d9c66be5a02fb000ecdeb1c1cf59b1cdc",
+    "triage": {
+      "stage": "triage",
+      "source": "network",
+      "new_attempt_count": 1,
+      "cache_age_s": 0.0,
+      "assessment": {
+        "schema_version": "jev-parsing.v1",
+        "status": "success",
+        "output": {
+          "schema_version": "jev-output.v1",
+          "evaluation_id": "synthetic-observe-triage",
+          "post_id": "synthetic-observe",
+          "source_kind": "synthetic",
+          "stage": "triage",
+          "question_set_version": "ctn-post.v1",
+          "status": "success",
+          "answers": {
+            "relevance": {
+              "type": "choice",
+              "status": "valid",
+              "value": "unrelated",
+              "probabilities": {
+                "relevant": 0.09999999999999998,
+                "unclear": 0.09999999999999998,
+                "unrelated": 0.8
+              },
+              "confidence": 1.0,
+              "legend": null,
+              "issue": null
+            },
+            "topic": {
+              "type": "choice",
+              "status": "valid",
+              "value": "economic_effects",
+              "probabilities": {
+                "economic_effects": 1.0,
+                "institutional_trust": 0.0,
+                "other_relevant": 0.0,
+                "personal_choice": 0.0,
+                "personal_experience": 0.0,
+                "public_access": 0.0,
+                "public_health": 0.0,
+                "unclear": 0.0,
+                "unrelated": 0.0,
+                "vaccine_evidence": 0.0,
+                "voting_process": 0.0
+              },
+              "confidence": 1.0,
+              "legend": null,
+              "issue": null
+            },
+            "policy_stance": {
+              "type": "choice",
+              "status": "valid",
+              "value": "yes",
+              "probabilities": {
+                "mixed": 0.0,
+                "neutral": 0.0,
+                "no": 0.0,
+                "unclear": 0.0,
+                "yes": 1.0
+              },
+              "confidence": 1.0,
+              "legend": null,
+              "issue": null
+            },
+            "prompt_injection": {
+              "type": "noul",
+              "status": "valid",
+              "value": 0.0,
+              "probabilities": null,
+              "confidence": null,
+              "legend": null,
+              "issue": null
+            }
+          },
+          "request_id": "e779e6427886d9478038a88e932b46d3a7024800aad99f2bf44f5583af92ef3e",
+          "model": "synthetic-test-model",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 6
+          },
+          "latency_ms": 10.0,
+          "evaluated_at": "2026-10-10T02:00:00+00:00",
+          "context_issues": [
+            {
+              "path": "content.post.author_id",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.post.created_at",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.author",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.metrics",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.conversation",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.interaction_history",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.post.kind",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.post.text_complete",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.task_context.assigned_side",
+              "reason": "unknown"
+            },
+            {
+              "path": "content.trusted_background",
+              "reason": "unknown"
+            }
+          ],
+          "error": null
+        },
+        "request": {
+          "schema_version": "jev-packing.v1",
+          "status": "ready",
+          "kind": "post",
+          "stage": "triage",
+          "targets": [
+            {
+              "role": "target",
+              "source_kind": "synthetic",
+              "post_id": "synthetic-observe",
+              "content_path": "content"
+            }
+          ],
+          "issues": [],
+          "question_ids": [
+            "relevance",
+            "topic",
+            "policy_stance",
+            "prompt_injection"
+          ],
+          "answer_bindings": {
+            "relevance": {
+              "question_id": "relevance",
+              "content_path": "content",
+              "targets": [
+                {
+                  "role": "target",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-observe",
+                  "content_path": "content"
+                }
+              ]
+            },
+            "topic": {
+              "question_id": "topic",
+              "content_path": "content",
+              "targets": [
+                {
+                  "role": "target",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-observe",
+                  "content_path": "content"
+                }
+              ]
+            },
+            "policy_stance": {
+              "question_id": "policy_stance",
+              "content_path": "content",
+              "targets": [
+                {
+                  "role": "target",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-observe",
+                  "content_path": "content"
+                }
+              ]
+            },
+            "prompt_injection": {
+              "question_id": "prompt_injection",
+              "content_path": "content",
+              "targets": [
+                {
+                  "role": "target",
+                  "source_kind": "synthetic",
+                  "post_id": "synthetic-observe",
+                  "content_path": "content"
+                }
+              ]
+            }
+          },
+          "question_set_version": "ctn-post.v1",
+          "question_set_fingerprint": "078f3ad2220ef07225d09446f013be2522f8d31867beaa11c3d7b6e7a831ada4",
+          "packing_fingerprint": "3b009c9737d770d1ff1f99a2380f47ba543803f3e8ed5b3cfa609dff000d62cd",
+          "input_fingerprint": "465c2079a75d3a64fd02b9f3b702156976502a369bcfc7d89cd8783a6a3804fb",
+          "request_id": "e779e6427886d9478038a88e932b46d3a7024800aad99f2bf44f5583af92ef3e",
+          "state_bytes": 1202,
+          "request_bytes": 9809,
+          "batch_index": null
+        },
+        "issues": [],
+        "error": null
+      },
+      "original_call": {
+        "schema_version": "jev-call.v1",
+        "status": "success",
+        "call_id": "synthetic-observe-triage",
+        "request_id": "e779e6427886d9478038a88e932b46d3a7024800aad99f2bf44f5583af92ef3e",
+        "error_code": null,
+        "retryable": false,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "number": 1,
+            "http_status": 200,
+            "error_code": null,
+            "elapsed_s": 0.01
+          }
+        ],
+        "elapsed_s": 0.01,
+        "retry_after_s": null,
+        "response_bytes": 837
+      }
+    },
+    "deep": null
+  }
+}

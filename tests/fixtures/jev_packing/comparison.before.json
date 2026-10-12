@@ -1,0 +1,30 @@
+{
+  "current": {
+    "schema_version": "jev-input.v1",
+    "post": {
+      "post_id": "same_version_conflict-current",
+      "text": "Policy version A requires H2D2 vaccination proof for every visitor entering public parks.",
+      "author_id": "synthetic-author-a",
+      "kind": "original",
+      "text_complete": true
+    },
+    "source": {
+      "kind": "synthetic",
+      "observed_at": "2026-10-09T00:00:00Z"
+    }
+  },
+  "historical": {
+    "schema_version": "jev-input.v1",
+    "post": {
+      "post_id": "same_version_conflict-historical",
+      "text": "Policy version A does not require H2D2 vaccination proof for any visitor entering public parks.",
+      "author_id": "synthetic-author-b",
+      "kind": "original",
+      "text_complete": true
+    },
+    "source": {
+      "kind": "synthetic",
+      "observed_at": "2026-10-09T00:00:00Z"
+    }
+  }
+}
