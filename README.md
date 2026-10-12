@@ -342,7 +342,7 @@ Neither offline tests nor that synthetic live check establish real-content class
 | `tests/fixtures/jev_handoff/actions-v1.json` | Eight historical v1 synthetic action examples, including an explicit generation-material example; their neutral pending state remains a versioned historical example. |
 | `tests/fixtures/jev_handoff/response-planning-v1.json` | Current synthetic neutral/mixed open, question-first, and guided planning examples. |
 | `tests/fixtures/jev_injection/cases-v1.json`, `tests/test_jev_injection.py` | Synthetic attacks/controls, documented heuristic gaps, and offline boundary regression tests. |
-| `ctn-architecture-en.html`, `ctn-architecture.html` | Broader design references; proposed architecture is not evidence that every subsystem is implemented. |
+| `ctn-architecture.html` (`-cn.html` for Chinese) | Broader design reference. Proposed architecture is not evidence that every subsystem is implemented. |
 | `jev-design-proposal.html` (`-cn.html` for Chinese) | Earlier v0.3 design proposal covering interaction choice, the P01–P09 prompt types, and post-comparison interpretation. Written before the code existed and explicitly states that thresholds were still to be agreed, so treat it as intent, not behaviour. |
 | `jev-decision-tree.html` (`-cn.html` for Chinese) | As-built reference for the two decision trees currently in `ctn/jev`: ordered routing rules, the action guards, the score gates, boundary semantics, the state vocabulary, and the defaults that keep parts of Tree 2 inert. Threshold values here are transcribed from `routing.py` and `actions.py`; where the two documents disagree on a number, this one reflects the code. |
 
