@@ -1,0 +1,93 @@
+# ============================================================================
+#  CTN 2026 —— 部署编排
+# ============================================================================
+#  常用命令：
+#      ./scripts/docker.sh build      # 构建运行时镜像
+#      ./scripts/docker.sh verify     # 构建自检镜像（跑全部测试）
+#      ./scripts/docker.sh up         # 后台启动
+#      ./scripts/docker.sh logs       # 跟随日志
+#      ./scripts/docker.sh shell      # 进容器排查
+#      ./scripts/docker.sh down       # 停止
+#
+#  首次部署前必须做一次（否则容器写不进挂载目录）：
+#      mkdir -p state logs && sudo chown -R 10001:10001 state logs
+#
+#  ── 为什么用 compose 而不是 docker run ──────────────────────────────
+#  它把架构里的三向切分**变成强制**：
+#      代码 → 镜像（来自 git）
+#      状态 → 卷（可单独备份，进不了 git）
+#      密钥 → env_file（进不了镜像）
+#  手工 docker run 很容易把 .env 或 state/ 带进镜像，这里从结构上避免。
+# ============================================================================
+
+name: ctn2026
+
+services:
+
+  # -------------------------------------------------------------------------
+  # 舰队主进程
+  # -------------------------------------------------------------------------
+  fleet:
+    build:
+      context: .
+      target: runtime
+    image: ctn2026/fleet:${CTN_IMAGE_TAG:-local}
+
+    # 密钥只从 .env 注入，绝不 COPY 进镜像（规则 5.6）。
+    # required: false 让 `docker compose config/build` 在没有 .env 时也能用；
+    # 真正启动前的检查由 scripts/docker.sh 的 require_env 负责。
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      CTN_STATE_DIR: /state
+      CTN_LOG_DIR: /logs
+      TZ: Australia/Sydney
+
+    volumes:
+      # 状态：sqlite / 曝光日志 / 检查点。**必须单独备份。**
+      - ./state:/state
+      # 遥测 JSONL：校准燃料 + 答辩素材
+      - ./logs:/logs
+
+    # 两周无人值守运行：崩了必须自己起来
+    restart: unless-stopped
+
+    # 收到 SIGTERM 后给主循环时间把状态落盘，再 SIGKILL。
+    # 与 2 周赛程相比，30 秒的停机完全可以忽略；数据丢失则不可逆。
+    stop_grace_period: 30s
+
+    # 正确转发信号、回收僵尸进程（Python 作为 PID 1 的经典问题）
+    init: true
+
+    # 限速设计里不需要高吞吐（每队约 0.6 req/s），
+    # 上限只用来防止 bug 导致的失控循环拖垮宿主机。
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1g
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+    # 主循环就位后启用；当前默认 CMD 已在 Dockerfile 中说明
+    # command: ["python", "-m", "ctn.main"]
+
+  # -------------------------------------------------------------------------
+  # 自检（不进默认启动，按需运行）
+  #     docker compose --profile test run --rm verify
+  #     或 ./scripts/docker.sh verify
+  # -------------------------------------------------------------------------
+  verify:
+    profiles: ["test"]
+    build:
+      context: .
+      target: verify
+    image: ctn2026/verify:${CTN_IMAGE_TAG:-local}
+    # 纯离线：不需要 .env、不需要网络、不挂任何卷
+    network_mode: none

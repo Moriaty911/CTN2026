@@ -1,0 +1,85 @@
+# ============================================================================
+#  CTN 2026 —— Docker 构建上下文排除
+# ============================================================================
+#  这个文件是**安全边界**，不是优化项。
+#
+#  规则 5.6：绝不能把比赛 API key 泄漏到队伍之外。
+#  把 .env COPY 进镜像 = 密钥被烘进镜像层，任何能 docker save 的人都能读到。
+#
+#  另外：state/ 与 logs/ 属于运行时数据，必须走卷，绝不能进镜像。
+# ============================================================================
+
+# ---- 密钥：最高优先级，绝不进镜像 -----------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+credentials/
+credentials*.json
+*_secret*
+*_token.txt
+
+# ---- 运行时状态与日志：必须走卷 -------------------------------------------
+state/
+logs/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3*
+checkpoint*
+*.jsonl
+*.log
+
+# ---- 比赛材料（规则 5.2） -------------------------------------------------
+materials/
+briefings/
+official/
+*.pdf
+discord-export*
+screenshots/
+
+# ---- 版本控制与本地环境 ---------------------------------------------------
+.git
+.gitignore
+.gitattributes
+.github
+
+.conda/
+envs/
+venv/
+.venv/
+environment.lock.yml
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- 编辑器 / 操作系统 ----------------------------------------------------
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+*~
+scratch/
+tmp/
+*.local.*
+local_*
+
+# ---- 文档与预览（镜像里用不到，减小体积） ---------------------------------
+docs/
+*.html
+*.png
+*.jpg
+*.jpeg
+README.md
+agent.md
