@@ -43,7 +43,7 @@ The default action policy is `jev-actions.v2`, which adds neutral/mixed delegati
 
 ## Requirements and setup
 
-- Python 3.10 or newer; the recorded verification run used Python 3.14.6.
+- **Python 3.14.** This version is pinned in `environment.yml` and in the Docker image (`python:3.14-slim`), and the container is the deployment target. `scripts/check_env.py` enforces it at startup so a wrong interpreter fails loudly instead of producing empty results. The earlier claim of "Python 3.10 or newer" was wrong: on 3.13 and earlier, `JevInput.from_dict` rejected every input (see `ctn/jev/inputs.py`). That specific defect is now fixed, but 3.14 remains the only supported and tested interpreter.
 - The current Python implementation and tests use the standard library. No third-party package installation is required.
 - Run commands from the repository root. There is no packaged installation or full application CLI yet.
 - Live evaluation requires a TypeSafe API key and network access. Offline tests require neither.

@@ -11,7 +11,7 @@ from dataclasses import MISSING, dataclass, fields
 from datetime import datetime
 from functools import lru_cache
 from types import UnionType
-from typing import Literal, get_args, get_origin, get_type_hints
+from typing import Literal, Union, get_args, get_origin, get_type_hints
 
 
 INPUT_SCHEMA_VERSION = "jev-input.v1"
@@ -38,7 +38,19 @@ def _hints(cls: type) -> dict:
 
 def _decode(hint: object, value: object, path: str, *, wire: bool) -> object:
     origin, args = get_origin(hint), get_args(hint)
-    if origin is UnionType:
+    # Accept both union flavours. Python 3.14 unified typing.Union with
+    # types.UnionType, but on 3.13 and earlier `Literal[...] | None` resolves to
+    # typing.Union while `str | None` resolves to types.UnionType. Checking only
+    # UnionType made every Optional field that wraps a typing construct fail
+    # validation, and InputPost.kind is the only such field in the schema, so
+    # JevInput.from_dict rejected every input.
+    #
+    # The project targets 3.14 and ships in a 3.14 container, so this is not the
+    # primary defence - the pinned interpreter is. It removes the footgun for
+    # anyone running a plain `python3` instead of the pinned environment, where
+    # the symptom (every flow returns `deferred`, every action `None`) looks
+    # like a logic bug rather than a version mismatch.
+    if origin is UnionType or origin is Union:
         if value is None and type(None) in args:
             return None
         # The input contract uses only T | None, never ambiguous unions.

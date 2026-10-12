@@ -1,0 +1,41 @@
+name: ci
+
+# One job, deliberately.
+#
+# It builds the Dockerfile's `verify` stage, which does three things at build
+# time: installs dependencies into a venv on python:3.14-slim, runs
+# scripts/check_env.py (interpreter version guard), and runs the full offline
+# test suite. If any of those fail, the build fails.
+#
+# This is the same interpreter the fleet ships on, so CI and production cannot
+# drift. It also means a broken Dockerfile is caught here rather than on the
+# server mid-competition.
+#
+# Why there is no 3.13 job: the project runs on 3.14 only. environment.yml pins
+# it, the image pins it, and scripts/check_env.py refuses to start on anything
+# else. The union defect in ctn/jev/inputs.py that broke 3.13 is fixed, but 3.13
+# is not a supported target and is not tested.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The verify stage runs the version guard and all 319 tests as part of
+      # the image build, so a failing suite fails this step.
+      - name: Build verify stage (3.14 + version guard + offline tests)
+        run: docker build --target verify -t ctn-verify .
+
+      # The runtime image is what actually deploys; confirm it also builds and
+      # that its default command starts cleanly.
+      - name: Build runtime stage and start it
+        run: |
+          docker build --target runtime -t ctn-runtime .
+          docker run --rm ctn-runtime
