@@ -1,0 +1,45 @@
+# ============================================================================
+#  CTN 2026 —— 统一 Python 环境
+# ============================================================================
+#  用法：
+#      ./scripts/setup_env.sh            # 创建或更新环境（推荐）
+#      conda env create -f environment.yml
+#      conda activate ctn
+#
+#  为什么必须钉住 Python 版本（2026-10 实测）：
+#
+#      ctn/jev/inputs.py 的 Optional 解包依赖
+#      `typing.Union is types.UnionType` 这一同一性，
+#      而它在 Python 3.14 才成立（3.14 统一了两个类型）。
+#
+#      实测同一份代码：
+#          Python 3.14.8  → 319/319 测试通过
+#          Python 3.13.13 → 229 failures + 130 errors（JevInput 拒绝一切输入）
+#
+#      代码已修复为同时兼容两种 union（origin is UnionType or origin is Union），
+#      但环境仍统一到 3.14：那只是我们发现的那一处版本差异，未必是唯一一处。
+#      比赛期间不该拿未测的版本差异去赌。
+# ============================================================================
+
+name: ctn
+
+channels:
+  - conda-forge
+
+dependencies:
+  # ── 解释器：这是本文件最重要的一行 ──────────────────────────────
+  - python=3.14
+
+  - pip>=25.1
+
+  # ── 第三方依赖 ────────────────────────────────────────────────
+  # 当前 ctn/jev/ 是纯标准库实现，离线测试不需要任何第三方包。
+  #
+  # pip 依赖**不在本文件重复列表**，而是引用 requirements.txt ——
+  # 那是 pip 侧唯一事实来源（Docker 镜像也用它），避免两处漂移。
+  - pip:
+      - -r requirements.txt
+
+      # 若最终确认「图片上传只能走网页 UI，API 不支持」，在
+      # requirements.txt 里加 playwright，并注意部署形态要从
+      # systemd+venv 改成容器，且预留浏览器实例内存（每实例 150–300MB）
