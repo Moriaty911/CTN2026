@@ -155,6 +155,8 @@ local_*
 # Local JEV task lists and decision notes (user requirement: never commit)
 /JEV_TASKS.local.md
 /JEV_INPUT_CONTRACT.local.md
+# 中文决策树仅本地查看（用户要求：不上传 Git）
+/jev-decision-tree-zh.html
 
 
 # ---------------------------------------------------------------------------
