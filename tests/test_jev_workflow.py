@@ -125,6 +125,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(len(transport.calls), 4)
         self.assertEqual(sum(l["new_attempt_count"] for l in logs), 4)
         self.assertEqual(len(logs), 3)
+        # Worker completion order is independent of the ordered batch return.
+        logs.sort(key=lambda entry: entry["batch_index"])
         self.assertEqual(logs[0]["action"]["action"], "reply")
         self.assertEqual(logs[0]["material_check"]["prompt_type"], "P08")
         self.assertNotIn(a["post"]["text"], json.dumps(logs))

@@ -20,11 +20,20 @@ class HandoffValidationError(ValueError):
 
 
 @dataclass(frozen=True)
+class _WorkflowBinding:
+    """Local integrity record, not authentication across processes."""
+    snapshots: tuple[str | None, ...] = field(repr=False)
+    response: object | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
 class HandoffPackage:
     _json: str = field(repr=False)
     _materials_json: str | None = field(default=None, repr=False)
     _generation_json: str | None = field(default=None, repr=False)
     _planning_json: str | None = field(default=None, repr=False)
+    _response_result: object | None = field(default=None, repr=False)
+    _workflow_binding: _WorkflowBinding | None = field(default=None, repr=False)
 
     def to_dict(self, *, include_materials=False):
         if type(include_materials) is not bool:
@@ -37,6 +46,20 @@ class HandoffPackage:
             if self._planning_json is not None:
                 result["response_planning_materials"] = json.loads(self._planning_json)
         return result
+
+
+def bind_workflow_handoff(package):
+    snapshots = (package._json, package._materials_json, package._generation_json, package._planning_json)
+    return HandoffPackage(*snapshots, package._response_result,
+                          _WorkflowBinding(snapshots, package._response_result))
+
+
+def validate_workflow_handoff(package):
+    if (type(package) is not HandoffPackage or type(package._workflow_binding) is not _WorkflowBinding or
+        package._workflow_binding.snapshots !=
+            (package._json, package._materials_json, package._generation_json, package._planning_json) or
+        package._workflow_binding.response is not package._response_result):
+        raise HandoffValidationError("handoff: missing or changed local workflow binding")
 
 
 def _stage_materials(stage):

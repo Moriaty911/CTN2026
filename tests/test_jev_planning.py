@@ -23,7 +23,7 @@ def planner(side="neutral", expression="assertion", handler=None, audit=None, po
             handler(body, data)
     transport = FakeTransport(respond)
     workflow = JevWorkflow(JevClient(JevConfig(api_key="synthetic-planning-key", max_retries=0), transport=transport),
-                           audit_log=audit, action_policy=policy)
+                           audit_log=audit, action_policy=policy if policy is not None else ActionPolicy(version="jev-actions.v2"))
     return workflow, transport
 
 

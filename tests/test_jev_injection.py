@@ -13,7 +13,7 @@ import tempfile
 import unittest
 
 from ctn.jev import (
-    BackgroundReference, CalibrationSample, CalibrationValidationError,
+    ActionPolicy, BackgroundReference, CalibrationSample, CalibrationValidationError,
     HandoffPackage, InjectionLimits, InjectionPreflight, JevAuditLog, JevPacker,
     MaterialBrief, MaterialChecker, PackingLimits, PackingValidationError, TextSpan,
     load_rubric,
@@ -279,7 +279,7 @@ class InjectionTests(unittest.TestCase):
         self.assertEqual(len(transport.calls), 2)
 
     def test_neutral_guidance_and_replayed_materials_cannot_skip_preflight(self):
-        workflow, transport = worker(side="neutral")
+        workflow, transport = worker(side="neutral", action_policy=ActionPolicy(version="jev-actions.v2"))
         data = record()
         package = workflow.evaluate(data)
         result = workflow.prepare(package, replace(clarification(data), information_gap=ATTACK)).to_dict(include_materials=True)

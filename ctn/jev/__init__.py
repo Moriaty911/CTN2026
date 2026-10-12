@@ -65,6 +65,7 @@ from .materials import (
 )
 from .workflow import JevWorkflow, WorkflowValidationError
 from .planning import PLANNING_SCHEMA_VERSION, ResponsePlanningTask, build_response_planning
+from .response import RESPONSE_SCHEMA_VERSION, ResponseDecision, decide_response
 
 __all__ = [
     "INPUT_SCHEMA_VERSION",
@@ -156,4 +157,7 @@ __all__ = [
     "PLANNING_SCHEMA_VERSION",
     "ResponsePlanningTask",
     "build_response_planning",
+    "RESPONSE_SCHEMA_VERSION",
+    "ResponseDecision",
+    "decide_response",
 ]

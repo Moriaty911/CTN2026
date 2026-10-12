@@ -1,4 +1,4 @@
-"""Module-local triage -> deep evaluation, with bounded duplicate handling.
+"""Module-local triage/deep and explicit response evaluation with bounded reuse.
 
 No platform reads, historical search, LLM calls, publishing or persistent state.
 One instance shares in-flight requests and an optional bounded memory cache.
@@ -182,13 +182,13 @@ class JevEvaluator:
         parsed = self.parser.parse(call, question_set=questions)
         return StageEvaluation(packed.stage, "not_sent", parsed, 0, _call_metadata_json=json.dumps(call.to_dict()))
 
-    def _evaluate_stage(self, packed: PackingResult, questions: QuestionSet, batch_memo=None) -> StageEvaluation:
+    def _evaluate_stage(self, packed: PackingResult, questions: QuestionSet, batch_memo=None, *, force_refresh=False) -> StageEvaluation:
         self._check_config()
         started = self._clock()
         # Deferred inputs can have no identity/fingerprint: never coalesce them.
         key = self._cache_key(packed) if packed.status == "ready" else None
         future, leader = None, True
-        if key is not None:
+        if key is not None and not force_refresh:
             with self._lock:
                 now = self._clock()
                 for expired in [k for k, entry in self._cache.items()
@@ -232,7 +232,8 @@ class JevEvaluator:
                         self._cache.move_to_end(key)
                         while len(self._cache) > self.limits.max_cache_entries:
                             self._cache.popitem(last=False)
-                    future.set_result(entry)
+                    if future is not None:
+                        future.set_result(entry)
             return StageEvaluation(packed.stage, "network" if entry.attempts else "not_sent", parsed,
                                    entry.attempts, _call_metadata_json=entry.call_metadata_json)
         except BaseException:
@@ -241,7 +242,7 @@ class JevEvaluator:
                 future.set_exception(EvaluatorValidationError("stage evaluation interrupted"))
             raise
         finally:
-            if key is not None:
+            if key is not None and future is not None:
                 with self._lock:
                     if self._inflight.get(key) is future:
                         self._inflight.pop(key)
@@ -368,3 +369,17 @@ class JevEvaluator:
         questions = self.comparison_questions
         packed = self.packer.pack_comparison(current, historical, question_set=questions)
         return self._evaluate_stage(packed, questions)
+
+    def evaluate_response(self, flow: EvaluationFlow, *, batch_memo=None, force_refresh=False) -> StageEvaluation:
+        """One independent response request after eligible post deep evaluation."""
+        from .handoff import build_handoff
+        if type(flow) is not EvaluationFlow or type(force_refresh) is not bool:
+            raise EvaluatorValidationError("response: incompatible evaluation")
+        build_handoff(flow)  # Validate source and triage/deep snapshot bindings.
+        final_route = flow.policy.decide(flow.deep.parsed) if flow.deep else None
+        if (flow.status not in {"evaluated", "partial"} or flow.relative_stance not in {"neutral", "mixed"} or
+            final_route is None or final_route.route != "deep"):
+            raise EvaluatorValidationError("response: eligible neutral/mixed deep assessment required")
+        questions = load_rubric("response")
+        packed = self.packer.pack_response(flow.deep.parsed._packed, question_set=questions)
+        return self._evaluate_stage(packed, questions, batch_memo, force_refresh=force_refresh)

@@ -3,8 +3,8 @@
 Aligned: response_specificity > 2.5 replies, otherwise likes.
 Opposing: reply_value < 1 skips, [1, 3] replies normally, > 3 requests a
 high-level account. A mapped high-level target upgrades a qualifying reply.
-Unknown grades never become low grades. V2 delegates neutral/mixed response
-planning to the downstream LLM without selecting an interaction or account.
+Unknown grades never become low grades. V3 requests a separate JEV decision
+for neutral/mixed posts. V2 retains historical downstream LLM planning.
 """
 
 from dataclasses import dataclass
@@ -37,7 +37,7 @@ class ActionDecision:
         def option(value, allowed):
             if value is not None and (type(value) is not str or value not in allowed):
                 raise ActionValidationError("decision: invalid option")
-        option(self.status, {"decided", "needs_review", "needs_assessment", "pending_rules", "needs_account_metadata", "needs_llm_assessment"})
+        option(self.status, {"decided", "needs_review", "needs_assessment", "needs_materials", "pending_rules", "needs_account_metadata", "needs_llm_assessment", "needs_jev_assessment"})
         if self.status is None:
             raise ActionValidationError("decision: status required")
         option(self.action, {"reply", "like", "no_interaction"})
@@ -52,7 +52,7 @@ class ActionDecision:
             if type(self.signal_value) not in {int, float} or not 0 <= self.signal_value <= 4 or self.signal_id is None:
                 raise ActionValidationError("decision: invalid signal")
         if (self.status == "decided" and self.action is None or
-            self.status in {"needs_review", "needs_assessment", "pending_rules", "needs_llm_assessment"} and self.action is not None or
+            self.status in {"needs_review", "needs_assessment", "needs_materials", "pending_rules", "needs_llm_assessment", "needs_jev_assessment"} and self.action is not None or
             self.status == "needs_account_metadata" and self.action != "reply"):
             raise ActionValidationError("decision: inconsistent action status")
         if self.action != "reply" and any(v is not None for v in (self.required_account_level, self.minimum_account_level, self.reply_quality, self.target_level_class)):
@@ -69,7 +69,9 @@ class ActionPolicy:
     opposing_high_above: float = 3.0
     # Explicit platform labels only. User-provided mapping, empty by default.
     platform_levels: tuple[tuple[str, str], ...] = ()
-    version: str = "jev-actions.v2"
+    version: str = "jev-actions.v3"
+    response_min_probability: float = 0.7
+    response_min_margin: float = 0.15
 
     def __post_init__(self):
         for name in ("aligned_reply_above", "opposing_reply_from", "opposing_high_above"):
@@ -82,7 +84,11 @@ class ActionPolicy:
                 raise ActionValidationError(f"{name}: invalid score threshold")
         if self.opposing_reply_from > self.opposing_high_above:
             raise ActionValidationError("thresholds: inconsistent order")
-        if type(self.version) is not str or self.version not in {"jev-actions.v1", "jev-actions.v2"} or type(self.platform_levels) is not tuple:
+        for name in ("response_min_probability", "response_min_margin"):
+            value = getattr(self, name)
+            if type(value) not in {int, float} or not 0 <= value <= 1:
+                raise ActionValidationError(f"{name}: invalid probability threshold")
+        if type(self.version) is not str or self.version not in {"jev-actions.v1", "jev-actions.v2", "jev-actions.v3"} or type(self.platform_levels) is not tuple:
             raise ActionValidationError("policy: unsupported configuration")
         seen = set()
         for pair in self.platform_levels:
@@ -103,6 +109,10 @@ class ActionPolicy:
                 "pending_rules": (["mixed_neutral_actions"] if self.version == "jev-actions.v1" else []) + ["engagement_trigger_thresholds"]}
         if self.version == "jev-actions.v2":
             data["mixed_neutral_policy"] = "downstream_response_planning"
+        elif self.version == "jev-actions.v3":
+            data["mixed_neutral_policy"] = "jev_response_decision"
+            data["response_thresholds"] = {"min_probability": self.response_min_probability,
+                                           "min_margin": self.response_min_margin}
         return data
 
     @property
@@ -124,6 +134,9 @@ class ActionPolicy:
         if self.version == "jev-actions.v2" and flow.relative_stance in {"neutral", "mixed"}:
             return ActionDecision("needs_llm_assessment", None, "downstream_response_planning_required",
                                   needs=("downstream_response_planning",))
+        if self.version == "jev-actions.v3" and flow.relative_stance in {"neutral", "mixed"}:
+            return ActionDecision("needs_jev_assessment", None, "jev_response_decision_required",
+                                  needs=("jev_response_decision",))
         if flow.relative_stance not in {"aligned", "opposing"}:
             return ActionDecision("pending_rules", None, "alignment_action_rules_pending", needs=("alignment_action_rules",))
         key = "response_specificity" if flow.relative_stance == "aligned" else "reply_value"
