@@ -24,9 +24,13 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Pinned instead of ubuntu-latest: GitHub is migrating the ubuntu-latest
+    # label to Ubuntu 26 beginning 2026-10-19, the competition's first day.
+    # A runner image change underneath a Docker build is not something to
+    # discover mid-competition, so this stays on a fixed image.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The verify stage runs the version guard and all 319 tests as part of
       # the image build, so a failing suite fails this step.
