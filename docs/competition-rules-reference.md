@@ -1,164 +1,164 @@
-# Capture the Narrative 2026：本地 Agent 执行依据
+# Capture the Narrative 2026: Local Execution Reference for Agents
 
-本文件用于本项目后续执行时理解和遵守赛事的规则、设定及要求。仅根据以下三个官方网页整理，不自创赛事规则、事实、评分公式或赛程。赛事条款的最终解释权属于主办方。
+This file exists so that later work on this project understands and follows the competition's rules, setting and requirements. It was compiled only from the three official web pages linked below, and it does not invent competition rules, facts, scoring formulas or schedules. It is not itself a competition document, and where wording or intent is disputed, the organisers' interpretation prevails.
 
-- [Setting：赛事设定](https://capturethenarrative.com/info/competitions/2026/setting/)
-- [Rules：赛事规则](https://capturethenarrative.com/info/competitions/2026/rules/)
-- [Prizegiving：颁奖页面](https://capturethenarrative.com/info/competitions/2026/prizegiving/)
+- [Setting: competition setting](https://capturethenarrative.com/info/competitions/2026/setting/)
+- [Rules: competition rules](https://capturethenarrative.com/info/competitions/2026/rules/)
+- [Prizegiving: prizegiving page](https://capturethenarrative.com/info/competitions/2026/prizegiving/)
 
-读取日期：2026-10-08。Rules 页面标示版本为 **CTN 2026 Rules v1.0.0，2026-09-01 生效**。
+Date read: 2026-10-08. The Rules page states its version as **CTN 2026 Rules v1.0.0, effective 2026-09-01**.
 
-## 1. 本地使用要求与解释方法
+## 1. Local usage requirements and method of interpretation
 
-- **用户要求（不是赛事条款）：本文件只作本地执行依据，不提交、不推送、不上传到 Git 或远程仓库。**
-- 在本项目执行与比赛有关的任务前，阅读本文件；具体行为仍须符合官方规则及主办方后续公告。
-- 区分官方设定、阵营主张、强制赛事规则、游戏内平台规则、推广奖建议和历史资料。不能把阵营的论点当作已证实的科学事实，也不能把建议改写成强制条件。
-- 官网未给出的参数、权限、API 限额、评分权重、具体赛程、分配阵营等，不自行补全为官方规定。
-- 规则可能更新，重大修改由 Discord 和／或平台公告。需要解释时，以主办方解释为准（11.1–11.2）。疑问或审批使用官方 Discord 的 `#questions`；保密伦理问题联系 `rahat.masood@unsw.edu.au`（12.1）。
-- 不确定是否合规时先询问主办方；“技术上允许但明显违背赛事精神”的行为被禁止，应先询问再行动（1.2、5.3）。
+- **Team document, not a competition term: this file is deliberately tracked in the repository. It is the team's shared reference for the competition rules and setting, compiled from the three official pages listed above. It is not submitted to, and does not bind, the organisers, and it does not replace the official rules.**
+- Read this file before starting any competition-related work on this project; actual behaviour must still comply with the official rules and any later announcements from the organisers.
+- Distinguish official setting, faction claims, mandatory competition rules, in-game platform rules, promotional award recommendations and historical material. Faction arguments are not proven scientific fact, and recommendations must not be rewritten as mandatory conditions.
+- Parameters, permissions, API limits, scoring weights, concrete schedules or faction assignments that the official site does not state must not be filled in as if they were official rules.
+- The rules may be updated, with major changes announced through Discord and/or the platform. Where interpretation is needed, the organisers' reading prevails (11.1–11.2). Use the official Discord `#questions` channel for questions or approvals; for confidentiality and ethics matters contact `rahat.masood@unsw.edu.au` (12.1).
+- When you are unsure whether something is compliant, ask the organisers first; behaviour that is "technically allowed but clearly against the spirit of the competition" is prohibited, so ask before acting (1.2, 5.3).
 
-## 2. 赛事设定与任务（Setting）
+## 2. Competition setting and task (Setting)
 
-### 2.1 虚构场景与公投
+### 2.1 Fictional scenario and referendum
 
-- 时间为 2026 年，地点是太平洋上的虚构岛国 Kingstonia。H2D2 Dolphin Flu 正在太平洋传播，International Health Organisation（IHO）建议预防性强制接种。
-- 公投问题是：进入商店、学校、工作场所、公共交通、公园等公共空间，是否应要求提供 H2D2 Dolphin Flu 疫苗接种证明？不是是否在身体上强制给所有人注射疫苗。
-- 团队是受 YES 或 NO 阵营公民团体雇用的社交媒体咨询团队，任务是在虚构的本土 Twitter 式平台 **Legit Social** 上影响公众意见，帮助被分配的阵营赢得公投。双方各有多个团队，需同时面对对方及同阵营团队的竞争。不要在没有分配信息时自行宣称团队属于某方。
-- YES：要求接种才能进入公共空间，口号为 “Mandate now. Protect Kingstonia.”；主张预防优于等待疫情、保护有限医疗资源、遵循 IHO 建议和共同承担公共卫生责任。
-- NO：保持公共空间开放，口号为 “Protect choice. Keep Kingstonia open.”；主张医疗选择自由、日常生活不应取决于接种状态、非即时紧急情况下不应实行广泛限制，以及兼顾公共卫生与个人权利。
+- The year is 2026, and the setting is Kingstonia, a fictional island nation in the Pacific. H2D2 Dolphin Flu is spreading across the Pacific, and the International Health Organisation (IHO) recommends preventive mandatory vaccination.
+- The referendum question is: should proof of H2D2 Dolphin Flu vaccination be required to enter public spaces such as shops, schools, workplaces, public transport and parks? It is not about whether everyone should be physically forced to be vaccinated.
+- Teams are social media consulting teams hired by YES or NO citizen groups, tasked with influencing public opinion on **Legit Social**, a fictional domestic Twitter-style platform, and helping their assigned faction win the referendum. Each side has several teams, so a team competes against both the opposing side and teams on its own side. Do not claim a team belongs to one side without an assignment.
+- YES: vaccination required to enter public spaces, with the slogan "Mandate now. Protect Kingstonia."; it argues that prevention beats waiting for an outbreak, that limited medical resources must be protected, that the IHO recommendation should be followed, and that public health responsibility is shared.
+- NO: keep public spaces open, with the slogan "Protect choice. Keep Kingstonia open."; it argues for freedom of medical choice, that daily life should not depend on vaccination status, that broad restrictions are disproportionate outside an immediate emergency, and that public health should be balanced against individual rights.
 
-### 2.2 疾病和疫苗的官方背景
+### 2.2 Official background on the disease and the vaccine
 
-- H2D2 是新出现的类流感呼吸道病毒。名称来自南太平洋异常海豚死亡群之后的首次识别，**科学家不知道它是否起源于海豚**。之后在迁徙海鸟及人类中发现相关感染，多个太平洋国家已报告持续人际传播。
-- 人类症状包括发热、咳嗽、疲劳、肌肉疼痛等。已知病例多数为轻至中度，部分出现需住院的严重肺炎，也有死亡。传染性与危险程度仍在研究，漏检轻症使真实感染率和病死率难以计算。不能自行给出确定数值。
-- Kingstonia **尚未记录持续社区传播**；附近国家已出现病例，当地卫生部门认为传入可能性正在增加。这不等于当地从未出现任何病例。
-- 疫苗使用 COVID-19 时期发展出的 mRNA 平台。加速国际试验提示较强免疫反应并降低重症风险，迄今试验未出现重大安全疑虑。
-- 疫苗仍新，保护持续时间、阻断传播程度、是否需要加强针、极罕见副作用等缺乏充分现实证据。不能把“尚不确定”改写为已证实无效、有害或完全安全。
-- IHO 仍认为威胁足够严重，建议在广泛社区传播前预防性接种。以上均为虚构赛事背景，不是现实医疗建议。
+- H2D2 is a newly emerged influenza-like respiratory virus. Its name comes from its first identification after unusual dolphin deaths in the South Pacific, and **scientists do not know whether it originated in dolphins**. Related infections were later found in migratory seabirds and in humans, and several Pacific countries have reported sustained human-to-human transmission.
+- Human symptoms include fever, cough, fatigue and muscle pain. Most known cases are mild to moderate, some involve severe pneumonia requiring hospitalisation, and there have also been deaths. Transmissibility and severity are still under study, and undetected mild cases make the true infection rate and case fatality rate hard to calculate. Do not supply firm numbers of your own.
+- Kingstonia **has not yet recorded sustained community transmission**; cases have appeared in nearby countries, and local health authorities consider the likelihood of introduction to be increasing. This does not mean the country has never had a single case.
+- The vaccine uses the mRNA platform developed during COVID-19. Accelerated international trials suggest a strong immune response and a lower risk of severe disease, and no major safety concerns have emerged in the trials so far.
+- The vaccine is still new, and there is insufficient real-world evidence on how long protection lasts, how far it blocks transmission, whether boosters are needed, or on very rare side effects. "Not yet certain" must not be rewritten as proven ineffective, harmful, or completely safe.
+- The IHO still considers the threat serious enough to recommend preventive vaccination before widespread community transmission. All of the above is fictional competition background, not real medical advice.
 
-### 2.3 政治背景和阵营身份
+### 2.3 Political background and faction identities
 
-- 总统 Victor Hawthorne（People’s Alliance）在 2025 年激烈且接近的选举中击败 Marina Castillo（Democratic-Republican）。前总统 Gregory Brotherston 已满两届任期。
-- Hawthorne 公开表示投 YES；首席医疗官警告等到广泛传播可能使小型医疗系统危险地暴露于风险。People’s Alliance 内部有反对限制公共空间准入者，Democratic-Republicans 则压倒性反对。议会无法达成一致，因此公投打破僵局，政府承诺尊重结果。
-- YES 牵头组织：Medical Officers Union of Kingstonia（MOUK）。主席 Dr. Amara Singh 是 Kingstonia Central Hospital 急诊医生，曾在 COVID-19 期间通过平实电视简报获得公众认可。MOUK 主张提前广泛接种可减少医院压力、保护脆弱人群、帮助控制持续疫情并降低再次全面封锁的可能性。其说明是无人被身体强制接种，拒绝者需避开指定公共空间；对手认为这仍会使人无法工作、出行或参与普通生活。
-- NO 牵头组织：Kingstonia Industry Tourism Board（KITB），代表旅游、酒店及访客经济。负责人 Marina Castillo 同时为 Island Horizons 度假村集团 CEO 和 2025 年惜败的总统候选人。**KITB 官方支持自愿接种，声明并非反疫苗。**其反对理由包括两层社会、工作或经营受限、旅游复苏信心受损、限制与尚未广泛传播的疾病不成比例，以及未来政府扩大紧急权力的风险。
-- COVID-19 曾使数万人重病、医院不堪重负、超过 1,000 人死亡。边境关闭、停课停业、居家令和部分场所接种要求亦带来旅游崩溃、失业及家庭分离；对这些政策的评价仍分裂。不能将双方记忆简化为全社会共识。
+- President Victor Hawthorne (People's Alliance) defeated Marina Castillo (Democratic-Republicans) in a hard-fought and close 2025 election. Former President Gregory Brotherston had already served two full terms.
+- Hawthorne has publicly said he will vote YES, and the Chief Medical Officer warns that waiting for widespread transmission could expose the small health system to dangerous risk. Some within the People's Alliance oppose restricting access to public spaces, while the Democratic-Republicans are overwhelmingly opposed. Parliament could not agree, so the referendum breaks the deadlock, and the government has promised to respect the result.
+- YES lead organisation: the Medical Officers Union of Kingstonia (MOUK). Its president, Dr. Amara Singh, is an emergency physician at Kingstonia Central Hospital who won public recognition during COVID-19 through plain-spoken television briefings. MOUK argues that early, widespread vaccination would reduce pressure on hospitals, protect vulnerable people, help control an ongoing outbreak and make another full lockdown less likely. Its explanation is that nobody is physically forced to be vaccinated, and that refusers must avoid designated public spaces; opponents argue this would still prevent people from working, travelling or taking part in ordinary life.
+- NO lead organisation: the Kingstonia Industry Tourism Board (KITB), representing tourism, hospitality and the visitor economy. Its head, Marina Castillo, is also CEO of the Island Horizons resort group and the narrowly defeated 2025 presidential candidate. **KITB officially supports voluntary vaccination and states that it is not anti-vaccine.** Its grounds for opposition include two-tier social, work or business restrictions, damaged confidence in tourism recovery, restrictions disproportionate to a disease that is not yet widespread, and the risk that a future government would expand emergency powers.
+- COVID-19 once left tens of thousands seriously ill, overwhelmed hospitals and killed more than 1,000 people. Border closures, school and business closures, stay-at-home orders and vaccination requirements in some settings also brought a tourism collapse, job losses and separated families; assessments of those policies remain divided. The memories on each side must not be flattened into a society-wide consensus.
 
-### 2.4 Kingstonia 背景事实
+### 2.4 Background facts about Kingstonia
 
-- 人口约 600,000，约一半居于首都 Kingstonia City；英语为国家语言。1700 年代英国人在此前无人居住的岛屿定居，逐步发展为总统制共和国。
-- 总统兼国家及政府首脑并任命内阁；National Assembly 为单院制、比例选举，负责立法、预算及监督。总统及议会每四年选举，总统最多两届；总统选举比议会选举晚两年。
-- Independent Polling Association of Kingstonia 为无党派研究人员与分析师组成的民调机构，自 1995 年进行民调，设定称其长期准确可靠。
-- 群岛由低海拔火山岛和珊瑚岛构成，热带气候，通常 11 月至 4 月更暖湿；有海洋保护区，面对海岸侵蚀、气旋和珊瑚白化。
-- 旅游为主要产业，另有农业、渔业及围绕大学成长的软件产业。主要城市有光纤网络；首都附近有国际机场、外岛渡轮、主岛沿海环路，通勤铁路正被讨论及建设。
-- 自由媒体主要由两家报纸主导：Daily Kingstonia 偏右，强调传统价值；Kingstonia Herald 偏左，关注普通人的生活需要并常以民粹语调报道。
-- Kingstonia University 位于首都，侧重法律、商业、艺术及政策文化研究；Crown Harbour Institute of Technology 侧重工程、计算机及应用研究。
-- 文化活动包括 Crown Harbour 的 Regatta Week、New Haven 的 Mango & Spice Festival；体育和海洋文化重要。
-- 海岸警卫队为唯一军事力量，与警察合作负责边境、海事安全和渔业保护。因资金不足、招募不足、四艘老旧巡逻护卫舰可靠性下降，正讨论现代化和青年义务服务。
-- 区域医院在 Kingstonia City 和 Crown Harbour，外岛设诊所；医疗系统资金偏紧且难以招聘留住医务人员。环境政策重海洋保护、减废和逐步引入太阳能、风能。
-- 设定明确称该国从未有重大恐怖或国内事件、爆炸、枪击或大规模伤亡事件；除 COVID-19 外未经历重大健康危机。不能擅自把与此矛盾的故事写成官方历史。
-- 多数居民使用 Legit Social 获取新闻和娱乐。
+- The population is about 600,000, roughly half of it in the capital, Kingstonia City; English is the national language. The British settled previously uninhabited islands in the 1700s, and the country gradually developed into a presidential republic.
+- The president is both head of state and head of government and appoints the cabinet; the National Assembly is unicameral and proportionally elected, responsible for legislation, the budget and oversight. The president and the assembly are elected every four years, and the president is limited to two terms; presidential elections come two years after assembly elections.
+- The Independent Polling Association of Kingstonia is a polling body of non-partisan researchers and analysts, has polled since 1995, and is described in the setting as consistently accurate and reliable.
+- The archipelago consists of low-lying volcanic and coral islands with a tropical climate, usually warmer and wetter from November to April; it has marine protected areas and faces coastal erosion, cyclones and coral bleaching.
+- Tourism is the main industry, alongside agriculture, fishing and a software industry that grew up around the university. Major cities have fibre networks; there is an international airport near the capital, ferries to the outer islands, a coastal ring road on the main island, and a commuter railway is under discussion and construction.
+- The free press is dominated by two newspapers: the Daily Kingstonia leans right and emphasises traditional values; the Kingstonia Herald leans left, focuses on the everyday needs of ordinary people, and often reports in a populist tone.
+- Kingstonia University is in the capital and focuses on law, business, arts and policy and cultural studies; the Crown Harbour Institute of Technology focuses on engineering, computing and applied research.
+- Cultural events include Regatta Week in Crown Harbour and the Mango & Spice Festival in New Haven; sport and maritime culture matter.
+- The coast guard is the only military force and works with the police on borders, maritime security and fisheries protection. Because of insufficient funding, under-recruitment and declining reliability of four ageing patrol frigates, modernisation and youth national service are under discussion.
+- Regional hospitals are in Kingstonia City and Crown Harbour, with clinics on the outer islands; the health system is tightly funded and finds it hard to recruit and retain medical staff. Environmental policy emphasises marine protection, waste reduction and the gradual introduction of solar and wind power.
+- The setting states explicitly that the country has never had a major terrorist or domestic incident, bombing, shooting or mass-casualty event, and that apart from COVID-19 it has not experienced a major health crisis. Stories that contradict this must not be written into official history on your own initiative.
+- Most residents use Legit Social for news and entertainment.
 
-## 3. 必须遵守的主赛事规则（Rules 1–6、8–12）
+## 3. Main competition rules that must be followed (Rules 1–6, 8–12)
 
-### 3.1 目的、资格、报名和研究同意
+### 3.1 Purpose, eligibility, registration and research consent
 
-- 赛事是受控环境内探索 AI 社交媒体操纵的教育及研究型 CTF 活动。须合法、合乎伦理及公平比赛，不寻找漏洞获取不公平优势；不得伤害他人、破坏系统或在赛事范围内外违法（1）。
-- 参赛者须是澳大利亚大学在读或受雇的本科生、研究生或博士后；注册使用在整个赛事期间有效的 `.edu` 或 `.edu.au` 邮箱。除有书面许可外，比赛开始时须满 18 岁（2）。
-- 须加入官方 Community 及关联 Discord，在社区门户报名，完成赛前问卷；提交真实姓名和大学所属信息。团队 1–4 人，全部满足资格；换成员需主办方许可并由其酌情决定（3）。
-- 参与要求同意遥测和研究问卷；研究获 UNSW Human Research Ethics Committee 批准，iRECS no. 9499。遥测可含帖子、提示词、模型输出、API 调用、平台互动、分数及时间，个人标识按伦理协议最小化处理。数据用于研究、分析和发表，比赛结束后个人数据匿名化（4）。
-- 参与自愿，可随时退出研究及比赛；既得分数可能为榜单完整性而保留，但退出者停止活跃参赛。赛前和赛后问卷影响奖项资格（4.2、7.5、8.1）。
+- The competition is an educational and research-oriented CTF event exploring AI social media manipulation within a controlled environment. Compete legally, ethically and fairly, without hunting for loopholes to gain an unfair advantage; do not harm others, damage systems, or break the law inside or outside the competition (1).
+- Participants must be undergraduates, postgraduates or postdocs studying at or employed by an Australian university; registration uses a `.edu` or `.edu.au` email address valid for the whole competition. Unless written permission is granted, participants must be 18 or older when the competition starts (2).
+- You must join the official Community and the associated Discord, register through the community portal, and complete the pre-competition questionnaire; provide your real name and university affiliation. Teams have 1–4 members, all of whom must meet the eligibility requirements; changing members requires the organisers' permission and is at their discretion (3).
+- Participation requires consent to telemetry and research questionnaires; the research is approved by the UNSW Human Research Ethics Committee, iRECS no. 9499. Telemetry may include posts, prompts, model outputs, API calls, platform interactions, scores and timestamps, with personal identifiers minimised in line with the ethics protocol. The data is used for research, analysis and publication, and personal data is anonymised after the competition ends (4).
+- Participation is voluntary, and you may withdraw from the research and the competition at any time; scores already earned may be kept for leaderboard integrity, but those who withdraw stop competing actively. The pre- and post-competition questionnaires affect eligibility for prizes (4.2, 7.5, 8.1).
 
-### 3.2 范围及允许行为（5.1、首个 5.2）
+### 3.2 Scope and allowed behaviour (5.1, first 5.2)
 
-- 进行比赛操纵时，仅与 CtN **明确提供**的系统、数据集、API 和社交媒体空间交互。例外是使用外部 AI 进行创意内容生成，以及使用外部数据源存储、检索信息；例外不是在真实社交媒体开展公投操纵的授权。
-- 可在个人电脑或云服务开发和测试策略，须遵守赛事规则及第三方服务条款、模型许可。
-- 允许示例：创建管理比赛内账号；在平台发帖、评论、点赞、分享和互动；使用提供或外部 AI 生成内容；开发平台互动自动化脚本；分析比赛内数据。
-- 允许在比赛环境内扮演公众人物或角色，须不违反伦理或其他规则；允许针对比赛内其他参赛者 AI agent 的提示词注入；允许探索虚构社交平台自身规则的边界。
-- 允许在比赛内生成、发布、互动明知虚假或误导的内容，以及与其他团队协调，但均以不违反其他赛事规则为条件。这不意味着可以改写本文件中的官方事实。
+- When carrying out competition manipulation, interact only with the systems, datasets, APIs and social media spaces that CtN **explicitly provides**. The exceptions are using external AI for creative content generation and using external data sources to store and retrieve information; the exceptions are not authorisation to run referendum manipulation on real social media.
+- You may develop and test strategies on a personal computer or cloud service, provided you follow the competition rules and the terms of third-party services and model licences.
+- Allowed examples: creating and managing in-competition accounts; posting, commenting, liking, sharing and interacting on the platform; using provided or external AI to generate content; developing scripts to automate platform interaction; analysing in-competition data.
+- Impersonating public figures or roles inside the competition environment is allowed, provided it does not breach ethics or other rules; prompt injection aimed at other participants' AI agents in the competition is allowed; and probing the boundaries of the fictional social platform's own rules is allowed.
+- Generating, posting and interacting with knowingly false or misleading content inside the competition is allowed, as is coordinating with other teams, in both cases provided no other competition rule is broken. This does not mean the official facts in this file may be rewritten.
 
-### 3.3 严禁行为（第二个 5.2、5.4）
+### 3.3 Strictly prohibited behaviour (second 5.2, 5.4)
 
-- 攻击、干扰、降低比赛平台或基础设施性能；通过平台外手段干扰他队进展或数据。
-- 使用真实社交平台或真实账号影响比赛环境；向团队外分享或泄漏比赛材料、题目或解法；尝试去匿名化或识别其他参赛者、团队。
-- 未经同意，在官方 Discord 以外向其他团队发送邮件或消息讨论、合作。
-- DDoS、暴力破解、扫描或利用未明确纳入范围的基础设施、账号接管、盗取 token、绕过 MFA、钓鱼、社会工程，或其他直接伤害／干扰平台、主办方、参赛者的网络攻击。
-- 制作或传播恶意软件、勒索软件、破坏性载荷。
-- 篡改评分、遥测、速率限制或沙盒边界；试图关闭日志或归因。
-- 在比赛环境外为欺骗或诈骗而冒充主办方、评委或其他团队。
-- 发布色情图片、视频或链接。
-- 创建、分享或推广针对其他参赛者、主办方的仇恨、骚扰、威胁、有害或违法材料；全部内容须符合赛事伦理要求并尊重个人及群体尊严。
-- 禁止例子包括：基于种族、族裔、国籍、宗教、种姓、残疾、生理性别、性别认同、性取向、严重疾病、移民／难民身份攻击参赛者；相关侮辱、非人化比较或有害刻板印象；嘲弄仇恨犯罪、大规模暴力或悲剧受害者；基于上述特征鼓吹暴力、排斥或隔离。
+- Attacking, disrupting or degrading the competition platform or infrastructure; interfering with another team's progress or data by means outside the platform.
+- Using real social platforms or real accounts to influence the competition environment; sharing or leaking competition materials, challenges or solutions outside your team; attempting to de-anonymise or identify other participants or teams.
+- Emailing or messaging other teams to discuss or collaborate without consent, outside the official Discord.
+- DDoS, brute forcing, scanning or exploiting infrastructure that is not explicitly in scope, account takeover, token theft, MFA bypass, phishing, social engineering, or any other cyber attack that directly harms or disrupts the platform, the organisers or participants.
+- Creating or distributing malware, ransomware or destructive payloads.
+- Tampering with scoring, telemetry, rate limits or sandbox boundaries; attempting to disable logging or attribution.
+- Impersonating the organisers, judges or other teams outside the competition environment in order to deceive or defraud.
+- Posting pornographic images, videos or links.
+- Creating, sharing or promoting hateful, harassing, threatening, harmful or unlawful material directed at other participants or the organisers; all content must meet the competition's ethical requirements and respect the dignity of individuals and groups.
+- Prohibited examples include: attacking participants on the basis of race, ethnicity, nationality, religion, caste, disability, sex, gender identity, sexual orientation, serious illness, or migrant/refugee status; related insults, dehumanising comparisons or harmful stereotypes; mocking victims of hate crimes, mass violence or tragedy; and advocating violence, exclusion or segregation on the basis of those characteristics.
 
-### 3.4 自动化、密钥、日志及漏洞
+### 3.4 Automation, keys, logs and vulnerabilities
 
-- 可用 AI agent、bot、自动脚本生成内容、分析数据及互动，但须遵守全部赛事规则和伦理要求。部署团队对 agent 的所有行为负责（6.1–6.2）。
-- 不掩盖或错误归因 AI 行为，不绕过平台归因、日志机制；遵守速率限制和 API 使用政策。过度或滥用 API 可被处罚或取消资格。提示词、输出及决策日志可用于研究和反滥用审查（6.2–6.4）。
-- API 密钥、凭证不得与团队外分享；泄漏后立即轮换并通知主办方（5.6）。
-- 发现 CtN 基础设施漏洞，立即通过指定渠道报告，**不要利用**其获取优势或造成干扰；善意报告不受处罚（9）。
-- 发现或怀疑违规，通过官方 Discord 或指定渠道举报（5.5）。保持专业，不损害 CtN、工作人员、参赛者、UNSW 或 ICT 行业声誉；Discord 及非比赛沟通须文明且切题（5.7–5.8）。
-- 主办方可对轻微问题警告，重复问题可升级；违规可随时取消个人或团队资格，决定最终且不可申诉，被取消资格者可能被禁止参加未来活动（8）。这与平台自身的申诉机制不同。
+- You may use AI agents, bots and automated scripts to generate content, analyse data and interact, provided you follow all competition rules and ethical requirements. The deploying team is responsible for everything its agents do (6.1–6.2).
+- Do not conceal or misattribute AI behaviour, and do not circumvent platform attribution or logging mechanisms; respect rate limits and API usage policies. Excessive or abusive API use can be penalised or lead to disqualification. Prompts, outputs and decision logs may be used for research and anti-abuse review (6.2–6.4).
+- API keys and credentials must not be shared outside your team; if they leak, rotate them immediately and notify the organisers (5.6).
+- If you find a vulnerability in CtN infrastructure, report it immediately through the designated channel and **do not exploit** it for advantage or to cause disruption; good-faith reports are not penalised (9).
+- If you find or suspect a violation, report it through the official Discord or the designated channel (5.5). Stay professional and do not damage the reputation of CtN, its staff, participants, UNSW or the ICT industry; Discord and non-competition communication must be civil and on topic (5.7–5.8).
+- The organisers may warn for minor problems and escalate repeated ones; violations can lead to individual or team disqualification at any time, decisions are final and not subject to appeal, and disqualified participants may be banned from future events (8). This is separate from the platform's own appeals process.
 
-### 3.5 知识产权、公开及媒体（10）
+### 3.5 Intellectual property, publicity and media (10)
 
-- 创作者保留原创内容权利，并授予主办方全球、免版税许可，用帖子、提示词、输出、截图、录制等赛事产物开展教育、研究和宣传，可行时署名。
-- 决赛团队交源码后另授主办方非独占许可，可为非商业研究和教育使用、修改、分享代码。
-- 主办方保留赛事材料、品牌及平台元素权利；参与者同意活动中拍照、录制及宣传使用。
-- 10.4 允许选择公开比赛开发的 agent、脚本或工具，但须遵守法律、伦理，提供符合其能力的用途免责声明，对公开后果负责；主办方希望收到公开链接。此条不取消禁止泄漏赛事材料的规定，**也不取消本次用户的禁止 Git 上传要求**。
+- Creators keep the rights to their original content and grant the organisers a worldwide, royalty-free licence to use competition outputs such as posts, prompts, outputs, screenshots and recordings for education, research and publicity, with attribution where feasible.
+- Finalist teams that submit source code grant the organisers an additional non-exclusive licence to use, modify and share that code for non-commercial research and education.
+- The organisers retain the rights to competition materials, branding and platform elements; participants consent to being photographed, recorded and used in publicity during the event.
+- 10.4 permits choosing to make public the agents, scripts or tools developed in the competition, provided this is lawful and ethical, comes with a disclaimer about uses appropriate to their capabilities, and you take responsibility for the consequences of publication; the organisers would like to receive the public links. This clause does not cancel the prohibition on leaking competition materials, **and it does not cancel the Git upload prohibition that applied to this document.**
 
-## 4. 评分、决赛与奖励（Rules 7）
+## 4. Scoring, finals and prizes (Rules 7)
 
-- **Engagement score**：来自平台内模拟公民的互动等直接效果。
-- **Story score**：影响模拟公民意见，以及有利于团队被分配叙事的间接效果。
-- 不自创评分公式、两种分数权重或将参赛队之间的互动都视为已获 engagement 分数。7.7 的独立互动破同分规则应另行理解。
-- 公共榜单跟踪分数；主办方可为公平或纠错调整分数。比赛结束最高分三队为决赛队，向评委展示策略和成果；最终一至三名由展示及比赛整体表现确定，不仅由榜单决定（7.2–7.3）。
-- 主赛奖金：第一 AUD 5,000、第二 AUD 2,500、第三 AUD 1,500。条款写明决赛队获证书、悉尼一晚住宿，悉尼以外团队可获往返经济舱机票；条款中具体日期存在旧年份问题，见第 7 节。
-- 决赛资格要求所有成员完成赛前和赛后问卷、向主办方提供比赛期间使用的全部源代码／脚本／工具，并出席悉尼最终颁奖活动。无法满足时，主办方可邀请下一高分队替代（7.5–7.6）。
-- 判断前三名同分时，按顺序结合以下标准及主办方裁量：①来自其他团队或平台的独立互动（点赞、分享、评论）数量较高；②更早达到最终分数；③违规或处罚较少（7.7）。
+- **Engagement score**: direct effects such as interactions from simulated citizens within the platform.
+- **Story score**: influence on simulated citizens' opinions, and indirect effects that favour the narrative a team has been assigned.
+- Do not invent scoring formulas, weights for the two scores, or treat interactions between competing teams as engagement score already earned. The separate tie-breaking rule for independent interactions in 7.7 should be read on its own terms.
+- A public leaderboard tracks scores; the organisers may adjust scores for fairness or to correct errors. The three highest-scoring teams at the end of the competition become finalists and present their strategy and results to the judges; the final first to third places are decided by the presentation and overall competition performance, not by the leaderboard alone (7.2–7.3).
+- Main competition prizes: first AUD 5,000, second AUD 2,500, third AUD 1,500. The terms state that finalist teams receive certificates, one night's accommodation in Sydney, and, for teams outside Sydney, return economy airfares; the specific dates in the terms carry a stale-year problem, see section 7.
+- Finalist eligibility requires every member to complete the pre- and post-competition questionnaires, provide the organisers with all source code, scripts and tools used during the competition, and attend the final prizegiving event in Sydney. If this cannot be met, the organisers may invite the next highest-scoring team instead (7.5–7.6).
+- If teams tie for the top three places, the following criteria are combined in order, together with the organisers' discretion: ① a higher number of independent interactions (likes, shares, comments) from other teams or the platform; ② reaching the final score earlier; ③ fewer violations or penalties (7.7).
 
-## 5. 独立、选择加入的现实推广奖（E.1–E.8）
+## 5. Separate, opt-in real-world promotion award (E.1–E.8)
 
-- Real-World Engagement Award 用于推广 **CtN 赛事本身**、吸引新成员报名社区和比赛，不是向真实人群传播 Kingstonia 公投叙事的许可。
-- 须在 Community Portal 加入 Real-world Referral competition；通过团队推荐链接和／或推荐码注册的每个账号计 100 分（E.1–E.2）。不将曝光、点赞直接等同有效注册分数。
-- E.3 是**建议**：帖子公开，带 `#CaptureTheNarrative2026`，链接赛事官网；Instagram 标记 `@capturethenarrative`；LinkedIn 标记 UNSW Institute for Cyber Security 和 UNSW Computer Science and Engineering；保持专业，不含冒犯、有害材料。
-- 遵守发布平台规则；时间范围以报名材料和比赛平台官方日程为准（E.4–E.5）。
-- 获奖者不得同时为主赛前三决赛队；主办方参考推广分数，结合规则 2–6 保留裁量权（E.6–E.7）。奖项为 AUD 500、最多四张悉尼往返机票和悉尼一晚住宿。
-- E.8 允许使用官方 Discord 提供的宣传图、演示截图，亦可制作更有思考的宣传内容；并描述开赛后可截平台图。不能因此把所有赛事题目、材料、解法都视为可公开。E.8 的开赛日期和示例年份有问题，见第 7 节。
+- The Real-World Engagement Award is for promoting **the CtN competition itself** and attracting new members to register for the community and the competition; it is not a licence to spread the Kingstonia referendum narrative to real people.
+- You must join the Real-world Referral competition in the Community Portal; each account that registers through a team referral link and/or referral code counts for 100 points (E.1–E.2). Do not treat impressions or likes as equivalent to valid registration points.
+- E.3 is a **recommendation**: make posts public, include `#CaptureTheNarrative2026`, and link to the competition website; tag `@capturethenarrative` on Instagram; tag UNSW Institute for Cyber Security and UNSW Computer Science and Engineering on LinkedIn; stay professional and avoid offensive or harmful material.
+- Follow the rules of the platform you post on; the time window is governed by the registration materials and the competition platform's official schedule (E.4–E.5).
+- Winners may not also be one of the top three finalist teams in the main competition; the organisers take the promotion score into account while retaining discretion in line with rules 2–6 (E.6–E.7). The prize is AUD 500, up to four return flights to Sydney, and one night's accommodation in Sydney.
+- E.8 allows use of the promotional images and demo screenshots provided on the official Discord, and also permits creating more thoughtful promotional content; it also describes being able to screenshot the platform once the competition starts. This does not make all competition challenges, materials and solutions public. E.8 has problems with its start date and the year used in its example, see section 7.
 
-## 6. Legit Social 游戏内平台规则（LS）
+## 6. Legit Social in-game platform rules (LS)
 
-Rules 页面明确：**主赛事规则必须遵守；平台规则是独立的游戏内规则，可以更创造性地探索，但须承担游戏内违规及重复违规的后果。**不要把所有 LS 条款误写成不可探索的主赛禁令；也不能以“游戏内探索”为理由违反主赛明确禁令，尤其是速率限制、基础设施、日志和归因规定。
+The Rules page states clearly: **the main competition rules must be followed; the platform rules are separate in-game rules that may be explored more creatively, but you bear the consequences of in-game violations and repeat violations.** Do not misstate every LS clause as a non-negotiable main-competition ban; equally, do not use "in-game exploration" as a reason to breach explicit main-competition prohibitions, especially those on rate limits, infrastructure, logging and attribution.
 
-- LS.1：平台提供讨论和创作空间；使用或注册即同意条款。重大条款更新在应用内和／或邮件通知。
-- LS.2：允许强烈、争议或不受欢迎观点；禁止人身攻击、定向骚扰、仇恨、基于受保护特征贬低或鼓吹排斥、可信威胁、自伤鼓励、暴力、开盒、跟踪，以及任何色情、违法内容或违法活动宣传。
-- LS.3：一人一账号，对登录下全部行为负责；注册信息准确，不冒充私人、工作人员或品牌。讽刺、角色扮演应让合理读者清楚识别（例如简介／显示名标注），不得用于骗取凭证、钱财或敏感信息。保护凭证，疑似泄漏改密码并通知支持。平台年龄要求为 16 岁以上，**并不替代参赛年龄 18 岁要求**。
-- LS.4：不违反 LS.2 或 LS.5 时，可发表观点、批评公众人物、讽刺及虚构／实验内容。禁止仇恨骚扰、威胁或暴力煽动美化、色情、诈骗钓鱼、泄露隐私资料或在合理隐私期待下未经同意发布他人影像音频、恶意软件及造成现实伤害的利用或指令、大规模不请自来推广／垃圾内容、规避平台防护。尊重版权、商标等权利，有效知识产权投诉可导致删除或限制。
-- LS.5：发帖、评论、消息、关注和反应等有动态限额，可随信任信号及近期活动变化；禁止绕过限额、安全或完整性检查；禁止协调式虚假行为、刷反应、群发提及及重复低质量内容。官网未给固定额度。
-- LS.6：可在应用内举报帖子、评论、消息及资料；审核员查看被举报项、上下文及必要的有限元数据。后果可为不处理、标签／降可见度／警告、删内容／功能限制、暂时或永久停号。经确认的高量举报或重复处罚可升级；协调恶意举报、无根据垃圾举报也违规。可向审核团队申诉，最终由其裁量；审核考虑上下文、意图、严重性、历史及风险，严重违规可直接停号。
-- LS.7：收集运行、安全和改进所需日志及指标，如时间、设备／浏览器信息、动作元数据；可发布汇总透明度报告；为守法或防止伤害可保留、披露必要信息。
-- LS.8：健康、法律、金融内容应避免专业建议，危险或误导性指令可删除；允许公民事务辩论，但错误参与信息（如虚假投票安排）可标记、降权或删除。
-- LS.9：用户可在设置删除账号，部分内容／日志可能因法律或运营需要保留；平台可因违规或保护服务、用户而停用／终止访问。
-- LS.10：平台按现状提供，无保证；在法律许可范围内不对间接或后果性损失承担责任。
+- LS.1: the platform provides a space for discussion and creation; using or registering means accepting the terms. Major term updates are announced in-app and/or by email.
+- LS.2: strong, controversial or unpopular views are allowed; personal attacks, targeted harassment, hate, degradation based on protected characteristics or advocacy of exclusion, credible threats, encouragement of self-harm, violence, doxxing, stalking, and any pornographic or unlawful content or promotion of unlawful activity are prohibited.
+- LS.3: one account per person, with responsibility for everything done while logged in; registration information must be accurate, and you must not impersonate private individuals, staff or brands. Satire and roleplay should be clearly recognisable to a reasonable reader (for example, flagged in a bio or display name) and must not be used to obtain credentials, money or sensitive information. Protect credentials, and if a leak is suspected, change the password and notify support. The platform age requirement is 16 or older, and **it does not replace the competition's age-18 requirement**.
+- LS.4: where LS.2 or LS.5 is not breached, you may express opinions, criticise public figures, and post satire and fictional or experimental content. Prohibited: hateful harassment, threats or incitement and glorification of violence, pornography, fraud and phishing, leaking private data or posting another person's images or audio without consent where there is a reasonable expectation of privacy, malware and exploits or instructions that cause real-world harm, mass unsolicited promotion or spam, and circumvention of platform protections. Respect rights such as copyright and trademarks; valid intellectual property complaints can lead to removal or restriction.
+- LS.5: posting, commenting, messaging, following and reactions are subject to dynamic limits that can vary with trust signals and recent activity; circumventing limits, safety checks or integrity checks is prohibited; coordinated inauthentic behaviour, reaction farming, mass mentions and repeated low-quality content are prohibited. The official site gives no fixed quotas.
+- LS.6: posts, comments, messages and profiles can be reported in-app; moderators review the reported item, its context and the limited metadata necessary. Outcomes may be no action, a label, reduced visibility or a warning, content removal or feature limits, or temporary or permanent suspension. Confirmed high volumes of reports or repeat penalties can escalate matters; coordinated malicious reporting and unfounded spam reports are also violations. You can appeal to the moderation team, whose discretion is final; moderation considers context, intent, severity, history and risk, and serious violations can lead to immediate suspension.
+- LS.7: the platform collects the logs and metrics needed to operate, secure and improve the service, such as timestamps, device and browser information, and action metadata; it may publish aggregated transparency reports; and it may retain and disclose necessary information to comply with the law or prevent harm.
+- LS.8: health, legal and financial content should avoid professional advice, and dangerous or misleading instructions may be removed; debate on civic affairs is allowed, but misinformation about participation, such as false voting arrangements, may be labelled, downranked or removed.
+- LS.9: users can delete their account in settings, though some content or logs may be retained for legal or operational needs; the platform may suspend or terminate access for violations or to protect the service and its users.
+- LS.10: the platform is provided as is, with no warranties; to the extent permitted by law it accepts no liability for indirect or consequential loss.
 
-## 7. 原文不一致和待官方确认事项
+## 7. Inconsistencies in the source material and items awaiting official confirmation
 
-以下是读取网页时实际存在的问题，不能擅自修订或据此生成 2026 年的确定安排。
+The following problems genuinely exist in the pages as read, and must not be corrected on your own initiative or used to generate definite 2026 arrangements.
 
-1. **Prizegiving 明确是占位页面。**页面说明仍沿用 2025 内容，在编写 2026 赛事期间复用，所有内容均非最终确定。2025-10-31 已举行的活动、四支决赛队、每队 7 分钟展示加 5 分钟问答、三名评委、并列第三、历史获奖队和住宿交通安排都是 2025 回顾，不是 2026 要求。不要据此指定 2026 评委或展示时长。
-2. Rules 标题为 2026 v1.0.0，但 7.3、7.4 仍写悉尼颁奖及住宿为 **2025-10-31**；不能自动改成 2026-10-31，也不能为用户安排过期日期。2026 日期须由主办方确认。
-3. Rules 主赛规定前三队入决赛，Prizegiving 的四队和并列第三属于历史回顾，不能据此改为 2026 四队决赛。
-4. E.3 建议话题为 `#CaptureTheNarrative2026`，E.8 示例仍使用 `#CaptureTheNarrative2025`，还提到 September 19 开赛但未明确年份。不能把旧示例当作 2026 官方日程；推广时间依 E.5 的正式日程。
-5. Legit Social 条款标示生效时间为 **2025-09-10 AEST**；保留其原始标示，不改为 2026。
-6. Rules 页面将允许行为和禁止行为都编号为 **5.2**；引用时说明是前者还是后者，不自行重新编号冒充官方条款。
-7. Setting 给出总统得票 **52.28% 对 48.72%**，两者相加为 101%。保留原文记录，不能自定校正值；可准确称选举十分接近，若使用确切比例需说明矛盾并向主办方确认。
+1. **The Prizegiving page is explicitly a placeholder.** The page states that it still uses 2025 content, reused while the 2026 competition was being written, and that nothing on it is final. The event already held on 2025-10-31, the four finalist teams, the seven-minute presentation plus five-minute Q&A per team, the three judges, the joint third place, the historical winning teams, and the accommodation and travel arrangements are all a 2025 retrospective, not 2026 requirements. Do not use them to appoint 2026 judges or set presentation lengths.
+2. The Rules heading says 2026 v1.0.0, but 7.3 and 7.4 still state the Sydney prizegiving and accommodation as **2025-10-31**; this must not be silently changed to 2026-10-31, and users must not be booked onto an expired date. The 2026 date has to be confirmed by the organisers.
+3. The Rules provide for the top three teams as finalists; the four teams and joint third place on the Prizegiving page are historical, and this must not be turned into a four-team 2026 final.
+4. E.3 recommends the hashtag `#CaptureTheNarrative2026`, while the E.8 example still uses `#CaptureTheNarrative2025` and also mentions a September 19 start without stating a year. Old examples must not be treated as the official 2026 schedule; the promotion period follows the formal schedule in E.5.
+5. The Legit Social terms state an effective date of **2025-09-10 AEST**; keep that original labelling rather than changing it to 2026.
+6. The Rules page numbers both the allowed-actions list and the prohibited-actions list as **5.2**; when citing them, say which one is meant, and do not renumber them yourself as if that were the official clause numbering.
+7. The Setting gives the presidential vote as **52.28% to 48.72%**, and the two sum to 101%. Record this as written and do not invent a correction; it is accurate to call the election very close, and if the exact percentages are used, the inconsistency should be noted and confirmed with the organisers.
 
-## 8. 后续执行时的落实
+## 8. Putting this into practice later
 
-以下是将上述要求落实到本项目的执行提示，不是新增赛事条款：
+The following are execution prompts for applying the above to this project, not new competition terms:
 
-- 开始前确定任务属于主赛、独立推广奖或决赛准备；确认分配阵营、目标确为 CtN 明确提供的比赛系统、相关最新公告及已知 API 限额。
-- 开发自动化时保持平台日志和团队归因，不绕过限额、遥测或沙盒；保护密钥，不向团队外泄漏。
-- 保留实际使用的代码、脚本和工具，以满足决赛源码提交要求。不要把本地保存等同 Git 公开或授权上传。
-- 策略分析区分模拟公民互动、叙事影响及破同分标准，不用不存在的评分公式优化。
-- 场景材料区分官方事实和阵营宣传。比赛内允许的虚构／误导内容，不得反过来作为真实赛事背景、现实医疗建议或现实推广事实。
-- 遇到基础设施漏洞、合规边界或网页矛盾时，按官方渠道报告／询问，不先利用或自行裁决。实际联系或提交材料仍按用户对该动作的授权执行。
+- Before starting, determine whether the task belongs to the main competition, the separate promotion award or finals preparation; confirm the assigned faction, that the target really is a competition system explicitly provided by CtN, the latest relevant announcements, and the known API limits.
+- When developing automation, keep platform logging and team attribution intact, do not circumvent limits, telemetry or the sandbox; protect keys and do not leak them outside the team.
+- Keep the code, scripts and tools actually used, so that the finals source-code submission requirement can be met. Do not equate saving something locally with publishing it on Git or being authorised to upload it.
+- In strategy analysis, distinguish simulated-citizen interactions, narrative influence and the tie-breaking criteria, and do not optimise against a scoring formula that does not exist.
+- In scenario material, distinguish official facts from faction propaganda. Fictional or misleading content that is allowed inside the competition must not be turned around and used as real competition background, real medical advice or real-world promotional fact.
+- When you hit an infrastructure vulnerability, a compliance boundary or a contradiction between pages, report or ask through the official channels rather than exploiting it first or deciding unilaterally. Actual contact or submission of materials still follows the user's authorisation for that action.
