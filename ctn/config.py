@@ -233,6 +233,44 @@ class LLMConfig:
 
 
 @dataclass(frozen=True)
+class CitizenLLMConfig:
+    """Explicit full URL for an OpenAI-compatible chat endpoint; no live default."""
+
+    endpoint: str = ""
+    api_key: str = field(default="", repr=False)
+    model: str = ""
+    timeout_s: float = 20.0
+    max_response_bytes: int = 65536
+    max_tokens: int = 800
+
+    def __post_init__(self):
+        if self.endpoint:
+            # Reuse existing HTTPS, credential-header and URL validation.
+            JevConfig(base_url=self.endpoint, api_key=self.api_key, model=self.model or "unconfigured")
+        if type(self.api_key) is not str or any(not 33 <= ord(c) <= 126 for c in self.api_key):
+            raise ValueError("invalid citizen credential")
+        if type(self.model) is not str or any(ord(c) < 32 for c in self.model):
+            raise ValueError("invalid citizen model")
+        if self.api_key and self.api_key in self.model:
+            raise ValueError("citizen credential outside authentication")
+        if type(self.timeout_s) not in {int, float} or not math.isfinite(self.timeout_s) or self.timeout_s <= 0:
+            raise ValueError("invalid citizen timeout")
+        if any(type(v) is not int or v < 1 for v in (self.max_tokens, self.max_response_bytes)):
+            raise ValueError("invalid citizen response limit")
+
+    @classmethod
+    def load(cls, env_file: str | Path = ".env") -> "CitizenLLMConfig":
+        _load_dotenv(Path(env_file))
+        try:
+            return cls(endpoint=_env_str("CTN_CITIZEN_LLM_URL"),
+                       api_key=_env_str("CTN_CITIZEN_LLM_API_KEY"), model=_env_str("CTN_CITIZEN_LLM_MODEL"),
+                       timeout_s=float(_env_str("CTN_CITIZEN_LLM_TIMEOUT_S", "20")),
+                       max_tokens=int(_env_str("CTN_CITIZEN_LLM_MAX_TOKENS", "800")))
+        except (ValueError, TypeError):
+            raise ValueError("invalid citizen LLM configuration") from None
+
+
+@dataclass(frozen=True)
 class PolicyConfig:
     """Decision thresholds for the action ladder.
 

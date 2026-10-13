@@ -43,6 +43,14 @@ The default action policy is `jev-actions.v2`, which adds neutral/mixed delegati
 
 ## Requirements and setup
 
+An independent **SQLite citizen monitor** is now available in `ctn.citizen`.
+It stores identity evidence, public stance observations, synthetic reader
+experiments, alerts and review tasks without changing JEV action rules. Default
+alarms are shadow candidates; live LLM calls require explicit configuration.
+See [the runnable monitor guide](docs/citizen-monitor.md) for CLI commands,
+calibration, limits, and `JevWorkflow` / pipeline `Post` integration. This does
+not add an official-platform adapter or automatic publishing/reporting.
+
 - **Python 3.14.** This version is pinned in `environment.yml` and in the Docker image (`python:3.14-slim`), and the container is the deployment target. `scripts/check_env.py` enforces it at startup so a wrong interpreter fails loudly instead of producing empty results. The earlier claim of "Python 3.10 or newer" was wrong: on 3.13 and earlier, `JevInput.from_dict` rejected every input (see `ctn/jev/inputs.py`). That specific defect is now fixed, but 3.14 remains the only supported and tested interpreter.
 - The current Python implementation and tests use the standard library. No third-party package installation is required.
 - Run commands from the repository root. There is no packaged installation or full application CLI yet.
