@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .models import Side
+
 
 # --------------------------------------------------------------------------- #
 # .env loading
@@ -65,6 +67,13 @@ def _env_bool(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_side(name: str) -> Side:
+    try:
+        return Side(_env_str(name).lower())
+    except ValueError:
+        return Side.UNASSIGNED
 
 
 # --------------------------------------------------------------------------- #
@@ -338,6 +347,9 @@ class Settings:
     llm: LLMConfig = field(default_factory=LLMConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
 
+    # Not yet assigned by the organisers. UNASSIGNED keeps the loop observe-only.
+    side: Side = Side.UNASSIGNED
+
     state_dir: Path = Path("state")
     log_dir: Path = Path("logs")
     dry_run: bool = True            # never write to the platform unless False
@@ -376,6 +388,7 @@ class Settings:
             ),
             jev=JevConfig.load(env_file),
             llm=LLMConfig.load(env_file),
+            side=_env_side("CTN_SIDE"),
             state_dir=state_dir,
             log_dir=log_dir,
             dry_run=_env_bool("CTN_DRY_RUN", True),
@@ -395,6 +408,8 @@ class Settings:
                 problems.append("CTN_PLATFORM_API_KEY is empty but CTN_DRY_RUN=false")
         if self.jev.enabled and not self.jev.api_key:
             problems.append("TYPESAFE_API_KEY missing; Jev calls will be skipped")
+        if self.side is Side.UNASSIGNED:
+            problems.append("CTN_SIDE not set (yes/no); the bot loop will only observe")
         if self.rate.read_rps + self.rate.write_rps > 1.0:
             problems.append(
                 "team read+write rate exceeds 1 req/s; 2025 per-team average was "
