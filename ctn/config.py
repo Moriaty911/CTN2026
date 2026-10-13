@@ -223,13 +223,77 @@ class LLMConfig:
     """Generative layer. External models are explicitly permitted by rule 5.1
     for creative content generation, subject to the provider's own licence."""
 
-    base_url: str = ""
-    api_key: str = ""
-    model: str = ""
+    base_url: str = "https://api.deepseek.com"
+    api_key: str = field(default="", repr=False)
+    model: str = "deepseek-flash"
     max_concurrency: int = 4
     request_timeout_s: float = 60.0
     max_retries: int = 2
-    temperature: float = 0.9        # high: we want surface-form diversity
+    temperature: float = 0.5
+    total_wait_budget_s: float = 60.0
+    retry_initial_s: float = 1.0
+    retry_max_s: float = 8.0
+    max_tokens: int = 1536
+    max_reply_chars: int = 1200
+    max_request_bytes: int = 262_144
+    max_response_bytes: int = 1_048_576
+
+    def to_dict(self):
+        """Metadata configuration; credentials never enter common serialization."""
+        return {name: value for name, value in vars(self).items() if name != "api_key"}
+
+    def __post_init__(self):
+        try:
+            url = urlsplit(self.base_url)
+            valid = (url.scheme == "https" and bool(url.hostname) and
+                     url.username is None and url.password is None and
+                     not url.query and not url.fragment and url.port != 0 and
+                     not any(ord(c) <= 32 or c == "\\" for c in self.base_url))
+        except (ValueError, TypeError):
+            valid = False
+        if not valid:
+            raise ValueError("LLMConfig.base_url: expected HTTPS base URL")
+        if type(self.api_key) is not str or any(not 33 <= ord(c) <= 126 for c in self.api_key):
+            raise ValueError("LLMConfig.api_key: invalid credential")
+        if type(self.model) is not str or not self.model or any(not 33 <= ord(c) <= 126 for c in self.model):
+            raise ValueError("LLMConfig.model: invalid model")
+        if self.api_key and (self.api_key in self.base_url or self.api_key in self.model):
+            raise ValueError("LLMConfig: credential outside authentication")
+        for name in ("max_concurrency", "max_retries", "max_tokens", "max_reply_chars", "max_request_bytes", "max_response_bytes"):
+            value = getattr(self, name)
+            if type(value) is not int or value < (0 if name == "max_retries" else 1):
+                raise ValueError(f"LLMConfig.{name}: invalid integer limit")
+        if self.max_tokens > 393216:
+            raise ValueError("LLMConfig.max_tokens: exceeds provider limit")
+        for name in ("request_timeout_s", "total_wait_budget_s", "retry_initial_s", "retry_max_s"):
+            value = getattr(self, name)
+            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"LLMConfig.{name}: invalid duration")
+        if self.retry_initial_s > self.retry_max_s:
+            raise ValueError("LLMConfig: invalid retry bounds")
+        if type(self.temperature) not in (int, float) or not math.isfinite(self.temperature) or not 0 <= self.temperature <= 2:
+            raise ValueError("LLMConfig.temperature: invalid temperature")
+
+    @classmethod
+    def load(cls, env_file: str | Path = ".env") -> "LLMConfig":
+        """Load generation settings without creating directories."""
+        _load_dotenv(Path(env_file))
+        values = {"base_url": _env_str("CTN_LLM_BASE_URL") or cls.base_url,
+                  "api_key": _env_str("CTN_LLM_API_KEY"),
+                  "model": _env_str("CTN_LLM_MODEL") or cls.model}
+        names = {"max_concurrency": "CONCURRENCY", "request_timeout_s": "TIMEOUT_S",
+                 "max_retries": "MAX_RETRIES", "temperature": "TEMPERATURE",
+                 "total_wait_budget_s": "WAIT_BUDGET_S", "retry_initial_s": "RETRY_INITIAL_S",
+                 "retry_max_s": "RETRY_MAX_S", "max_tokens": "MAX_TOKENS",
+                 "max_reply_chars": "MAX_REPLY_CHARS", "max_request_bytes": "MAX_REQUEST_BYTES",
+                 "max_response_bytes": "MAX_RESPONSE_BYTES"}
+        for field_name, suffix in names.items():
+            default = getattr(cls, field_name)
+            try:
+                values[field_name] = type(default)(os.environ.get("CTN_LLM_" + suffix, str(default)))
+            except (ValueError, TypeError):
+                raise ValueError("CTN_LLM_" + suffix + ": invalid configuration") from None
+        return cls(**values)
 
 
 @dataclass(frozen=True)
@@ -311,12 +375,7 @@ class Settings:
                 read_share=_env_float("CTN_READ_SHARE", 0.75),
             ),
             jev=JevConfig.load(env_file),
-            llm=LLMConfig(
-                base_url=_env_str("CTN_LLM_BASE_URL"),
-                api_key=_env_str("CTN_LLM_API_KEY"),
-                model=_env_str("CTN_LLM_MODEL"),
-                max_concurrency=_env_int("CTN_LLM_CONCURRENCY", 4),
-            ),
+            llm=LLMConfig.load(env_file),
             state_dir=state_dir,
             log_dir=log_dir,
             dry_run=_env_bool("CTN_DRY_RUN", True),

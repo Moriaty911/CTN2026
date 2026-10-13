@@ -89,11 +89,11 @@ class ActionTests(unittest.TestCase):
             flow, _, _ = assessed(side="no", value=4, handler=handler)
             self.assertIsNone(POLICY.decide(flow).action)
 
-    def test_mixed_neutral_delegate_without_action_value_gate_or_account_selection(self):
+    def test_mixed_neutral_request_jev_without_action_value_gate_or_account_selection(self):
         for side in ("mixed", "neutral"):
             flow, _, _ = assessed(side=side, value=0, level=None)
             decision = POLICY.decide(flow)
-            self.assertEqual(decision.status, "needs_llm_assessment")
+            self.assertEqual(decision.status, "needs_jev_assessment")
             self.assertIsNone(decision.action)
             self.assertIsNone(decision.signal_value)
             self.assertIsNone(decision.required_account_level)

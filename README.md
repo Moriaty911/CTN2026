@@ -1,10 +1,10 @@
 # CNT2026
 
-Python components for the Capture the Narrative 2026 project. The current working implementation centers on the **JEV content evaluation and decision module**: it accepts standardized posts, evaluates them through TypeSafe JEV, validates the returned JSON, applies confirmed interaction rules, and prepares traceable materials for a downstream generation module.
+Python components for the Capture the Narrative 2026 project. The current working implementation includes **JEV content evaluation and decisions plus DeepSeek reply drafting**: it accepts standardized posts, evaluates them through TypeSafe JEV, validates the returned JSON, applies confirmed interaction rules, checks traceable materials, and explicitly generates a draft within the selected purpose.
 
 The scenario is the fictional Kingstonia referendum on vaccination proof for access to public spaces. Supporting voluntary vaccination does not automatically mean supporting the access requirement. Alignment is calculated against the team's explicitly supplied side; a single post does not establish an author's permanent affiliation.
 
-**Status as of October 10, 2026:** Tasks T01–T09 have a completed first implementation. T10 has calibration tools, but calibration against real competition content and outcome feedback remains pending. This repository does not yet provide a complete autonomous posting application.
+**Status as of October 12, 2026:** Tasks T01–T09 have a completed first implementation. Neutral/mixed posts now receive a separate JEV action-and-purpose judgment with material checks before generation. T10 has calibration tools, but calibration against real competition content and outcome feedback remains pending. This repository does not yet provide a complete autonomous posting application.
 
 ## Implemented capabilities
 
@@ -15,8 +15,9 @@ The scenario is the fictional Kingstonia referendum on vaccination proof for acc
 | JEV transport | Sends authenticated HTTPS requests with configurable timeouts, bounded retries, shared cooldown, concurrency control, and response-size limits. |
 | Response parsing | Validates Choice, Score, and Noul answers against the exact request; preserves per-answer failures and applies information-sufficiency gates. |
 | Evaluation routing | Runs triage and, when appropriate, deep evaluation. Supports ordered batches, duplicate-request sharing, optional caching, and explicit post-pair comparisons. |
-| Interaction decisions | Selects reply, like, or no interaction for aligned/opposing posts; delegates neutral/mixed response planning to the downstream LLM. |
-| Generation handoff | Checks a caller-selected purpose and evidence bindings; supplies guided or open response-planning prompts for neutral/mixed posts. |
+| Interaction decisions | Applies confirmed aligned/opposing rules; asks JEV to select the action and primary response purpose for neutral/mixed posts. Ambiguous or unavailable decisions remain pending. |
+| Generation handoff | Checks purpose and evidence bindings. Neutral/mixed briefs must match the JEV-selected purpose; downstream generates from the fixed direction. |
+| Reply drafting | Calls DeepSeek from a locally bound, checked reply task using internal P01–P09 templates; validates JSON, completion, length and local injection/secret signals. Returns a draft or a pending/failure state. |
 | Audit and review | Records metadata-only JSONL events and supports field-level human references, routing replay, feedback records, and comparisons between evaluated rubric versions. |
 
 ## Architecture and ownership
@@ -30,23 +31,27 @@ flowchart LR
     R -->|Candidate| D[JEV deep evaluation]
     R -->|Observe, review, or failure| H[Bound handoff]
     D --> A[Validated assessment and action decision]
-    A --> H
-    H --> M[Selected-purpose checks or neutral/mixed response planning]
-    M --> L[Downstream account selection, LLM, review, and execution]
+    A -->|Aligned or opposing| H
+    A -->|Eligible neutral or mixed| J[JEV response action and purpose]
+    J --> G[Risk, sufficiency, probability and consistency checks]
+    G --> H
+    H --> M[Same-purpose material checks]
+    M --> L[ReplyGenerator: fixed-purpose DeepSeek draft]
+    L --> O[Downstream account allocation, semantic review and publishing]
 ```
 
-The JEV module owns content preparation, evaluation, parsing, internal routing, interaction decisions, and generation-material checks. Other modules own platform fetching and field mapping, historical storage and retrieval, actual account allocation, LLM service calls, draft review, publishing, and outcome collection. Original-post planning remains a separate flow.
+The JEV module owns content preparation, evaluation, parsing, internal routing, interaction decisions, and generation-material checks. The separate LLM module owns service calls, internal drafting prompts and structural output checks. Other modules supply material briefs, choose purposes for aligned/opposing posts, and own platform fetching and field mapping, historical storage and retrieval, actual account allocation, semantic draft review, publishing, and outcome collection. Original-post planning remains a separate flow.
 
 `JevWorkflow` is the recommended integration entry point. It uses the confirmed `ctn-post.v2` rubric for new evaluations. Lower-level `JevEvaluator`, `JevPacker`, and `load_rubric("post")` retain their v1 defaults for compatibility; use explicit versions when working below the workflow layer. `build_handoff()` alone preserves a `pending_rules` placeholder and does not apply the workflow's action policy.
 
-The default action policy is `jev-actions.v2`, which adds neutral/mixed delegation. Explicit `ActionPolicy(version="jev-actions.v1")` preserves the previous pending behavior for historical compatibility. The JEV question rubric and aligned/opposing thresholds are unchanged.
+The default action policy is `jev-actions.v3`, which adds JEV decisions for neutral/mixed posts. Explicit `ActionPolicy(version="jev-actions.v1")` retains pending rules; `jev-actions.v2` retains the historical downstream LLM planning behavior. Their serialized policies and fingerprints remain unchanged. The existing post rubric and aligned/opposing thresholds are unchanged. The new response rubric is `ctn-response.v1`.
 
 ## Requirements and setup
 
 - **Python 3.14.** This version is pinned in `environment.yml` and in the Docker image (`python:3.14-slim`), and the container is the deployment target. `scripts/check_env.py` enforces it at startup so a wrong interpreter fails loudly instead of producing empty results. The earlier claim of "Python 3.10 or newer" was wrong: on 3.13 and earlier, `JevInput.from_dict` rejected every input (see `ctn/jev/inputs.py`). That specific defect is now fixed, but 3.14 remains the only supported and tested interpreter.
-- The current Python implementation and tests use the standard library. No third-party package installation is required.
+- JEV components use the standard library. DeepSeek drafting and its offline tests use the existing pinned `httpx==0.28.1` dependency. Install `requirements.txt` in the supported project environment; no model SDK is required.
 - Run commands from the repository root. There is no packaged installation or full application CLI yet.
-- Live evaluation requires a TypeSafe API key and network access. Offline tests require neither.
+- Live evaluation requires a TypeSafe API key; live drafting requires a DeepSeek API key. Both require network access. Offline tests require neither credential nor network access.
 
 Create a local configuration file without overwriting an existing one:
 
@@ -74,7 +79,7 @@ Set `TYPESAFE_API_KEY` in `.env`, or provide it through the process environment.
 | `CTN_JEV_MAX_RESPONSE_BYTES` | `1048576` | Maximum accepted response size. |
 | `CTN_JEV_BATCH` | `24` | Scheduling chunk size for independent post evaluations. |
 
-These are configurable engineering defaults, not official provider quotas or competition limits. The wait budget is not a hard deadline for an entire two-stage evaluation; synchronous DNS/socket operations cannot be hard-cancelled. Retrying an ambiguous network failure can incur another charge.
+These are configurable engineering defaults, not official provider quotas or competition limits. The wait budget is not a hard deadline for an entire evaluation; synchronous DNS/socket operations cannot be hard-cancelled. An eligible neutral/mixed post ordinarily adds one response request after triage and deep evaluation, before retries or duplicate/cache reuse. Retrying an ambiguous network failure can incur another charge.
 
 Action thresholds and platform-level mappings use `ActionPolicy`. Relevance and injection thresholds use `RoutingPolicy`. Packing byte budgets and context priorities use `PackingLimits`. These settings are not automatically read from the older general `PolicyConfig` fields in `ctn/config.py`.
 
@@ -146,7 +151,7 @@ When a signal is found, or inspection exceeds a configured limit:
 
 The preflight version/settings contribute to the packing fingerprint and cache identity. Audit events record only policy hashes, completeness, and signal counts. The response parser also rejects suspicious free-text provider model metadata; accepted answer values and score legends remain bound to the internally defined questions.
 
-`no_local_signal` means that these heuristics found no signal; it does not mean trusted or safe. Normal quotations of attack instructions can require review, and classification/value manipulation can still evade both preflight and JEV. Model risk checks at `0.5` remain unchanged and run after local preflight. Structured JSON, matching quotations, and low risk scores do not prove semantic correctness. Downstream LLM input separation, output review, tool permissions, account management, and publishing authorization remain the downstream owners' responsibilities.
+`no_local_signal` means that these heuristics found no signal; it does not mean trusted or safe. Normal quotations of attack instructions can require review, and classification/value manipulation can still evade both preflight and JEV. Model risk checks at `0.5` remain unchanged and run after local preflight. Structured JSON, matching quotations, and low risk scores do not prove semantic correctness. The LLM module additionally separates internal instructions from external data, rechecks materials and screens draft outputs. Semantic review, account management and publishing authorization remain downstream responsibilities.
 
 Run the focused offline regression suite with:
 
@@ -158,7 +163,7 @@ The 22-case synthetic corpus includes obvious attacks, seven ordinary controls, 
 
 ## Confirmed interaction rules
 
-Score-based action rules require a usable assessment and applicable score. Unavailable scores are not replaced with defaults. Neutral/mixed planning delegation retains assessment guards but has no reply-value cutoff.
+Score-based action rules require a usable assessment and applicable score. Unavailable scores are not replaced with defaults. Neutral/mixed JEV decisions retain assessment guards but have no reply-value cutoff.
 
 | Post alignment | Signal | Condition | Decision |
 |---|---|---|---|
@@ -168,7 +173,7 @@ Score-based action rules require a usable assessment and applicable score. Unava
 | Opposing | `reply_value` | `1–3`, inclusive | Ordinary reply, subject to target-level resolution. |
 | Opposing | `reply_value` | `> 3` | Reply requiring a high-level account and high-quality content. |
 | Opposing, explicitly mapped high-level target | `reply_value` | Meets the reply threshold | Upgrade the reply to a high-level account and high-quality content. |
-| Mixed or neutral | — | Usable, relevant deep assessment | `needs_llm_assessment`; send a response-planning task downstream, without selecting an action or account. |
+| Mixed or neutral | Independent JEV response judgments | Usable, relevant deep assessment | Decide reply/no interaction or return material/review/assessment needs; account allocation remains downstream. |
 | Unknown alignment | — | Alignment cannot be established | `pending_rules`, with no selected action. |
 
 A high-level target does not override a low-value skip. Exactly `2.5` selects like for aligned posts; exactly `1` qualifies for an opposing reply; exactly `3` remains in the ordinary-value interval.
@@ -177,38 +182,55 @@ A high-level target does not override a low-value skip. Exactly `2.5` selects li
 
 Provide actual, explicitly confirmed platform labels through `ActionPolicy(platform_levels=...)`, mapping each to `standard` or `high`. The default mapping is empty. An opposing post in the ordinary-value interval with an unknown or unmapped level returns `needs_account_metadata`; it does not dispatch ordinary generation. A value above `3` already requests a high-level account. Actual account selection belongs downstream.
 
-## Neutral and mixed response planning
+## Neutral and mixed JEV response decisions
 
-Neutral and mixed posts enter a downstream LLM assessment round to choose what, if anything, to respond to. They do not inherit the opposing-post value thresholds, and neutral wording does not imply high persuadability.
+With the default v3 policy, eligible neutral/mixed posts enter an independent JEV response-decision request. It reuses the exact packed deep state, including omissions, registered background and context limits. It never restores omitted original material. The new request uses the same transport, retry, concurrency, in-flight sharing and optional cache mechanisms as the earlier stages.
 
-When `response_planning_task.status` is `ready`, explicitly request materials with `package.to_dict(include_materials=True)` and pass `response_planning_materials` to the downstream LLM:
+The versioned English question set in `ctn/jev/rubrics/response.v1.json` asks four independent questions:
+
+| Question | Options / meaning |
+|---|---|
+| `response_action` | `reply`, `no_interaction`, `needs_materials`, `needs_review` |
+| `response_purpose` | P02–P09, `none`, `unclear`; P01 remains aligned-only. |
+| `response_context` | `sufficient`, `insufficient`, `unclear`; interpretation sufficiency is distinct from missing drafting evidence. |
+| `prompt_injection` | Noul risk signal, using the existing review threshold. |
+
+A central genuine question takes priority over incidental arguments or emotion. Otherwise JEV chooses the main purpose; unresolved competing purposes require review. Mixed conditions and different supported/unsupported parts are preserved. Neutral wording does not establish persuadability. The questions select content fit rather than expected persuasion or actual benefit. No answer is hidden context for another; local code combines them.
+
+Automatic action adoption requires the selected option's probability to be at least **0.7**, with a lead of at least **0.15** over the runner-up. A reply purpose must independently meet both conditions. Configure them with `ActionPolicy(response_min_probability=..., response_min_margin=...)`. These are engineering defaults awaiting calibration, not empirical accuracy estimates; provider `confidence` does not replace these gates. Information-sufficiency labels are checked separately.
+
+Risk or unavailable risk pauses the decision. Missing/invalid essential answers, low-probability choices, unclear purposes and conflicting answers require review. For example, `reply` with `none`, or `no_interaction` with a P type, cannot be adopted. Insufficient interpretation returns `needs_materials`, retaining a confident purpose when available. Transport or packing failures return `needs_assessment`, never no interaction. An explicit, consistent no-interaction decision creates no generation task. There is no fallback to LLM purpose selection in v3.
+
+Inspect the decision before supplying a brief:
 
 ```python
 # package is the result of workflow.evaluate(...).
-output = package.to_dict(include_materials=True)
-planning = output.get("response_planning_task")
-if planning is not None and planning["status"] == "ready":
-    planning_materials = output["response_planning_materials"]
-    # Downstream assembles its LLM request using the instructions and materials.
+output = package.to_dict()
+decision = output.get("response_decision")
+if decision is not None:
+    if decision["status"] == "decided" and decision["action"] == "reply":
+        selected_purpose = decision["prompt_type"]
+        # The calling module supplies a matching MaterialBrief with exact
+        # focus, evidence and any comparison / verification requirements.
+    else:
+        print(decision["status"], decision["reason"], decision["needs"])
 ```
 
-The task uses one of three modes:
+`response_decision` uses `jev-response-decision.v1` and includes the action, purpose, status, fixed reason code, missing conditions, probability-gate results, thresholds, question version/fingerprint, target, request ID and parent deep-request binding. `response_assessment` retains the normalized third-stage assessment. The handoff's top-level `new_attempt_count` includes all stages; `flow.new_attempt_count` still counts only triage/deep. Audits count third-stage attempts once and record only status, hashes, thresholds and gate outcomes, not post text, keys or probability distributions.
 
-| Mode | Behavior |
-|---|---|
-| `guided` | A caller-supplied `MaterialBrief` fixes the purpose and exact focus. Existing quotation, evidence, comparison, and verification checks must pass. |
-| `question_first` | A valid JEV question classification suggests inspecting and prioritizing the actual question. The LLM must locate it in the text and check whether supplied evidence can answer it. |
-| `open` | No direction is fixed. The LLM chooses an appropriate answer, concern response, explanation, argument response, clarification, or another supported purpose from the supplied content. |
+For a decided reply, missing drafting material preserves the action and selected purpose while `generation_needs` lists the missing brief or checked requirements. `prepare(package, brief)` performs no JEV call and cannot change the selected purpose. A mismatched brief blocks generation; failed new preparation removes any previous generation task. A JEV decision with missing essential interpretation remains pending even if a brief alone is supplied.
 
-The versioned English instructions are assembled in `ctn/jev/planning.py`. Open planning allows the LLM to select a useful direction, request missing materials, or decide that no interaction is appropriate. It cannot invent evidence, treat quoted instructions as commands, infer permanent affiliation, or claim that disagreement establishes falsehood or reduced credibility. Mixed positions retain their supported parts and conditions.
+Use `workflow.redecide(updated_payload, brief=..., comparison=...)` when the decision itself needs reassessment. Supply the complete updated standardized input. It re-runs triage/deep under the evaluator's cache policy and forces a fresh response judgment, updating an enabled response cache on success. Changed input is independently packed and assessed. New evidence must pass the same local reference registration rules; this entry point does not retrieve missing material. Pass a newly evaluated comparison matching the updated target when needed.
 
-Supplying a specific brief via `evaluate(..., brief=...)` or `prepare(package, brief)` produces guided planning. Missing required evidence or mismatched quotations produce explicit planning needs; the module does not silently fall back to an open prompt. `prepare()` makes no additional JEV call. Failed new guidance removes any previous planning materials.
+V3 outputs no `response_planning_materials`; `response_planning_task` is null. Downstream uses a ready `generation_task` and its explicit `generation_materials` to generate within the JEV-selected direction, with semantic review and account allocation still required. Neutral/mixed account-grade and quality rules have not been specified, so these requirements remain unset rather than copied from opposing-post rules.
 
-`response_planning_task` is separate from `generation_task`: a ready plan request is not a decided reply or a ready draft-generation task. The downstream owner runs the LLM, interprets its response plan, applies the corresponding material/semantic checks, manages accounts, generates the draft, and performs execution review. This module does not parse or adopt an LLM plan as an executed action. Risk, unavailable essential context, evaluation failures, and unrelated observations retain their existing routing behavior.
+### Historical v2 compatibility
+
+Explicit `ActionPolicy(version="jev-actions.v2")` retains `needs_llm_assessment` and the earlier `open`, `question_first` and checked `guided` planning tasks from `ctn/jev/planning.py`. These tasks are planning requests, not decided replies. Historical v2 fixtures remain examples of that opt-in behavior. `prepare()` preserves the saved policy rather than adopting a later workflow default. The new response stage extends the question/output stage vocabulary with `response` and request kind with `response`; existing triage/deep payloads retain their meanings.
 
 ## Prepare materials for the downstream LLM
 
-The downstream caller chooses a purpose; this module checks its requirements. There is no automatic purpose-priority selection or LLM service call.
+For aligned/opposing posts the caller chooses a purpose. For v3 neutral/mixed posts JEV chooses it, and the caller supplies a matching brief. This module checks the material requirements and makes no LLM service call. Selecting P04/P05 does not establish a valid comparison; selecting P06 does not establish that a statement is false or human-verified.
 
 | ID | Purpose | Principal material requirements |
 |---|---|---|
@@ -222,7 +244,7 @@ The downstream caller chooses a purpose; this module checks its requirements. Th
 | P08 | Ask for clarification | Exact focus and a specific declared information gap. |
 | P09 | Summarize discussion | At least two distinct traceable comments and an explicit supplied-sample scope. |
 
-After evaluating the example above, the caller can select P08 without another JEV request:
+For an aligned/opposing reply, or a neutral/mixed reply that JEV has selected as P08, the caller can provide clarification materials without another JEV request. If JEV selected a different purpose, provide that purpose's materials instead:
 
 ```python
 from ctn.jev import MaterialBrief, TextSpan
@@ -260,13 +282,83 @@ JSON callers can use `MaterialBrief.from_dict(...)` with `jev-material-brief.v1`
 | Individual answer | `valid`, `missing`, `invalid`, `insufficient_context` |
 | Parsed assessment | `success`, `partial`, `failed` |
 | Evaluation flow | `evaluated`, `partial`, `observe`, `needs_context`, `needs_review`, `failed`, `deferred` |
-| Action decision | `decided`, `needs_review`, `needs_assessment`, `pending_rules`, `needs_account_metadata`, `needs_llm_assessment` |
+| Action decision | `decided`, `needs_review`, `needs_assessment`, `needs_materials`, `pending_rules`, `needs_account_metadata`; lower-level pending `needs_jev_assessment`; historical v2 `needs_llm_assessment` |
+| JEV response decision | `decided`, `needs_materials`, `needs_review`, `needs_assessment` |
 | Material check | `ready`, `needs_materials`, `needs_review`, `blocked` |
-| Response-planning task | `ready`, `needs_materials`, `needs_review`, `blocked` |
+| Historical v2 response-planning task | `ready`, `needs_materials`, `needs_review`, `blocked` |
+| Reply draft | `draft`, `needs_materials`, `needs_review`, `blocked`, `failed` |
 
 Consumers must inspect these layers and their missing-condition records; a successful HTTP response does not imply a usable assessment or generation task. Missing risk is never treated as zero. An unavailable dependent score exposes no usable numeric value. Scores can be fractional. Observed independent two-decimal score/distribution rounding is handled with a bounded consistency tolerance and a `score_rounding_tolerance` warning; the provider score is retained for action comparisons.
 
 Every handoff has `execution_authorized=False`. A ready generation task supplies materials for the next module; it does not authorize or perform publication.
+
+## Generate a DeepSeek reply draft
+
+`ReplyGenerator` is a separate, explicit operation. Evaluating or preparing a post never calls DeepSeek automatically. It accepts a locally bound `JevWorkflow` handoff and typed brief, repeats local preparation/material checks, and makes no further JEV request. For a new evaluated reply without a brief, `generate()` can complete local preparation using the supplied brief; a pending action remains blocked.
+
+```python
+from ctn.config import LLMConfig
+from ctn.llm import DeepSeekClient, DraftOptions, ReplyGenerator
+
+with DeepSeekClient(LLMConfig.load()) as llm:
+    generator = ReplyGenerator(workflow, llm)
+    draft = generator.generate(
+        prepared, brief,
+        # comparison=paired,  # Required for P04/P05; use workflow.compare().
+        options=DraftOptions(language="follow_post"),
+    )
+    print(draft.to_dict())  # Metadata only, including blocked/pending reasons.
+    if draft.status == "draft":
+        reply_text = draft.reply  # Deliver explicitly for downstream review.
+```
+
+The purpose is fixed by JEV for v3 neutral/mixed posts, and by the checked caller selection for aligned/opposing posts. A conflicting brief cannot change an already prepared purpose. Historical v2 planning tasks are not accepted as decided generation tasks.
+
+Workflow handoffs retain a private immutable snapshot binding. Reconstructed JSON and modified handoff snapshots cannot be passed to `generate()` or promoted by `prepare()`. This is in-process integrity checking, **not authentication across processes or against code already running inside this process**. A future network handoff needs a separate authenticated provenance contract; hashes alone do not supply it.
+
+Internal `ctn-reply-prompts.v1` templates cover P01–P09. System messages contain only repository-owned instructions and validated language/length options. Posts, full sources, comments and material descriptions are JSON data in a user message. Exported free-form `instructions` are not promoted into system messages. Omitted context is not restored; requests over budget are rejected without truncation. P04/P05, P06 and P09 retain all existing comparison, verification and sample requirements.
+
+`ctn-reply-draft.v1` records the target, purpose, parent JEV request, draft request hash, versions, configured model, usage, attempts and status. Public text is available through `draft.reply` or explicit `draft.to_dict(include_text=True)`; default/common serialization and object printing omit it. `JsonlWriter` can be passed as `audit_log` to record metadata-only generation events, without raw errors, texts, target identifiers or credentials.
+
+### DeepSeek configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CTN_LLM_API_KEY` | Empty | Local authentication credential. |
+| `CTN_LLM_BASE_URL` | `https://api.deepseek.com` | HTTPS base URL; `/chat/completions` is appended. |
+| `CTN_LLM_MODEL` | `deepseek-flash` | Configurable requested model. |
+| `CTN_LLM_CONCURRENCY` | `4` | Concurrent calls per shared client. |
+| `CTN_LLM_TIMEOUT_S` | `60` | Timeout for each network operation. |
+| `CTN_LLM_MAX_RETRIES` | `2` | Retries after the initial attempt. |
+| `CTN_LLM_WAIT_BUDGET_S` | `60` | Combined local queue and backoff waiting budget. |
+| `CTN_LLM_RETRY_INITIAL_S`, `CTN_LLM_RETRY_MAX_S` | `1`, `8` | Backoff bounds; a longer numeric Retry-After must fit the remaining wait budget. |
+| `CTN_LLM_TEMPERATURE` | `0.5` | Sampling temperature in non-thinking mode. |
+| `CTN_LLM_MAX_TOKENS` | `1536` | Model output-token cap. |
+| `CTN_LLM_MAX_REPLY_CHARS` | `1200` | Maximum accepted public reply, counted in Unicode characters. |
+| `CTN_LLM_MAX_REQUEST_BYTES`, `CTN_LLM_MAX_RESPONSE_BYTES` | `262144`, `1048576` | Encoded request/decompressed response budgets. |
+
+`LLMConfig.load()` creates no runtime directories and honors existing environment variables. Blank template base URL/model fields resolve to these defaults. Credentials are omitted from repr and common configuration serialization. These limits are engineering defaults, not platform quotas. Socket timeouts are not an overall wall-clock deadline. A timeout retry may incur another charge. Sharing one client shares its concurrency limit; separate clients have separate limits.
+
+The adapter uses non-streaming [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/), thinking disabled, no tools, and JSON output with explicit instructions. [DeepSeek documents possible empty JSON output](https://api-docs.deepseek.com/guides/json_mode/); empty, malformed, duplicate-key, truncated or unexpected tool responses cannot become drafts. Only temporary network failures, HTTP 408/429 and selected 5xx errors retry. Authentication failures, invalid requests and unusable content do not retry or trigger automatic rewriting. Redirects and environment-proxy configuration are disabled.
+
+Drafts default to the post's language and approximately 2–5 short sentences; P08 can be one focused question. Explicit languages are `en`, `zh`, `es`, `fr`, `de`, `pt`, `ar`, `ru`, `ja`, `ko`, and `hi`; the per-call character limit may lower, not raise, the configured cap. In ambiguous multilingual input the prompt defaults to English. Language and purpose adherence are prompt requirements, not proven semantic properties of JSON validation.
+
+Material and output checks use local injection heuristics and both configured credentials. They reduce risk but can miss semantic attacks and can flag ordinary quotations. A `draft` is structurally accepted content with `execution_authorized=False` and `semantic_review_required=True`; it does not prove factual correctness, publishability, or competition effectiveness. Account voice/selection and semantic review remain downstream work.
+
+### Synthetic live drafting check
+
+```sh
+python3 -m ctn.llm.smoke             # Metadata only
+python3 -m ctn.llm.smoke --show-text # Explicitly display the synthetic draft
+```
+
+This command makes one DeepSeek call with retries disabled and local simulated JEV answers; it makes **zero real JEV calls** and never publishes. The October 12 live check succeeded with `deepseek-flash`, P08, one attempt and 1,141 total tokens. Its metadata report is local and ignored: `logs/llm-live-verified.local.json`. The preceding sandbox network failure was separately reported; no automatic retry occurred.
+
+Synthetic target: “I keep seeing people mention exceptions to the vaccination-proof proposal. The details are unclear to me.” Generated draft:
+
+> Could you share which version of the vaccination-proof proposal you're referring to, and which exceptions you've seen mentioned? That would help clarify what's actually being proposed.
+
+This verifies credential/transport/draft integration, not purpose-selection accuracy or factual review of real competition content.
 
 ## Compare supplied posts
 
@@ -309,7 +401,7 @@ Run the offline suite:
 python3 -m unittest discover -s tests -q
 ```
 
-The recorded October 10, 2026 run passed **319 tests**. Coverage includes input contracts, context omission, request binding, transport failures and retry limits, per-answer parsing, sufficiency gates, routing boundaries, batching and caching, action thresholds, guided/open response planning, material binding, injection preflight and adversarial boundary cases, audit handling, and calibration tools.
+The October 12, 2026 run passed **382 offline tests**, including 35 response-decision tests and 28 new LLM/configuration tests. Coverage includes input contracts, context omission, request binding, transport failures and retry limits, per-answer parsing, sufficiency gates, routing boundaries, batching and caching, action thresholds, historical guided/open planning, neutral/mixed JEV decisions, probability boundaries, conflicting answers, same-purpose material gates, fresh reassessment, injection defenses, audit handling, and calibration tools. Fake-response tests verify program behavior; they do not measure live JEV purpose-selection accuracy.
 
 For an explicit live wire-format check:
 
@@ -332,19 +424,22 @@ Neither offline tests nor that synthetic live check establish real-content class
 | `ctn/jev/injection.py` | Offline, bounded injection review signals with unchanged original observations. |
 | `ctn/jev/routing.py`, `evaluator.py` | Two-stage routing, batches, duplicate sharing, and optional caching. |
 | `ctn/jev/actions.py` | Confirmed interaction rules and account-level requirements. |
+| `ctn/jev/response.py`, `rubrics/response.v1.json` | Independent neutral/mixed JEV action/purpose judgments, local gates and saved decision binding. |
 | `ctn/jev/materials.py`, `handoff.py` | Selected-purpose checks and explicit material transfer. |
-| `ctn/jev/planning.py` | Neutral/mixed response-planning prompts, question hints, and checked guided directions. |
+| `ctn/jev/planning.py` | Historical v2 neutral/mixed LLM planning prompts and checked guidance. |
 | `ctn/jev/audit.py`, `calibration.py`, `smoke.py` | Metadata audit, review tools, and explicit live verification. |
 | `ctn/config.py`, `telemetry.py`, `models.py` | Shared configuration, logging, and project data structures. |
 | `ctn/client/base.py`, `mock.py`, `ratelimit.py` | Existing platform protocol, simulation, and rate-control foundations; not a connected production platform adapter. |
-| `ctn/llm/`, `ctn/rag/`, `ctn/pipeline/` | Placeholders for future integration; their current package initializers are empty. |
+| `ctn/llm/` | DeepSeek transport, fixed-purpose prompts, draft contracts, local checks and an explicit synthetic live smoke command. |
+| `ctn/rag/`, `ctn/pipeline/` | Placeholders for future integration. |
 | `tests/` | Offline unit tests and contract/workflow fixtures. |
 | `tests/fixtures/jev_handoff/actions-v1.json` | Eight historical v1 synthetic action examples, including an explicit generation-material example; their neutral pending state remains a versioned historical example. |
-| `tests/fixtures/jev_handoff/response-planning-v1.json` | Current synthetic neutral/mixed open, question-first, and guided planning examples. |
+| `tests/fixtures/jev_handoff/response-planning-v1.json` | Historical v2 synthetic open, question-first, and guided planning examples. |
+| `tests/test_jev_response.py` | Offline third-stage decisions, thresholds, provenance, reassessment, material checks and compatibility. |
 | `tests/fixtures/jev_injection/cases-v1.json`, `tests/test_jev_injection.py` | Synthetic attacks/controls, documented heuristic gaps, and offline boundary regression tests. |
 | `ctn-architecture.html` (`-cn.html` for Chinese) | Broader design reference. Proposed architecture is not evidence that every subsystem is implemented. |
 | `jev-design-proposal.html` (`-cn.html` for Chinese) | Earlier v0.3 design proposal covering interaction choice, the P01–P09 prompt types, and post-comparison interpretation. Written before the code existed and explicitly states that thresholds were still to be agreed, so treat it as intent, not behaviour. |
-| `jev-decision-tree.html` (`-cn.html` for Chinese) | As-built reference for the two decision trees currently in `ctn/jev`: ordered routing rules, the action guards, the score gates, boundary semantics, the state vocabulary, and the defaults that keep parts of Tree 2 inert. Threshold values here are transcribed from `routing.py` and `actions.py`; where the two documents disagree on a number, this one reflects the code. |
+| `jev-decision-tree.html` (`-cn.html` for Chinese) | Earlier implementation snapshot of routing/action trees; it predates the v3 neutral/mixed response stage. Use this README and current code for that branch. |
 
 ## Remaining integration and decisions
 
@@ -352,10 +447,10 @@ Neither offline tests nor that synthetic live check establish real-content class
 |---|---|
 | Platform input mapping | Upstream supplies standardized content through the input contract. |
 | Official account-level labels | Confirm explicit label-to-`standard`/`high` mappings. |
-| Neutral/mixed LLM integration | Downstream consumes the response-planning task, selects a supported direction, and resolves reply/no-interaction/material needs; account selection remains with the account module. |
+| Neutral/mixed generation integration | Consume JEV decisions, supply a same-purpose brief, and generate from checked materials. Calibrate action/purpose selection and the probability/margin gates with real samples. |
 | Independent engagement triggers | Define and review thresholds before enabling overrides. |
 | Historical retrieval and frequency statistics | Another module supplies candidate pairs and manages storage/counting. |
-| LLM and account execution | Downstream selects the purpose and actual account, generates and reviews text, checks execution limits, and publishes. |
+| Draft review and account execution | Downstream supplies briefs, selects purposes for aligned/opposing posts and actual accounts, reviews generated text, checks execution limits, and publishes. DeepSeek drafting is implemented separately. |
 | Real feedback | The feedback owner provides linked observations with source, time, and missing-data information. |
 | T10 calibration | Review real samples and outcome feedback, compare concrete versions, and explicitly decide which changes to adopt. |
 | Injection resilience | Calibrate with real JEV adversarial assessments, track missed attacks and benign review burden, and integrate downstream permission/output safeguards. |

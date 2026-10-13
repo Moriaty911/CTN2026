@@ -279,6 +279,49 @@ class JevPacker:
         return self._pack((current, historical), kind="comparison", stage="deep",
                           question_set=question_set if question_set is not None else load_rubric("comparison"))
 
+    def pack_response(self, source: PackingResult, *, question_set: QuestionSet | None = None) -> PackingResult:
+        """Reuse the exact deep state; never repack omitted original material.
+
+        The source must be a bound, ready single-post deep request. No additional
+        state fields or caller questions can override the internal rubric.
+        """
+        if (type(source) is not PackingResult or source.status != "ready" or
+            source.kind != "post" or source.stage != "deep"):
+            raise PackingValidationError("source: expected a ready post deep snapshot")
+        rubric = question_set if question_set is not None else load_rubric("response")
+        if type(rubric) is not QuestionSet or rubric.status != "confirmed":
+            raise PackingValidationError("question_set: expected confirmed response questions")
+        questions = rubric.to_provider_questions("response")
+        if self._secret_paths(questions) or self._unicode_paths(questions):
+            raise PackingValidationError("question_set: invalid text or sensitive material")
+        body = source.to_provider_body()
+        if (hashlib.sha256(source.to_provider_bytes()).hexdigest() != source.request_id or
+            body.get("model") != self.model or len(source.targets) != 1):
+            raise PackingValidationError("source: invalid snapshot binding")
+        state = body["state"]
+        record = JevInput.from_dict(state["content"])
+        target = source.targets[0]
+        if (target.role != "target" or target.content_path != "content" or
+            record.post.post_id != target.post_id or record.source.kind != target.source_kind):
+            raise PackingValidationError("source: invalid target binding")
+        common = {"kind": "response", "stage": "response", "targets": source.targets,
+                  "question_ids": tuple(questions), "question_set_version": rubric.version,
+                  "question_set_fingerprint": rubric.fingerprint,
+                  "packing_fingerprint": _digest({"packer": self.fingerprint, "parent_request_id": source.request_id}),
+                  "input_fingerprint": source.input_fingerprint, "batch_index": source.batch_index}
+        if self._secret_paths(state) or self._unicode_paths(state):
+            return PackingResult("deferred", issues=(PackingIssue("content", "sensitive_or_invalid_snapshot"),), **common)
+        preflight = self.preflight.check(state, path="state")
+        common["preflight"] = preflight
+        if preflight.requires_review or source.preflight is not None and source.preflight.requires_review:
+            return PackingResult("deferred", issues=(PackingIssue("content", "local_injection_signal"),), **common)
+        encoded = _json({"model": self.model, "state": state, "questions": questions})
+        state_size, request_size = len(_json(state).encode("utf-8")), len(encoded.encode("utf-8"))
+        if state_size > self.limits.max_state_bytes or request_size > self.limits.max_request_bytes:
+            return PackingResult("deferred", issues=(PackingIssue("content", "response_snapshot_over_budget"),), **common)
+        return PackingResult("ready", issues=source.issues, request_id=hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+                             state_bytes=state_size, request_bytes=request_size, _body_json=encoded, **common)
+
     def pack_batch(self, contents: list[JevInput | dict] | tuple[JevInput | dict, ...], *,
                    stage: Literal["triage", "deep"] = "triage",
                    question_set: QuestionSet | None = None) -> tuple[PackingResult, ...]:
