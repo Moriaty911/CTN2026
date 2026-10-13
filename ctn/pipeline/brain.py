@@ -65,12 +65,16 @@ class JevLlmBrain:
 
     # ---- input mapping --------------------------------------------------- #
     def payload_for(self, post: Post) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema_version": "jev-input.v1",
             "post": {"post_id": post.post_id, "text": post.text},
             "source": {"kind": "platform", "observed_at": datetime.now(timezone.utc).isoformat()},
             "task_context": {"assigned_side": self.side.value},
         }
+        level = post.raw.get("platform_level") or post.raw.get("author_level")
+        if level:
+            payload["author"] = {"platform_level": str(level)}
+        return payload
 
     # ---- decision -------------------------------------------------------- #
     def think(self, post: Post) -> BrainVerdict:
