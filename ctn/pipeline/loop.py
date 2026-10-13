@@ -24,6 +24,7 @@ from ..models import ActionKind, ActionResult, Decision, GuardVerdict, Side, to_
 from ..ratelimit import build_gate, build_ledger
 from ..telemetry import Telemetry
 from .compose import check_text
+from .brain import JevLlmBrain
 from .decide import decide
 from .perceive import DEFAULT_KEYWORDS, perceive
 
@@ -54,6 +55,8 @@ class BotLoop:
         accounts: Sequence[str],
         keywords: Sequence[str] = DEFAULT_KEYWORDS,
         max_actions_per_cycle: int = 3,
+        brain: "JevLlmBrain | None" = None,
+        max_evaluations_per_cycle: int = 8,
         telemetry: Telemetry | None = None,
         rng: random.Random | None = None,
     ) -> None:
@@ -64,10 +67,15 @@ class BotLoop:
         self.accounts = list(accounts)
         self.keywords = tuple(keywords)
         self.max_actions_per_cycle = max_actions_per_cycle
+        # With a brain, JEV + LLM replace the keyword heuristics. Each evaluated
+        # post costs JEV calls (and possibly one LLM call), so evaluation is capped.
+        self.brain = brain
+        self.max_evaluations_per_cycle = max_evaluations_per_cycle
         self._telemetry = telemetry
         self._rng = rng or random.Random()
         self._own = set(self.accounts)
         self._acted: set[str] = set()       # post ids we already acted on
+        self._judged: set[str] = set()      # post ids the brain ruled out; never pay to re-judge
         self._recent_texts: list[str] = []
         self._next = 0
         self.cycle = 0
@@ -109,11 +117,22 @@ class BotLoop:
             p for p in obs.posts
             if p.post_id not in self._acted and p.author not in self._own
         ]
-        report.decisions = [
-            decide(p, side=self.side, keywords=self.keywords, rng=self._rng) for p in candidates
-        ]
-        actionable = [d for d in report.decisions if d.action is not ActionKind.NONE]
-        actionable.sort(key=lambda d: d.scores.score("relevance"), reverse=True)
+        if self.brain is not None:
+            batch = [p for p in candidates if p.post_id not in self._judged][: self.max_evaluations_per_cycle]
+            report.decisions = list(await asyncio.gather(*(self.brain.decide(p) for p in batch)))
+            # A clean "no action" verdict is final. Errors are retried next cycle.
+            self._judged.update(
+                d.post_id for d in report.decisions if d.action is ActionKind.NONE and d.scores.ok
+            )
+            actionable = [d for d in report.decisions if d.action is not ActionKind.NONE]
+            # Replies are the scarce write; likes are cheap. Keep JEV's order otherwise.
+            actionable.sort(key=lambda d: d.action is not ActionKind.REPLY)
+        else:
+            report.decisions = [
+                decide(p, side=self.side, keywords=self.keywords, rng=self._rng) for p in candidates
+            ]
+            actionable = [d for d in report.decisions if d.action is not ActionKind.NONE]
+            actionable.sort(key=lambda d: d.scores.score("relevance"), reverse=True)
 
         # ACT
         for decision in actionable[: self.max_actions_per_cycle]:

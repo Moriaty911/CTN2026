@@ -8,11 +8,14 @@
 All platform calls go through `ctn.actuator.Actuator`, never the client directly.
 """
 
+from .brain import BrainVerdict, JevLlmBrain
 from .decide import alignment, decide, relevance
 from .loop import BotLoop, CycleReport
 from .perceive import DEFAULT_KEYWORDS, Observation, perceive
 
 __all__ = [
+    "BrainVerdict",
+    "JevLlmBrain",
     "DEFAULT_KEYWORDS",
     "BotLoop",
     "CycleReport",
