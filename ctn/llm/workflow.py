@@ -26,6 +26,21 @@ def _strict_json(value):
     return json.loads(value, object_pairs_hook=pairs, parse_constant=constant)
 
 
+def _clean_natural_reply(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].strip() == "```":
+            cleaned = "\n".join(lines[1:-1]).strip()
+    if len(cleaned) >= 2 and cleaned.startswith("`") and cleaned.endswith("`"):
+        cleaned = cleaned[1:-1].strip()
+    if len(cleaned) >= 2:
+        if (cleaned[0] == '"' and cleaned[-1] == '"') or \
+           (cleaned[0] == "'" and cleaned[-1] == "'") or \
+           (cleaned[0] == '“' and cleaned[-1] == '”'):
+            cleaned = cleaned[1:-1].strip()
+    return cleaned
+
 class ReplyGenerator:
     def __init__(self, workflow: JevWorkflow, client: DeepSeekClient, *, audit_log: JsonlWriter | None = None):
         if type(workflow) is not JevWorkflow or type(client) is not DeepSeekClient:
@@ -48,7 +63,7 @@ class ReplyGenerator:
                 "need_count": len(result.needs), "execution_authorized": False})
         return result
 
-    def generate(self, handoff: HandoffPackage, brief: MaterialBrief, comparison=None, options=None):
+    def generate(self, handoff: HandoffPackage, brief: MaterialBrief, comparison=None, options=None, *, retry_feedback: str | None = None):
         """Recheck locally without JEV calls. No implicit generation on evaluate()."""
         options = DraftOptions() if options is None else options
         if type(options) is not DraftOptions or type(brief) is not MaterialBrief:
@@ -104,7 +119,7 @@ class ReplyGenerator:
                 material["template_version"] != "jev-briefs.v1"):
                 return finish("needs_review", "generation_binding_mismatch")
             # Model instructions are constructed only from our versioned templates.
-            messages = build_messages(material, options, max_chars)
+            messages = build_messages(material, options, max_chars, retry_feedback=retry_feedback)
         except (ValueError, KeyError, TypeError, IndexError, WorkflowValidationError):
             return finish("needs_review", "invalid_handoff_binding")
         call = self.client.call(messages)
@@ -126,27 +141,50 @@ class ReplyGenerator:
             content = message.get("content")
             if type(content) is not str or not content.strip():
                 return finish("failed", "empty_response")
-            output = _strict_json(content)
-            if type(output) is not dict or set(output) != {"status", "reply", "needs"}:
-                return finish("failed", "invalid_draft_schema")
-            status, reply, needs = output["status"], output["reply"], output["needs"]
-            if (type(status) is not str or status not in {"draft", "needs_materials", "needs_review"} or
-                type(needs) is not list or any(type(n) is not str or n not in MODEL_NEEDS for n in needs) or
-                len(needs) != len(set(needs))):
-                return finish("failed", "invalid_draft_schema")
             usage = envelope.get("usage", {})
             if type(usage) is dict:
                 base = replace(base, usage=tuple((key, usage[key]) for key in
                     ("prompt_tokens", "completion_tokens", "total_tokens")
                     if type(usage.get(key)) is int and usage[key] >= 0))
-            if status != "draft":
-                if reply is not None or not needs:
-                    return finish("failed", "invalid_draft_schema")
-                return finish(status, "model_requests_material" if status == "needs_materials" else "model_requests_review",
-                              needs=tuple(needs))
-            if type(reply) is not str or not reply.strip() or needs:
-                return finish("failed", "invalid_draft_schema")
-            reply = reply.strip()
+            reply = None
+            trimmed = content.strip()
+            # If the response happens to be JSON (e.g. from structured test fixtures or fallback),
+            # handle it gracefully.
+            if trimmed.startswith("{") and trimmed.endswith("}"):
+                try:
+                    output = _strict_json(trimmed)
+                    if isinstance(output, dict) and "status" in output:
+                        if set(output) != {"status", "reply", "needs"}:
+                            return finish("failed", "invalid_draft_schema")
+                        status = output["status"]
+                        raw_needs = output.get("needs") or []
+                        if status in {"needs_materials", "needs_review"}:
+                            if (output.get("reply") is None and isinstance(raw_needs, list)
+                                    and all(isinstance(n, str) and n in MODEL_NEEDS for n in raw_needs)
+                                    and len(raw_needs) == len(set(raw_needs)) and raw_needs):
+                                return finish(status,
+                                              "model_requests_material" if status == "needs_materials" else "model_requests_review",
+                                              needs=tuple(raw_needs))
+                            return finish("failed", "invalid_draft_schema")
+                        elif status == "draft":
+                            if "reply" in output and isinstance(output["reply"], str) and output["reply"].strip() and not raw_needs:
+                                reply = _clean_natural_reply(output["reply"])
+                            else:
+                                return finish("failed", "invalid_draft_schema")
+                        else:
+                            return finish("failed", "invalid_draft_schema")
+                    elif isinstance(output, dict) and "reply" in output and isinstance(output["reply"], str):
+                        reply = _clean_natural_reply(output["reply"])
+                except ValueError as err:
+                    if "duplicate JSON key" in str(err) or "nonfinite" in str(err):
+                        return finish("failed", "invalid_response")
+
+            if reply is None:
+                reply = _clean_natural_reply(content)
+
+            if not reply:
+                return finish("failed", "empty_response")
+
             # Reject malformed Unicode rather than leak it into logs/publishing.
             reply.encode("utf-8")
             if len(reply) > max_chars:

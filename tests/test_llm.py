@@ -31,11 +31,18 @@ REPLY = "Which policy version and exceptions does your question refer to?"
 
 
 def response(reply=REPLY, *, status="draft", needs=None, finish="stop", **fields):
-    data = {"choices": [{"finish_reason": finish, "message": {"role": "assistant", "content": json.dumps(
-        {"status": status, "reply": reply, "needs": needs or []})}}],
+    if status == "draft" and needs is None:
+        content = reply
+    else:
+        content = json.dumps({"status": status, "reply": reply, "needs": needs or []})
+    data = {"choices": [{"finish_reason": finish, "message": {"role": "assistant", "content": content}}],
         "usage": {"prompt_tokens": 50, "completion_tokens": 12, "total_tokens": 62}}
     data.update(fields)
-    return httpx.Response(200, json=data)
+    try:
+        raw_body = json.dumps(data).encode("utf-8")
+    except UnicodeEncodeError:
+        raw_body = json.dumps(data, ensure_ascii=True).encode("utf-8")
+    return httpx.Response(200, content=raw_body, headers={"Content-Type": "application/json"})
 
 
 class LlmTests(unittest.TestCase):
@@ -70,12 +77,28 @@ class LlmTests(unittest.TestCase):
             self.assertEqual(body["thinking"], {"type": "disabled"})
             self.assertFalse(body["stream"])
             self.assertNotIn("tools", body)
-            self.assertEqual(body["response_format"], {"type": "json_object"})
+            self.assertNotIn("response_format", body)
             self.assertNotIn(REPLY, repr(result))
             self.assertNotIn("reply", result.to_dict())
             self.assertEqual(result.to_dict(include_text=True)["reply"], REPLY)
             self.assertFalse(result.to_dict()["execution_authorized"])
             self.assertTrue(result.to_dict()["semantic_review_required"])
+
+    def test_natural_language_raw_text_and_markdown_fences_are_packaged_into_draft(self):
+        workflow, package, brief = self.ready()
+        cases = [
+            ("Just a plain human reply.", "Just a plain human reply."),
+            ('"Quoted human reply."', "Quoted human reply."),
+            ('“Smart quoted reply.”', "Smart quoted reply."),
+            ('```\nMarkdown fenced reply.\n```', "Markdown fenced reply."),
+            ('```markdown\nMarkdown fenced reply with tag.\n```', "Markdown fenced reply with tag."),
+            ('`Inline backtick reply.`', "Inline backtick reply."),
+        ]
+        for raw, expected in cases:
+            generator, _ = self.generator(workflow, lambda r, text=raw: response(text))
+            result = generator.generate(package, brief)
+            self.assertEqual(result.status, "draft")
+            self.assertEqual(result.reply, expected)
 
     def test_action_pending_like_and_no_interaction_never_call(self):
         workflows = [worker(specificity=2)[0], worker(side="no", value=0)[0],

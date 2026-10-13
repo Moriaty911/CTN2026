@@ -208,27 +208,40 @@ def run_demo(
         else:
             lines.append("   • 行为说明: 无回复价值或不符策略阈值，选择忽略 (OBSERVE)，避免为对方引流。")
 
+        if "postflight" in detail:
+            pf = detail["postflight"]
+            ans = pf.get("answers", {})
+            lines.extend([
+                f"",
+                f"3. JEV Post-flight 预发风控门禁 (单次4维判别):",
+                f"   • 门禁总决断: {str(ans.get('send_authorization', 'unknown')).upper()} (允许发送: {pf.get('can_send')})",
+                f"   • 阵营立场: {ans.get('side_alignment')}  | 策略遵从: {ans.get('purpose_compliance')}",
+                f"   • 毒性与注入: {'【违规阻断】' if ans.get('toxicity_and_injection') else '【安全通过】'}",
+            ])
+            if "postflight_attempt_1_rejected" in detail:
+                lines.append(f"   • ⚠️ 初审被拒反馈: {detail['postflight_attempt_1_rejected']} (已触发 Option B 自动修正重试)")
+
         # Execute through actuator
         exec_account = f"bot_{idx:03d}"
         if action_kind == ActionKind.LIKE:
             res = asyncio.run(actuator.like(exec_account, post.post_id))
             lines.extend([
                 f"",
-                f"3. 平台执行 (Actuator):",
+                f"4. 平台执行 (Actuator):",
                 f"   • 动作: LIKE | 账号: {exec_account} | 状态: {'成功' if res.ok else '失败'}",
             ])
         elif action_kind == ActionKind.REPLY:
             res = asyncio.run(actuator.reply(exec_account, post.post_id, verdict.text))
             lines.extend([
                 f"",
-                f"3. 平台执行 (Actuator):",
+                f"4. 平台执行 (Actuator):",
                 f"   • 动作: REPLY | 账号: {exec_account} | 状态: {'成功' if res.ok else '失败'}",
                 f"   • 平台生成帖子ID: {res.response.get('post_id')}",
             ])
         else:
             lines.extend([
                 f"",
-                f"3. 平台执行 (Actuator):",
+                f"4. 平台执行 (Actuator):",
                 f"   • 动作: IGNORE (不产生写请求，保护写预算配额)",
             ])
 

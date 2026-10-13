@@ -46,7 +46,7 @@ class DeepSeekClient:
         try:
             body = json.dumps({"model": cfg.model, "messages": messages, "stream": False,
                                "thinking": {"type": "disabled"}, "max_tokens": cfg.max_tokens,
-                               "temperature": cfg.temperature, "response_format": {"type": "json_object"}},
+                               "temperature": cfg.temperature},
                               ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode()
         except (TypeError, ValueError, UnicodeError):
             return LlmCallResult("invalid_request")

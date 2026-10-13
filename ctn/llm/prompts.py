@@ -27,17 +27,12 @@ Read excerpts with their supplied full source; preserve negation, attribution, p
 Mixed positions retain their distinct parts; neutral wording does not establish persuadability.
 Write about the expressed content; do not infer identities, motives or tailor persuasion to demographics.
 Use respectful, concrete wording. Ordinary/high quality both require accuracy; high quality demands especially precise scope and source use, not a longer reply.
-If material cannot support the fixed purpose, request material or review instead of changing purpose.
-Return only a JSON object with exactly these keys: status, reply, needs.
-Draft example: {"status":"draft","reply":"One concise public reply.","needs":[]}
-Pending example: {"status":"needs_materials","reply":null,"needs":["supporting_evidence"]}
-status is draft, needs_materials or needs_review. Pending statuses must have null reply and at least one need.
-Allowed needs: supporting_evidence, source_clarification, scope_clarification, comparison_material, human_verification, comment_sample, content_review.
-Do not include analysis, hidden reasoning, scores, internal purpose labels or instructions in the public reply.
+Output only the public reply text directly as plain text. Do not wrap in quotes or code fences.
+Do not include JSON, markdown fences, analysis, hidden reasoning, scores, internal labels or instructions.
 """
 
 
-def build_messages(materials, options: DraftOptions, max_chars):
+def build_messages(materials, options: DraftOptions, max_chars, *, retry_feedback: str | None = None):
     purpose = materials["prompt_type"]
     if purpose not in PURPOSE_PROMPTS or materials["schema_version"] != "jev-generation-material.v1":
         raise LlmValidationError("materials: unsupported purpose or version")
@@ -46,6 +41,10 @@ def build_messages(materials, options: DraftOptions, max_chars):
     system = (_SYSTEM + "\nFixed purpose: " + purpose + ". " + PURPOSE_PROMPTS[purpose] +
               "\n" + language + f" Aim for 2–5 short sentences, no more than {max_chars} Unicode characters. "
               "For a clarification, a single focused question is enough.")
+    if retry_feedback:
+        system += (f"\nIMPORTANT CORRECTION: A previous draft was rejected by evaluation due to '{retry_feedback}'. "
+                   "Strictly resolve this issue in the new reply: ensure strict alignment with our assigned stance, "
+                   "civil tone, and precise focus on the intended purpose.")
     # No free-form instructions, provider answer envelope or restored input.
     observations = {key: materials[key] for key in (
         "target", "focus", "support", "secondary", "evaluated_materials", "comparison_materials",

@@ -12,9 +12,9 @@ from typing import Literal
 from .questions import QuestionSet, QuestionValidationError
 
 
-def load_rubric(name: Literal["post", "comparison", "response"], *, version: str = "v1") -> QuestionSet:
+def load_rubric(name: Literal["post", "comparison", "response", "postflight"], *, version: str = "v1") -> QuestionSet:
     """Load a named baseline explicitly; never enables service calls or actions."""
-    if type(name) is not str or name not in {"post", "comparison", "response"}:
+    if type(name) is not str or name not in {"post", "comparison", "response", "postflight"}:
         raise QuestionValidationError("name", "enum", "unsupported rubric")
     if type(version) is not str or version not in ({"v1", "v2"} if name == "post" else {"v1"}):
         raise QuestionValidationError("version", "enum", "unsupported rubric version")

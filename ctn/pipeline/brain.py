@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from ..jev import JevWorkflow, MaterialBrief, TextSpan
+from ..jev import JevPostflightChecker, JevWorkflow, MaterialBrief, TextSpan
 from ..llm import DraftOptions, ReplyGenerator
 from ..models import ActionKind, Decision, JevAnswers, Post, Side, Tier
 
@@ -52,6 +52,7 @@ class JevLlmBrain:
         generator: ReplyGenerator,
         *,
         side: Side,
+        postflight: JevPostflightChecker | None = None,
         options: DraftOptions | None = None,
         information_gap: str = DEFAULT_INFORMATION_GAP,
     ) -> None:
@@ -60,6 +61,7 @@ class JevLlmBrain:
         self.workflow = workflow
         self.generator = generator
         self.side = side
+        self.postflight = postflight if postflight is not None else JevPostflightChecker(workflow.evaluator.client)
         self.options = options or DraftOptions()
         self.information_gap = information_gap
 
@@ -105,12 +107,49 @@ class JevLlmBrain:
             "P08", TextSpan(("content", "post", "text"), 0, len(text), text),
             information_gap=self.information_gap,
         )
-        # generate() completes local preparation from the supplied brief itself.
+        # Attempt 1: generate candidate draft
         draft = self.generator.generate(package, brief, options=self.options)
         detail["draft"] = draft.to_dict()
         if draft.status != "draft" or not draft.reply:
             return BrainVerdict(reason=f"llm:{draft.status}:{draft.reason}", prompt_type=draft.prompt_type, detail=detail)
-        return BrainVerdict(ActionKind.REPLY, draft.reply, "llm:draft", draft.prompt_type, detail)
+
+        # Postflight gate check 1
+        pv1 = self.postflight.check(
+            post_id=post.post_id,
+            target_text=post.text,
+            reply_text=draft.reply,
+            assigned_side=self.side.value,
+            intended_purpose=draft.prompt_type or "P08",
+        )
+        detail["postflight"] = pv1.to_dict()
+
+        if pv1.can_send:
+            return BrainVerdict(ActionKind.REPLY, draft.reply, "approved", draft.prompt_type, detail)
+
+        # Option B: One targeted retry if postflight rejected attempt 1
+        detail["postflight_attempt_1_rejected"] = pv1.reason
+        draft_retry = self.generator.generate(
+            package, brief, options=self.options, retry_feedback=pv1.reason,
+        )
+        detail["draft_retry"] = draft_retry.to_dict()
+        if draft_retry.status != "draft" or not draft_retry.reply:
+            return BrainVerdict(ActionKind.NONE, reason=f"postflight_rejected:{pv1.reason}", prompt_type=draft.prompt_type, detail=detail)
+
+        # Postflight gate check 2 on the retried draft
+        pv2 = self.postflight.check(
+            post_id=post.post_id,
+            target_text=post.text,
+            reply_text=draft_retry.reply,
+            assigned_side=self.side.value,
+            intended_purpose=draft_retry.prompt_type or "P08",
+        )
+        detail["postflight_retry"] = pv2.to_dict()
+
+        if pv2.can_send:
+            return BrainVerdict(ActionKind.REPLY, draft_retry.reply, "approved_on_retry", draft_retry.prompt_type, detail)
+
+        # Abort reply after failed retry to protect account safety and write quota
+        return BrainVerdict(ActionKind.NONE, reason=f"postflight_rejected:{pv2.reason}", prompt_type=draft.prompt_type, detail=detail)
 
     async def athink(self, post: Post) -> BrainVerdict:
         return await asyncio.to_thread(self.think, post)
