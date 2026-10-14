@@ -1,0 +1,116 @@
+"""Tests for harness.md parsing, Pi skill integrity, and CLI edge cases."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import re
+import tempfile
+import unittest
+
+from ctn.macro.cli import main
+
+
+class HarnessFileIntegrityTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(__file__).resolve().parent.parent
+        self.harness_file = self.root / "harness.md"
+        self.skill_file = self.root / ".pi" / "skills" / "campaign-publisher" / "SKILL.md"
+
+    def test_harness_file_exists_and_contains_core_sections(self):
+        self.assertTrue(self.harness_file.is_file(), "harness.md must exist at repository root")
+        content = self.harness_file.read_text(encoding="utf-8")
+
+        required_sections = [
+            "1. 战局总纲",
+            "2. 账号状态与排期锁",
+            "3. 媒体与特权 NPC 追踪看板",
+            "4. 人工最高指令区",
+            "5. 宏观发帖执行流水日志",
+        ]
+        for section in required_sections:
+            self.assertIn(section, content, f"harness.md missing required section: {section}")
+
+    def test_extract_active_human_directives(self):
+        """Verify that standing directives marked with [ACTIVE] can be extracted."""
+        content = self.harness_file.read_text(encoding="utf-8")
+        active_directives = re.findall(r"\[ACTIVE\]\s*(.*)", content)
+        self.assertGreater(len(active_directives), 0, "Should have at least one active human directive")
+        for directive in active_directives:
+            self.assertTrue(len(directive.strip()) > 5)
+
+    def test_account_table_has_all_personas(self):
+        """Verify that all default accounts are tracked in the harness.md table."""
+        content = self.harness_file.read_text(encoding="utf-8")
+        expected_accounts = ["bot_worker_yes", "bot_debater_yes", "bot_medic_yes", "bot_policy_yes"]
+        for acc in expected_accounts:
+            self.assertIn(acc, content, f"Account {acc} must be tracked in harness.md")
+
+    def test_pi_skill_file_integrity(self):
+        """Verify that .pi/skills/campaign-publisher/SKILL.md is valid and well-formed."""
+        self.assertTrue(self.skill_file.is_file(), "SKILL.md must exist in .pi/skills/campaign-publisher/")
+        content = self.skill_file.read_text(encoding="utf-8")
+
+        # Check YAML frontmatter
+        self.assertTrue(content.startswith("---"))
+        frontmatter_end = content.find("---", 3)
+        self.assertGreater(frontmatter_end, 3)
+        frontmatter = content[3:frontmatter_end]
+        self.assertIn("name: campaign-publisher", frontmatter)
+        self.assertIn("description:", frontmatter)
+
+        # Check required workflow keywords in instructions
+        self.assertIn("harness.md", content)
+        self.assertIn("python -m ctn.macro status", content)
+        self.assertIn("python -m ctn.macro publish", content)
+
+
+class MacroCliEdgeCaseTests(unittest.TestCase):
+    def test_publish_unknown_account_fails_gracefully(self):
+        with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
+            code = main([
+                "--state-file", tmp.name,
+                "publish",
+                "--account", "non_existent_account",
+                "--text", "Valid post text",
+                "--dry-run",
+            ])
+            self.assertEqual(code, 1)
+
+    def test_publish_dry_run_flag(self):
+        with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
+            code = main([
+                "--state-file", tmp.name,
+                "publish",
+                "--account", "bot_debater_yes",
+                "--text", "Debate inquiry about Kingstonia policy.",
+                "--dry-run",
+                "--bypass-jev",
+            ])
+            self.assertEqual(code, 0)
+
+    def test_warmup_cycling_index(self):
+        with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
+            # Seed index 0 on bot_worker_yes
+            code0 = main([
+                "--state-file", tmp.name,
+                "warmup",
+                "--account", "bot_worker_yes",
+                "--index", "0",
+                "--dry-run",
+            ])
+            self.assertEqual(code0, 0)
+
+            # Seed index 1 on bot_debater_yes (different account, so not blocked by worker cooldown)
+            code1 = main([
+                "--state-file", tmp.name,
+                "warmup",
+                "--account", "bot_debater_yes",
+                "--index", "1",
+                "--dry-run",
+            ])
+            self.assertEqual(code1, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

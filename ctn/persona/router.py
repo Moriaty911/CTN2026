@@ -87,6 +87,19 @@ class PersonaRouter:
         """Reset all account runtime states (cooldowns and counters)."""
         self._states.clear()
 
+    def load_states(self, states_data: dict[str, dict[str, Any]]) -> None:
+        """Load account states from dictionary."""
+        for acc_id, d in states_data.items():
+            self._states[acc_id] = AccountState(
+                account_id=acc_id,
+                last_posted_at=float(d.get("last_posted_at", 0.0)),
+                post_count=int(d.get("post_count", 0)),
+            )
+
+    def dump_states(self) -> dict[str, dict[str, Any]]:
+        """Dump all account states to a dictionary."""
+        return {acc_id: s.to_dict() for acc_id, s in self._states.items()}
+
     def score_archetypes(
         self,
         data: dict[str, Any],

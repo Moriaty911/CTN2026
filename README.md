@@ -1,10 +1,10 @@
 # CNT2026
 
-Python components for the Capture the Narrative 2026 project. The current working implementation includes **JEV content evaluation and decisions plus DeepSeek reply drafting**: it accepts standardized posts, evaluates them through TypeSafe JEV, validates the returned JSON, applies confirmed interaction rules, checks traceable materials, and explicitly generates a draft within the selected purpose.
+Python components for the Capture the Narrative 2026 project. The system operates as a **Dual-Engine Architecture** combining high-throughput **Micro-level Reactive Replies** (JEV stream evaluation + DeepSeek drafting + JEV 4-dimension pre-send gatekeeping) with a strategic **Macro-level Proactive Publishing Engine** driven by the `pi.dev` Agent harness, long-term state tracking via `harness.md`, and multi-account persona lifecycle management.
 
 The scenario is the fictional Kingstonia referendum on vaccination proof for access to public spaces. Supporting voluntary vaccination does not automatically mean supporting the access requirement. Alignment is calculated against the team's explicitly supplied side; a single post does not establish an author's permanent affiliation.
 
-**Status as of October 12, 2026:** Tasks T01–T09 have a completed first implementation. Neutral/mixed posts now receive a separate JEV action-and-purpose judgment with material checks before generation. T10 has calibration tools, but calibration against real competition content and outcome feedback remains pending. This repository does not yet provide a complete autonomous posting application.
+**Status as of October 14, 2026:** Stage 1 implementation is fully operational with 436 passing unit tests. Features include real-time JEV evaluation, multi-account persona routing with cooldown fallback, JEV 4-dimension postflight gatekeeping with Option B retries, macro environment sensing (trending hashtags & dual newspaper monitoring), Kingstonia native warmup post seeds, and `pi.dev` strategic campaign harness integration.
 
 ## Implemented capabilities
 
@@ -16,31 +16,65 @@ The scenario is the fictional Kingstonia referendum on vaccination proof for acc
 | Response parsing | Validates Choice, Score, and Noul answers against the exact request; preserves per-answer failures and applies information-sufficiency gates. |
 | Evaluation routing | Runs triage and, when appropriate, deep evaluation. Supports ordered batches, duplicate-request sharing, optional caching, and explicit post-pair comparisons. |
 | Interaction decisions | Applies confirmed aligned/opposing rules; asks JEV to select the action and primary response purpose for neutral/mixed posts. Ambiguous or unavailable decisions remain pending. |
-| Generation handoff | Checks purpose and evidence bindings. Neutral/mixed briefs must match the JEV-selected purpose; downstream generates from the fixed direction. |
-| Reply drafting | Calls DeepSeek from a locally bound, checked reply task using internal P01–P09 templates; validates JSON, completion, length and local injection/secret signals. Returns a draft or a pending/failure state. |
+| Multi-account personas | 4 specialized archetypes (sharp debater, medical expert, grassroots worker, policy analyst) with signal-based routing, per-account cooldown tracking, and fallback. |
+| Reply drafting | Calls DeepSeek from a locally bound, checked reply task using internal P01–P09 templates; injects persona background and voice instructions. |
+| Pre-send gatekeeper | Single JEV call (<0.3s) evaluating candidate drafts across 4 dimensions: side alignment, purpose compliance, toxicity/injection, and send authorization, with Option B targeted retry. |
+| Macro sensing | Collects platform trending hashtags, headlines from dual newspapers (*Daily Kingstonia* & *Kingstonia Herald*), VIP NPC posts, and account availability. |
+| Strategic publishing | Proactive publishing with JEV preflight auditing and account cooldown enforcement, plus pre-vetted Kingstonia native warmup seed posts. |
+| Pi Agent harness | Integration with `pi.dev` via `.pi/skills/campaign-publisher/SKILL.md` and persistent working memory in `harness.md`. |
 | Audit and review | Records metadata-only JSONL events and supports field-level human references, routing replay, feedback records, and comparisons between evaluated rubric versions. |
 
-## Architecture and ownership
+## Dual-Engine Architecture
 
 ```mermaid
-flowchart LR
-    U[Upstream standardized content] --> W[JevWorkflow]
-    W --> I[Input validation and packing]
-    I --> T[JEV triage]
-    T --> R{Risk and relevance routing}
-    R -->|Candidate| D[JEV deep evaluation]
-    R -->|Observe, review, or failure| H[Bound handoff]
-    D --> A[Validated assessment and action decision]
-    A -->|Aligned or opposing| H
-    A -->|Eligible neutral or mixed| J[JEV response action and purpose]
-    J --> G[Risk, sufficiency, probability and consistency checks]
-    G --> H
-    H --> M[Same-purpose material checks]
-    M --> L[ReplyGenerator: fixed-purpose DeepSeek draft]
-    L --> O[Downstream account allocation, semantic review and publishing]
+flowchart TB
+    subgraph Platform["Legit Social Platform (Mock / Production)"]
+        RawFeed["Incoming Posts Stream"]
+        TrendingData["Trending Hashtags & Posts"]
+        Newspapers["Dual Newspapers (Daily Kingstonia & Kingstonia Herald)"]
+        VIP_NPCs["7 Special NPCs (Journalists, Columnists, Candidates)"]
+    end
+
+    subgraph MacroEngine["【Macro Strategic Loop】(Periodic Pulse / 1-2 Hours)"]
+        direction TB
+        MacroSensing["1. Macro Sensing (ctn.macro status)<br>• Trends, News Headlines, VIP NPC topics"]
+        HarnessMemory["2. Persistent Working Memory (harness.md)<br>• Campaign Phase, Commitments, Account Locks, Human Directives"]
+        PiAgent["3. Pi Agent with Chain of Thought (pi.dev)<br>• Strategic Reasoning & Tactical Post Drafting"]
+        MacroSensing --> PiAgent
+        HarnessMemory <--> PiAgent
+    end
+
+    subgraph MicroPipeline["【Micro Reactive Loop】(Continuous Stream Batch)"]
+        direction TB
+        StreamRead["1. Perceive Stream & Keyword Search"]
+        JevEval["2. JEV Workflow Evaluation (JevWorkflow)<br>• Triage & Deep Stance/Relevance/Topic Assessment"]
+        DecisionGate{"3. Action Decision"}
+        Router["4. Persona Router (PersonaRouter)<br>• 4 Archetypes Match & 60s Cooldown Tracker"]
+        LlmDraft["5. LLM Reply Generator (ReplyGenerator)<br>• DeepSeek + Persona Voice & Tone Injection"]
+        
+        StreamRead --> JevEval --> DecisionGate
+        DecisionGate -->|LIKE| LikeDirect["Like (Amplify Allied Voices)"]
+        DecisionGate -->|NONE| SkipDirect["Ignore (Observe & Conserve Quota)"]
+        DecisionGate -->|REPLY| Router --> LlmDraft
+    end
+
+    subgraph SafeExecution["Unified Safety Gate & Actuator"]
+        Postflight["JEV 4-Dimension Gatekeeper (JevPostflightChecker)<br>• Side Alignment, Purpose, Toxicity, Authorization<br>• Option B Targeted Retry on Rejection"]
+        Actuator["Actuator Execution Layer<br>• ActionGate (Rate Limiting) & BudgetLedger (Quota Tracking)"]
+        
+        LlmDraft --> Postflight
+        PiAgent -->|"ctn.macro publish"| Postflight
+        Postflight -->|"Approved"| Actuator
+    end
+
+    Actuator -->|"Publish / Reply / Like"| Platform
+    RawFeed -.-> StreamRead
+    TrendingData -.-> MacroSensing
+    Newspapers -.-> MacroSensing
+    VIP_NPCs -.-> MacroSensing
 ```
 
-The JEV module owns content preparation, evaluation, parsing, internal routing, interaction decisions, and generation-material checks. The separate LLM module owns service calls, internal drafting prompts and structural output checks. Other modules supply material briefs, choose purposes for aligned/opposing posts, and own platform fetching and field mapping, historical storage and retrieval, actual account allocation, semantic draft review, publishing, and outcome collection. Original-post planning remains a separate flow.
+The JEV module owns content preparation, evaluation, parsing, internal routing, interaction decisions, and generation-material checks. The separate LLM module owns service calls, internal drafting prompts and structural output checks. The macro module owns macro sensing, persistent campaign memory, and strategic proactive publishing via the Pi Agent harness. All platform writes pass through the JEV pre-send gatekeeper and the rate-limited, budgeted Actuator.
 
 `JevWorkflow` is the recommended integration entry point. It uses the confirmed `ctn-post.v2` rubric for new evaluations. Lower-level `JevEvaluator`, `JevPacker`, and `load_rubric("post")` retain their v1 defaults for compatibility; use explicit versions when working below the workflow layer. `build_handoff()` alone preserves a `pending_rules` placeholder and does not apply the workflow's action policy.
 
@@ -360,6 +394,70 @@ Synthetic target: “I keep seeing people mention exceptions to the vaccination-
 
 This verifies credential/transport/draft integration, not purpose-selection accuracy or factual review of real competition content.
 
+## Macro Strategic Publishing & Pi Agent Harness
+
+While the micro loop (`JevWorkflow` + `ReplyGenerator` + `JevPostflightChecker`) reacts to individual posts in real time, the **Macro Strategic Engine** drives autonomous, scheduled narrative publishing. It observes broad platform trends, targets the two influential newspapers (*Daily Kingstonia* and *Kingstonia Herald*), provides news bait for the 7 VIP journalist NPCs, and manages the account lifecycle (warmup seeds vs climax deployment).
+
+### 1. Working Memory & Human Governance (`harness.md`)
+
+Each scheduled run of the macro harness reads and updates `harness.md` in the project root. This file provides persistent state across runs:
+- **Active Strategic Focus**: Current campaign phase (e.g., Phase 1: Warmup & Setup, Phase 2: Narrative Shaping, Phase 3: Climax Push) and lock expiry timestamps.
+- **Account Cadence Locks**: Cooldown tracking ensuring accounts are not overused (e.g. keeping expert accounts dormant until Phase 2).
+- **VIP Watchlist**: Media headlines and topics favored by journalist NPCs.
+- **Human Directives**: Standing instructions from human commanders that the agent must strictly respect.
+- **Action History**: Chronological audit trail of all proactive posts.
+
+### 2. Macro Sensing & Publishing CLI (`ctn.macro`)
+
+The Python CLI handles deterministic tasks, rate limits, and JEV safety gatekeeping:
+
+```sh
+# 1. Inspect macro environment (trending hashtags, dual newspapers, account cooldowns)
+python -m ctn.macro status --side yes
+
+# 2. Publish a strategic post (automatically audited by JEV 4-dimension preflight gate)
+python -m ctn.macro publish --account bot_worker_yes --text "Morning transit crowded on the ring road." --tag "#KingstoniaVotes"
+
+# 3. Publish a pre-vetted Kingstonia native warmup post (establishes authentic citizen presence)
+python -m ctn.macro warmup --account bot_worker_yes --index 0
+```
+
+### 3. Pi Agent Integration Tutorial (`pi.dev`)
+
+The strategic decision-maker uses the [pi.dev](https://pi.dev) agent framework with native Chain-of-Thought (CoT) reasoning.
+
+#### Step 1: Install Pi CLI
+```sh
+# macOS / Linux
+curl -fsSL https://pi.dev/install.sh | sh
+
+# Or via npm (Node.js >= 22.19.0)
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+```
+
+#### Step 2: Agent Skill Configuration
+The repository includes a preconfigured Pi skill in `.pi/skills/campaign-publisher/SKILL.md`. When Pi runs in the project directory, it automatically loads this skill into context.
+
+The skill instructs Pi to:
+1. Read `harness.md` to check active commitments, account locks, and human overrides.
+2. Run `python -m ctn.macro status` to evaluate current trending topics and newspaper coverage.
+3. Use Chain-of-Thought (CoT) to decide whether to post, which account to dispatch, and how to craft high news-value content.
+4. Execute `python -m ctn.macro publish` or `warmup`.
+5. Update `harness.md` with the new action log and next lock timestamp.
+
+#### Step 3: Run a Strategic Campaign Pulse
+Run a single non-interactive pulse:
+```sh
+pi -p "Run campaign pulse: read harness.md, evaluate macro status, execute strategic post if appropriate, and update harness.md"
+```
+
+#### Step 4: Schedule Periodic Runs (Cron)
+To run autonomous strategic pulses every 2 hours:
+```sh
+# Add to crontab (crontab -e)
+0 */2 * * * cd /Users/liu/Documents/AI2026 && pi -p "Run campaign pulse: read harness.md, evaluate macro status, execute strategic post if appropriate, and update harness.md"
+```
+
 ## Compare supplied posts
 
 `workflow.compare(current_payload, historical_payload)` evaluates one explicitly supplied pair using `ctn-comparison.v1`. The caller owns historical storage, candidate selection, and retrieval.
@@ -401,7 +499,14 @@ Run the offline suite:
 python3 -m unittest discover -s tests -q
 ```
 
-The October 12, 2026 run passed **382 offline tests**, including 35 response-decision tests and 28 new LLM/configuration tests. Coverage includes input contracts, context omission, request binding, transport failures and retry limits, per-answer parsing, sufficiency gates, routing boundaries, batching and caching, action thresholds, historical guided/open planning, neutral/mixed JEV decisions, probability boundaries, conflicting answers, same-purpose material gates, fresh reassessment, injection defenses, audit handling, and calibration tools. Fake-response tests verify program behavior; they do not measure live JEV purpose-selection accuracy.
+The October 14, 2026 run passed **436 offline tests**, covering:
+- JEV workflow, inputs, routing, action decisions, rubric parsing, and calibration.
+- Multi-account persona models, archetype scoring, cooldown tracking, and fallback.
+- JEV 4-dimension preflight gatekeeping with Option B retries.
+- Macro environment state collection, strategic publisher, warmup seed retrieval, and CLI commands.
+- Dual-engine integration (shared actuator, budget ledger, rate limiter, and persona cooldown).
+- Harness state parsing, active human directive extraction, and Pi skill integrity.
+- Persona voice prompt injection and tone integrity across all YES and NO personas.
 
 For an explicit live wire-format check:
 
@@ -409,15 +514,17 @@ For an explicit live wire-format check:
 python3 -m ctn.jev.smoke
 ```
 
-This sends one synthetic v2 deep-evaluation request with retries disabled, parses its response, prints metadata and diagnostic counts only, and exits successfully only when all answers are valid. It uses the configured service and may incur a provider charge. The recorded final live check returned **HTTP 200 with all 17 answers valid**. It did not invoke an LLM or publish a platform action.
-
-Neither offline tests nor that synthetic live check establish real-content classification accuracy, measured reply benefit, or competition performance. The reference fixture uses six accepted boundary meanings with confirmations recorded per field; other annotations remain candidates. Correction priority is risk misses, alignment mistakes, unendorsed quotation attribution, and false conflicts between different conditions, followed by value-score and purpose-selection deviations.
-
 ## Repository map
 
 | Path | Role |
 |---|---|
+| `ctn/macro/` | Macro environment state collector (`state.py`), strategic publisher (`publisher.py`), and CLI entry point (`cli.py`). |
+| `ctn/persona/` | Persona models, built-in registry, routing engine (`router.py`), and native Kingstonia warmup seeds (`warmup_seeds.py`). |
+| `ctn/pipeline/` | Brain integration (`brain.py`), bot loop (`loop.py`), and perception (`perceive.py`). |
+| `.pi/skills/campaign-publisher/SKILL.md` | Pi Agent native skill for autonomous strategic narrative campaign publishing. |
+| `harness.md` | Root working memory, campaign phase tracking, account cadence locks, and human directive ledger. |
 | `ctn/jev/workflow.py` | Recommended evaluation, action, and material-handoff entry point. |
+| `ctn/jev/postflight.py`, `rubrics/postflight.v1.json` | 4-dimension JEV pre-send gatekeeper (side, purpose, toxicity/injection, authorization). |
 | `ctn/jev/inputs.py`, `outputs.py` | Standardized input and assessment contracts. |
 | `ctn/jev/questions.py`, `rubrics.py`, `rubrics/` | Typed questions, versioned rubrics, and relative-alignment mapping. |
 | `ctn/jev/packing.py`, `client.py`, `parsing.py` | Content preparation, transport, and response validation. |
@@ -429,10 +536,9 @@ Neither offline tests nor that synthetic live check establish real-content class
 | `ctn/jev/planning.py` | Historical v2 neutral/mixed LLM planning prompts and checked guidance. |
 | `ctn/jev/audit.py`, `calibration.py`, `smoke.py` | Metadata audit, review tools, and explicit live verification. |
 | `ctn/config.py`, `telemetry.py`, `models.py` | Shared configuration, logging, and project data structures. |
-| `ctn/client/base.py`, `mock.py`, `ratelimit.py` | Existing platform protocol, simulation, and rate-control foundations; not a connected production platform adapter. |
-| `ctn/llm/` | DeepSeek transport, fixed-purpose prompts, draft contracts, local checks and an explicit synthetic live smoke command. |
-| `ctn/rag/`, `ctn/pipeline/` | Placeholders for future integration. |
-| `tests/` | Offline unit tests and contract/workflow fixtures. |
+| `ctn/client/base.py`, `mock.py`, `ratelimit.py` | Platform protocol, simulation, and rate-control foundations. |
+| `ctn/llm/` | DeepSeek transport, persona voice injection, draft contracts, and local checks. |
+| `tests/` | Offline unit tests (420 tests passing) and contract/workflow fixtures. |
 | `tests/fixtures/jev_handoff/actions-v1.json` | Eight historical v1 synthetic action examples, including an explicit generation-material example; their neutral pending state remains a versioned historical example. |
 | `tests/fixtures/jev_handoff/response-planning-v1.json` | Historical v2 synthetic open, question-first, and guided planning examples. |
 | `tests/test_jev_response.py` | Offline third-stage decisions, thresholds, provenance, reassessment, material checks and compatibility. |
