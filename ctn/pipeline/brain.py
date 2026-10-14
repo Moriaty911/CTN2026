@@ -31,6 +31,7 @@ from typing import Any
 from ..jev import JevPostflightChecker, JevWorkflow, MaterialBrief, TextSpan
 from ..llm import DraftOptions, ReplyGenerator
 from ..models import ActionKind, Decision, JevAnswers, Post, Side, Tier
+from ..persona import PersonaRouter
 
 # Generic gap used for the P08 clarification brief. It deliberately assumes no facts.
 DEFAULT_INFORMATION_GAP = "Which specific policy detail, condition or evidence does the author mean?"
@@ -52,6 +53,7 @@ class JevLlmBrain:
         generator: ReplyGenerator,
         *,
         side: Side,
+        router: PersonaRouter | None = None,
         postflight: JevPostflightChecker | None = None,
         options: DraftOptions | None = None,
         information_gap: str = DEFAULT_INFORMATION_GAP,
@@ -61,6 +63,7 @@ class JevLlmBrain:
         self.workflow = workflow
         self.generator = generator
         self.side = side
+        self.router = router if router is not None else PersonaRouter(default_side=side.value)
         self.postflight = postflight if postflight is not None else JevPostflightChecker(workflow.evaluator.client)
         self.options = options or DraftOptions()
         self.information_gap = information_gap
@@ -102,13 +105,27 @@ class JevLlmBrain:
         if selected not in (None, "P08"):
             return BrainVerdict(reason=f"needs_materials:{selected}", prompt_type=selected, detail=detail)
 
+        # Select persona and account via PersonaRouter
+        routing = self.router.route(data=data, post_text=post.text, side=self.side.value)
+        detail["routing"] = routing.to_dict()
+        detail["selected_account"] = routing.account_id
+
+        # If all eligible accounts are cooling down, pause reply to prevent spamming
+        if routing.in_cooldown:
+            return BrainVerdict(
+                ActionKind.NONE,
+                reason=f"account_cooldown:{routing.account_id}",
+                prompt_type=selected,
+                detail=detail,
+            )
+
         text = post.text
         brief = MaterialBrief(
             "P08", TextSpan(("content", "post", "text"), 0, len(text), text),
             information_gap=self.information_gap,
         )
-        # Attempt 1: generate candidate draft
-        draft = self.generator.generate(package, brief, options=self.options)
+        # Attempt 1: generate candidate draft using selected persona
+        draft = self.generator.generate(package, brief, options=self.options, persona=routing.persona)
         detail["draft"] = draft.to_dict()
         if draft.status != "draft" or not draft.reply:
             return BrainVerdict(reason=f"llm:{draft.status}:{draft.reason}", prompt_type=draft.prompt_type, detail=detail)
@@ -124,12 +141,13 @@ class JevLlmBrain:
         detail["postflight"] = pv1.to_dict()
 
         if pv1.can_send:
+            self.router.mark_used(routing.account_id)
             return BrainVerdict(ActionKind.REPLY, draft.reply, "approved", draft.prompt_type, detail)
 
         # Option B: One targeted retry if postflight rejected attempt 1
         detail["postflight_attempt_1_rejected"] = pv1.reason
         draft_retry = self.generator.generate(
-            package, brief, options=self.options, retry_feedback=pv1.reason,
+            package, brief, options=self.options, persona=routing.persona, retry_feedback=pv1.reason,
         )
         detail["draft_retry"] = draft_retry.to_dict()
         if draft_retry.status != "draft" or not draft_retry.reply:
@@ -146,6 +164,7 @@ class JevLlmBrain:
         detail["postflight_retry"] = pv2.to_dict()
 
         if pv2.can_send:
+            self.router.mark_used(routing.account_id)
             return BrainVerdict(ActionKind.REPLY, draft_retry.reply, "approved_on_retry", draft_retry.prompt_type, detail)
 
         # Abort reply after failed retry to protect account safety and write quota
@@ -163,9 +182,10 @@ class JevLlmBrain:
         except Exception as exc:  # one bad post must never kill a cycle
             verdict = BrainVerdict(reason="brain_error")
             error = type(exc).__name__
+        account_to_use = account or verdict.detail.get("selected_account", "bot_default")
         tier = {ActionKind.LIKE: Tier.AMPLIFY, ActionKind.REPLY: Tier.PUBLISH}.get(verdict.action, Tier.OBSERVE)
         return Decision(
-            decision_id=uuid.uuid4().hex[:12], post_id=post.post_id, tier=tier, account=account,
+            decision_id=uuid.uuid4().hex[:12], post_id=post.post_id, tier=tier, account=account_to_use,
             scores=JevAnswers(answers={"relevance": 1.0 if verdict.action is not ActionKind.NONE else 0.0},
                               raw={"source": "jev+llm", **verdict.detail}, ok=not error, error=error),
             rationale=verdict.reason, action=verdict.action, text=verdict.text,

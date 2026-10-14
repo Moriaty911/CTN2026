@@ -2,6 +2,7 @@
 
 import json
 
+from ctn.persona.models import Persona
 from .models import DraftOptions, LlmValidationError
 
 
@@ -32,7 +33,14 @@ Do not include JSON, markdown fences, analysis, hidden reasoning, scores, intern
 """
 
 
-def build_messages(materials, options: DraftOptions, max_chars, *, retry_feedback: str | None = None):
+def build_messages(
+    materials,
+    options: DraftOptions,
+    max_chars: int,
+    *,
+    persona: Persona | None = None,
+    retry_feedback: str | None = None,
+):
     purpose = materials["prompt_type"]
     if purpose not in PURPOSE_PROMPTS or materials["schema_version"] != "jev-generation-material.v1":
         raise LlmValidationError("materials: unsupported purpose or version")
@@ -41,6 +49,14 @@ def build_messages(materials, options: DraftOptions, max_chars, *, retry_feedbac
     system = (_SYSTEM + "\nFixed purpose: " + purpose + ". " + PURPOSE_PROMPTS[purpose] +
               "\n" + language + f" Aim for 2–5 short sentences, no more than {max_chars} Unicode characters. "
               "For a clarification, a single focused question is enough.")
+    if persona is not None:
+        system += (
+            f"\nPersona Profile: You are posting as '{persona.name}'. "
+            f"Background: {persona.bio} "
+            f"Voice & Tone Instructions: {persona.tone_instruction} "
+            "Strictly embody this persona's voice and perspective while remaining completely natural. "
+            "Do not explicitly state your bio or introduce yourself by job title unless naturally relevant."
+        )
     if retry_feedback:
         system += (f"\nIMPORTANT CORRECTION: A previous draft was rejected by evaluation due to '{retry_feedback}'. "
                    "Strictly resolve this issue in the new reply: ensure strict alignment with our assigned stance, "

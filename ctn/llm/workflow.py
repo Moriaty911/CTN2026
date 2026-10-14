@@ -7,6 +7,7 @@ import json
 from ctn.jev.handoff import HandoffPackage, validate_workflow_handoff
 from ctn.jev.materials import MaterialBrief, MaterialChecker
 from ctn.jev.workflow import JevWorkflow, WorkflowValidationError
+from ctn.persona.models import Persona
 from ctn.telemetry import JsonlWriter
 from .client import DeepSeekClient
 from .models import DraftOptions, ReplyDraftResult, MODEL_NEEDS, LlmValidationError
@@ -63,7 +64,7 @@ class ReplyGenerator:
                 "need_count": len(result.needs), "execution_authorized": False})
         return result
 
-    def generate(self, handoff: HandoffPackage, brief: MaterialBrief, comparison=None, options=None, *, retry_feedback: str | None = None):
+    def generate(self, handoff: HandoffPackage, brief: MaterialBrief, comparison=None, options=None, *, persona: Persona | None = None, retry_feedback: str | None = None):
         """Recheck locally without JEV calls. No implicit generation on evaluate()."""
         options = DraftOptions() if options is None else options
         if type(options) is not DraftOptions or type(brief) is not MaterialBrief:
@@ -88,7 +89,7 @@ class ReplyGenerator:
             selected = selected or (prior["prompt_type"] if prior else None)
             base = replace(base, target_post_id=original["targets"][0]["post_id"], prompt_type=selected,
                            parent_request_id=original["flow"]["deep"]["assessment"]["request"]["request_id"]
-                               if original["flow"]["deep"] else None)
+                                if original["flow"]["deep"] else None)
             if action["status"] != "decided" or action["action"] != "reply":
                 return finish("needs_review" if action["status"] == "needs_review" else "blocked",
                               "action_not_ready", needs=tuple(original.get("generation_needs", ())))
@@ -119,7 +120,7 @@ class ReplyGenerator:
                 material["template_version"] != "jev-briefs.v1"):
                 return finish("needs_review", "generation_binding_mismatch")
             # Model instructions are constructed only from our versioned templates.
-            messages = build_messages(material, options, max_chars, retry_feedback=retry_feedback)
+            messages = build_messages(material, options, max_chars, persona=persona, retry_feedback=retry_feedback)
         except (ValueError, KeyError, TypeError, IndexError, WorkflowValidationError):
             return finish("needs_review", "invalid_handoff_binding")
         call = self.client.call(messages)

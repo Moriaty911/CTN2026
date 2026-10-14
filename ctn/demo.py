@@ -196,6 +196,15 @@ def run_demo(
         ]
 
         if action_kind == ActionKind.REPLY:
+            routing_info = detail.get("routing") or {}
+            persona_info = routing_info.get("persona") or {}
+            if routing_info:
+                lines.extend([
+                    f"   • 路由人设账号: @{routing_info.get('account_id')} ({persona_info.get('name')} · {routing_info.get('target_archetype')})",
+                    f"   • 人设背景画像: {persona_info.get('bio')}",
+                    f"   • 设定回复语气: {persona_info.get('tone_instruction', '')[:60]}...",
+                    f"   • 路由决策原因: {routing_info.get('reason')} (匹配分: {routing_info.get('score')})",
+                ])
             lines.extend([
                 f"   • 回复策略模板: {verdict.prompt_type or 'P08 (澄清疑问)'}",
                 f"   • LLM 拟定回复: \"{verdict.text}\"",
@@ -221,21 +230,21 @@ def run_demo(
             if "postflight_attempt_1_rejected" in detail:
                 lines.append(f"   • ⚠️ 初审被拒反馈: {detail['postflight_attempt_1_rejected']} (已触发 Option B 自动修正重试)")
 
-        # Execute through actuator
-        exec_account = f"bot_{idx:03d}"
+        # Execute through actuator using the routed persona account
+        exec_account = detail.get("selected_account") or f"bot_{side.value}_{idx:03d}"
         if action_kind == ActionKind.LIKE:
             res = asyncio.run(actuator.like(exec_account, post.post_id))
             lines.extend([
                 f"",
                 f"4. 平台执行 (Actuator):",
-                f"   • 动作: LIKE | 账号: {exec_account} | 状态: {'成功' if res.ok else '失败'}",
+                f"   • 动作: LIKE | 执行账号: @{exec_account} | 状态: {'成功' if res.ok else '失败'}",
             ])
         elif action_kind == ActionKind.REPLY:
             res = asyncio.run(actuator.reply(exec_account, post.post_id, verdict.text))
             lines.extend([
                 f"",
                 f"4. 平台执行 (Actuator):",
-                f"   • 动作: REPLY | 账号: {exec_account} | 状态: {'成功' if res.ok else '失败'}",
+                f"   • 动作: REPLY | 执行账号: @{exec_account} | 状态: {'成功' if res.ok else '失败'}",
                 f"   • 平台生成帖子ID: {res.response.get('post_id')}",
             ])
         else:
