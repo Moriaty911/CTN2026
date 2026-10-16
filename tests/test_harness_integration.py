@@ -22,14 +22,20 @@ class HarnessFileIntegrityTests(unittest.TestCase):
         content = self.harness_file.read_text(encoding="utf-8")
 
         required_sections = [
-            "1. 战局总纲",
-            "2. 账号状态与排期锁",
-            "3. 媒体与特权 NPC 追踪看板",
-            "4. 人工最高指令区",
-            "5. 宏观发帖执行流水日志",
+            "1. Active Strategic Focus",
+            "2. Account States & Cadence Locks",
+            "3. Media & VIP NPC Watchlist",
+            "4. Human Directives & Standing Rules",
+            "5. Action History",
         ]
         for section in required_sections:
             self.assertIn(section, content, f"harness.md missing required section: {section}")
+
+        # Verify harness.md contains strictly English text (no CJK characters)
+        self.assertIsNone(
+            re.search(r"[\u4e00-\u9fff]", content),
+            "harness.md must be written strictly in English without Chinese characters",
+        )
 
     def test_extract_active_human_directives(self):
         """Verify that standing directives marked with [ACTIVE] can be extracted."""
@@ -47,7 +53,7 @@ class HarnessFileIntegrityTests(unittest.TestCase):
             self.assertIn(acc, content, f"Account {acc} must be tracked in harness.md")
 
     def test_pi_skill_file_integrity(self):
-        """Verify that .pi/skills/campaign-publisher/SKILL.md is valid and well-formed."""
+        """Verify that .pi/skills/campaign-publisher/SKILL.md is valid and strictly in English."""
         self.assertTrue(self.skill_file.is_file(), "SKILL.md must exist in .pi/skills/campaign-publisher/")
         content = self.skill_file.read_text(encoding="utf-8")
 
@@ -63,6 +69,12 @@ class HarnessFileIntegrityTests(unittest.TestCase):
         self.assertIn("harness.md", content)
         self.assertIn("python -m ctn.macro status", content)
         self.assertIn("python -m ctn.macro publish", content)
+
+        # Verify SKILL.md contains strictly English text (no CJK characters)
+        self.assertIsNone(
+            re.search(r"[\u4e00-\u9fff]", content),
+            "SKILL.md must be written strictly in English without Chinese characters",
+        )
 
 
 class MacroCliEdgeCaseTests(unittest.TestCase):

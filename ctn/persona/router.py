@@ -58,46 +58,89 @@ def _get_val(ans_obj: Any) -> Any:
     return ans_obj
 
 
+# Cross-persona complementarity matrix for allied (P01) support replies:
+# Maps the detected topic archetype of an allied post to (primary_complement, secondary_complement).
+_COMPLEMENTARY_ARCHETYPES: dict[PersonaArchetype, tuple[PersonaArchetype, PersonaArchetype]] = {
+    "grassroots_worker": ("medical_expert", "policy_analyst"),
+    "medical_expert": ("grassroots_worker", "policy_analyst"),
+    "policy_analyst": ("grassroots_worker", "sharp_debater"),
+    "sharp_debater": ("policy_analyst", "medical_expert"),
+}
+
+
 class PersonaRouter:
-    """Routes target posts to the most suitable account persona based on JEV signals."""
+    """Routes target posts to the most suitable account persona, backed by SQLite StateStore."""
 
     def __init__(
         self,
         registry: PersonaRegistry | None = None,
         *,
         default_side: str = "yes",
+        store: Any | None = None,
+        db_path: str = ":memory:",
     ) -> None:
+        from ctn.storage import StateStore
+
         self.registry = registry if registry is not None else get_default_registry()
         self.default_side = default_side
+        self.store: StateStore = store if store is not None else StateStore(db_path)
         self._states: dict[str, AccountState] = {}
 
     def get_state(self, account_id: str) -> AccountState:
-        """Return or create the runtime state for an account."""
+        """Return or create the runtime state for an account, synchronized with SQLite."""
         if account_id not in self._states:
-            self._states[account_id] = AccountState(account_id=account_id)
+            self._states[account_id] = self.store.get_account_state(account_id)
         return self._states[account_id]
 
-    def mark_used(self, account_id: str, now: float | None = None) -> None:
-        """Record that an account just published a reply."""
+    def mark_used(
+        self,
+        account_id: str,
+        now: float | None = None,
+        *,
+        target_stance: str = "",
+    ) -> None:
+        """Record that an account just published a post or reply and persist to SQLite."""
         current_time = time.monotonic() if now is None else now
         state = self.get_state(account_id)
         state.mark_used(current_time)
+        self.store.save_account_state(state, target_stance=target_stance)
+
+    def set_account_frozen(self, account_id: str, frozen: bool = True) -> AccountState:
+        """Mark an account as temporarily frozen (or unfreeze it) in memory and SQLite."""
+        st = self.store.set_account_frozen(account_id, frozen=frozen)
+        self._states[account_id] = st
+        return st
+
+    def set_account_banned(self, account_id: str, banned: bool = True) -> AccountState:
+        """Mark an account as permanently banned (or unban it) in memory and SQLite."""
+        st = self.store.set_account_banned(account_id, banned=banned)
+        self._states[account_id] = st
+        return st
 
     def reset_states(self) -> None:
-        """Reset all account runtime states (cooldowns and counters)."""
+        """Reset all account runtime states in memory and SQLite."""
         self._states.clear()
+        self.store.reset_accounts()
 
     def load_states(self, states_data: dict[str, dict[str, Any]]) -> None:
-        """Load account states from dictionary."""
+        """Load account states from dictionary and persist into SQLite."""
         for acc_id, d in states_data.items():
-            self._states[acc_id] = AccountState(
+            st = AccountState(
                 account_id=acc_id,
                 last_posted_at=float(d.get("last_posted_at", 0.0)),
                 post_count=int(d.get("post_count", 0)),
+                is_frozen=bool(d.get("is_frozen", False)),
+                is_banned=bool(d.get("is_banned", False)),
             )
+            self._states[acc_id] = st
+            self.store.save_account_state(st)
 
     def dump_states(self) -> dict[str, dict[str, Any]]:
         """Dump all account states to a dictionary."""
+        for acc_id, st in list(self._states.items()):
+            self.store.save_account_state(st)
+        all_states = self.store.load_all_account_states()
+        self._states.update(all_states)
         return {acc_id: s.to_dict() for acc_id, s in self._states.items()}
 
     def score_archetypes(
@@ -173,8 +216,10 @@ class PersonaRouter:
         side: str | None = None,
         prompt_type: str | None = None,
         now: float | None = None,
+        *,
+        complementary: bool | None = None,
     ) -> RoutingDecision:
-        """Match target post to best available persona, handling cooldown and fallbacks."""
+        """Match target post to best available persona, handling disabled accounts, cooldown, fallbacks, and allied complementarity."""
         current_time = time.monotonic() if now is None else now
         target_side = (side or self.default_side).lower()
 
@@ -189,8 +234,27 @@ class PersonaRouter:
             gen_task = data.get("generation_task") or {}
             prompt_type = resp_dec.get("prompt_type") or gen_task.get("prompt_type")
 
-        # Score archetypes
+        # Score archetypes based on topic/emotion
         archetype_scores = self.score_archetypes(data, post_text, prompt_type=prompt_type)
+        detected_archetype = max(archetype_scores.items(), key=lambda item: item[1])[0]
+
+        # Determine whether to apply Cross-Persona Complementarity for allied P01 statements
+        if complementary is None:
+            flow = data.get("flow") or {}
+            rel_stance = flow.get("relative_stance")
+            answers = _extract_jev_answers(data)
+            func = str(_get_val(answers.get("expression_function")) or "").lower()
+            is_question = (func == "question") or ("?" in post_text)
+            use_complementary = (rel_stance == "aligned" and not is_question) or (prompt_type == "P01" and not is_question)
+        else:
+            use_complementary = complementary
+
+        if use_complementary and detected_archetype in _COMPLEMENTARY_ARCHETYPES:
+            primary_comp, secondary_comp = _COMPLEMENTARY_ARCHETYPES[detected_archetype]
+            base_max = archetype_scores[detected_archetype]
+            archetype_scores = dict(archetype_scores)
+            archetype_scores[primary_comp] = base_max + 0.5
+            archetype_scores[secondary_comp] = base_max + 0.25
 
         # Sort candidates by (score * weight) descending
         scored_candidates: list[tuple[Persona, float]] = []
@@ -202,45 +266,62 @@ class PersonaRouter:
         scored_candidates.sort(key=lambda item: item[1], reverse=True)
         top_persona, top_score = scored_candidates[0]
         target_archetype = top_persona.archetype
+        match_reason = (
+            f"complementary_{target_archetype}_for_{detected_archetype}"
+            if use_complementary and target_archetype != detected_archetype
+            else f"matched_{target_archetype}"
+        )
 
-        # Check cooldown status for candidates
+        # Check suspension/ban and cooldown status for candidates
         available: list[tuple[Persona, float]] = []
         in_cooldown_list: list[tuple[Persona, float, float]] = []  # persona, score, remaining_time
+        top_state = self.get_state(top_persona.account_id)
 
         for p, score in scored_candidates:
             st = self.get_state(p.account_id)
+            if st.is_disabled():
+                continue
             if st.is_in_cooldown(current_time, p.cooldown_s):
                 rem = st.remaining_cooldown(current_time, p.cooldown_s)
                 in_cooldown_list.append((p, score, rem))
             else:
                 available.append((p, score))
 
-        # Case 1: Ideal match is ready
+        if not available and not in_cooldown_list:
+            raise ValueError(f"All registered accounts for side '{target_side}' are frozen or banned")
+
+        # Case 1: Ideal match is active and ready
         if available and available[0][0].account_id == top_persona.account_id:
             return RoutingDecision(
                 account_id=top_persona.account_id,
                 persona=top_persona,
                 target_archetype=target_archetype,
                 score=round(top_score, 3),
-                reason=f"matched_{target_archetype}",
+                reason=match_reason,
                 fallback_used=False,
                 in_cooldown=False,
             )
 
-        # Case 2: Ideal match is cooling down, but an alternative persona is ready
+        # Case 2: Ideal match is cooling down or disabled, but an alternative active persona is ready
         if available:
             fallback_persona, fallback_score = available[0]
+            if top_state.is_banned:
+                fb_reason = f"fallback_from_{top_persona.account_id}_banned"
+            elif top_state.is_frozen:
+                fb_reason = f"fallback_from_{top_persona.account_id}_frozen"
+            else:
+                fb_reason = f"fallback_from_{top_persona.account_id}_cooling_down"
             return RoutingDecision(
                 account_id=fallback_persona.account_id,
                 persona=fallback_persona,
                 target_archetype=target_archetype,
                 score=round(fallback_score, 3),
-                reason=f"fallback_from_{top_persona.account_id}_cooling_down",
+                reason=fb_reason,
                 fallback_used=True,
                 in_cooldown=False,
             )
 
-        # Case 3: All accounts are in cooldown; select one with shortest remaining wait
+        # Case 3: All active accounts are in cooldown; select one with shortest remaining wait
         in_cooldown_list.sort(key=lambda item: item[2])  # sort by remaining wait time
         best_cool_persona, best_cool_score, _ = in_cooldown_list[0]
         return RoutingDecision(

@@ -137,6 +137,82 @@ class TestStrategicPublisher(unittest.TestCase):
         # Postflight was never called
         self.postflight.check.assert_not_called()
 
+    def test_publish_rejected_by_character_limit(self):
+        long_text = "A" * 275
+        result = self.publisher.publish_sync(
+            "bot_worker_yes",
+            long_text,
+            hashtags=["#PublicTransit"],
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["status"], "rejected")
+        self.assertIn("constraint_rejected:exceeds_max_chars", result["reason"])
+        self.postflight.check.assert_not_called()
+
+    def test_publish_rejected_by_overlong_hashtag(self):
+        result = self.publisher.publish_sync(
+            "bot_worker_yes",
+            "We need safe transit rules today",
+            hashtags=["#ThisHashtagIsWayTooLongAndLooksLikeASentenceFromABot"],
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["status"], "rejected")
+        self.assertIn("constraint_rejected:invalid_hashtag_length", result["reason"])
+        self.postflight.check.assert_not_called()
+
+    def test_publish_rejected_by_non_english_text(self):
+        result = self.publisher.publish_sync(
+            "bot_worker_yes",
+            "\u65e9\u9ad8\u5cf0 bus is crowded #PublicTransit",
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["status"], "rejected")
+        self.assertIn("constraint_rejected:non_english_text", result["reason"])
+        self.postflight.check.assert_not_called()
+
+    def test_publish_rejected_on_duplicate_text(self):
+        pf_verdict = MagicMock()
+        pf_verdict.can_send = True
+        pf_verdict.reason = "approved"
+        pf_verdict.to_dict.return_value = {"can_send": True}
+        self.postflight.check.return_value = pf_verdict
+
+        res1 = self.publisher.publish_sync(
+            "bot_worker_yes",
+            "Safe buses keep Crown Harbour moving! #PublicTransit",
+        )
+        self.assertTrue(res1["ok"])
+
+        # Attempting to post the exact same text from another account is rejected as duplicate
+        res2 = self.publisher.publish_sync(
+            "bot_medic_yes",
+            "Safe buses keep Crown Harbour moving! #PublicTransit",
+        )
+        self.assertFalse(res2["ok"])
+        self.assertIn("constraint_rejected:duplicate_post_text", res2["reason"])
+
+    def test_publish_passes_branch_rule_and_target_text_to_jev(self):
+        pf_verdict = MagicMock()
+        pf_verdict.can_send = True
+        pf_verdict.reason = "approved"
+        pf_verdict.to_dict.return_value = {"can_send": True}
+        self.postflight.check.return_value = pf_verdict
+
+        result = self.publisher.publish_sync(
+            "bot_medic_yes",
+            "I hear your concern about clinic wait times—let's look at how the rule helps nurses. #SafeCare",
+            branch="branch_B_2b_ours",
+            target_text="I doubt this mandate will actually help hospital clinics.",
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["branch"], "branch_B_2b_ours")
+
+        call_kwargs = self.postflight.check.call_args[1]
+        self.assertTrue(call_kwargs["strict_alignment"])
+        self.assertEqual(call_kwargs["target_text"], "I doubt this mandate will actually help hospital clinics.")
+        self.assertIn("warm, gentle, consultative tone", call_kwargs["intended_purpose"])
+        self.assertIn("Dr. Julian Reed", call_kwargs["persona_profile"])
+
 
 class TestMacroCli(unittest.TestCase):
     def test_cli_status(self):

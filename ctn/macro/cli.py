@@ -18,29 +18,37 @@ from ctn.ratelimit import build_gate, build_ledger
 from .publisher import StrategicPublisher
 from .state import MacroStateCollector
 
-DEFAULT_STATE_FILE = ".ctn_macro_state.json"
+from ctn.storage import DEFAULT_DB_PATH, StateStore
+
+DEFAULT_STATE_FILE = DEFAULT_DB_PATH
 
 
 def _load_router(side: str, state_path: Path) -> PersonaRouter:
-    """Instantiate a PersonaRouter and restore persisted account states if available."""
-    router = PersonaRouter(default_side=side)
-    if state_path.is_file():
-        try:
-            data = json.loads(state_path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                router.load_states(data)
-        except Exception:
-            pass
-    return router
+    """Instantiate a PersonaRouter backed by SQLite (or JSON state file if .json is specified)."""
+    if state_path.suffix.lower() == ".json":
+        router = PersonaRouter(default_side=side)
+        if state_path.is_file():
+            try:
+                data = json.loads(state_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    router.load_states(data)
+            except Exception:
+                pass
+        return router
+    store = StateStore(state_path)
+    return PersonaRouter(default_side=side, store=store)
 
 
 def _save_router(router: PersonaRouter, state_path: Path) -> None:
-    """Save account runtime states to disk."""
-    try:
-        data = router.dump_states()
-        state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    """Save account runtime states to disk (automatic for SQLite; explicit dump for .json)."""
+    if state_path.suffix.lower() == ".json":
+        try:
+            data = router.dump_states()
+            state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+    else:
+        router.dump_states()
 
 
 def _setup_environment(dry_run: bool = False) -> tuple[Actuator, JevPostflightChecker]:
@@ -119,6 +127,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
         args.text,
         hashtags=tags,
         purpose=args.purpose,
+        branch=args.branch,
+        target_text=args.target_text,
         bypass_jev=bypass_jev,
     )
 
@@ -168,6 +178,16 @@ def main(argv: list[str] | None = None) -> int:
     sub_pub.add_argument("--text", required=True, help="Post content to publish")
     sub_pub.add_argument("--tag", default="", help="Optional comma-separated hashtags")
     sub_pub.add_argument("--purpose", default="P01", help="Strategic purpose code")
+    sub_pub.add_argument(
+        "--branch",
+        default="",
+        help="Decision tree branch code (e.g. branch_A, branch_B_1a, branch_B_2b_ours, branch_B_2c)",
+    )
+    sub_pub.add_argument(
+        "--target-text",
+        default="",
+        help="Optional opposing trending post text being countered in Branch B",
+    )
     sub_pub.add_argument("--dry-run", action="store_true", help="Simulate without posting")
     sub_pub.add_argument("--bypass-jev", action="store_true", help="Bypass JEV postflight check")
     sub_pub.set_defaults(func=cmd_publish)

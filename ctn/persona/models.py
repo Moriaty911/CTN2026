@@ -41,11 +41,17 @@ class Persona:
 
 @dataclass
 class AccountState:
-    """Runtime operational state of an account, tracking posting cooldowns."""
+    """Runtime operational state of an account, tracking cooldowns and suspension status."""
 
     account_id: str
     last_posted_at: float = 0.0
     post_count: int = 0
+    is_frozen: bool = False
+    is_banned: bool = False
+
+    def is_disabled(self) -> bool:
+        """Return True if the account is temporarily frozen or permanently banned."""
+        return self.is_frozen or self.is_banned
 
     def is_in_cooldown(self, now: float, cooldown_s: float) -> bool:
         """Check if the account is currently cooling down."""
@@ -70,6 +76,8 @@ class AccountState:
             "account_id": self.account_id,
             "last_posted_at": self.last_posted_at,
             "post_count": self.post_count,
+            "is_frozen": self.is_frozen,
+            "is_banned": self.is_banned,
         }
 
 

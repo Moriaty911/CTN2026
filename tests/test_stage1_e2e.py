@@ -85,7 +85,7 @@ class BrainTests(unittest.TestCase):
         verdict = make_brain(workflow, llm).think(
             Post("p1", "citizen_1", "We should protect Kingstonia, but what are the exceptions?"))
         self.assertEqual((verdict.action, verdict.text, verdict.prompt_type),
-                         (ActionKind.REPLY, REPLY, "P08"))
+                         (ActionKind.REPLY, REPLY, "P01"))
         self.assertEqual(len(llm_calls), 1)
         self.assertGreaterEqual(len(jev.calls), 2)          # triage + deep, no extra on generate
 

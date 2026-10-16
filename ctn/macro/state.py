@@ -8,6 +8,7 @@ import time
 from typing import Any
 
 from ctn.actuator import Actuator
+from ctn.jev.postflight import check_incoming_post_language
 from ctn.persona import PersonaRouter
 
 
@@ -42,11 +43,16 @@ class MacroStateCollector:
                 tag = item.get("hashtag") or item.get("tag")
                 if tag and str(tag) not in trending_tags:
                     trending_tags.append(str(tag))
-                if item.get("text") or item.get("post_id"):
+                text_val = str(item.get("text") or "")
+                if text_val or item.get("post_id"):
+                    if text_val:
+                        lang_ok, _ = check_incoming_post_language(text_val)
+                        if not lang_ok:
+                            continue
                     trending_posts.append({
                         "post_id": item.get("post_id", ""),
                         "author": item.get("author", ""),
-                        "text": item.get("text", ""),
+                        "text": text_val,
                         "likes": item.get("likes", 0),
                         "replies": item.get("replies", 0),
                         "reposts": item.get("reposts", 0),
@@ -62,20 +68,26 @@ class MacroStateCollector:
             if isinstance(raw_list, list):
                 for p in raw_list:
                     if isinstance(p, dict) and (p.get("text") or p.get("post_id")):
+                        text_val = str(p.get("text") or "")
+                        if text_val:
+                            lang_ok, _ = check_incoming_post_language(text_val)
+                            if not lang_ok:
+                                continue
                         cleaned.append({
                             "post_id": p.get("post_id", ""),
                             "author": p.get("author", ""),
-                            "text": p.get("text", ""),
+                            "text": text_val,
                             "likes": p.get("likes", 0),
                             "replies": p.get("replies", 0),
                         })
             return cleaned
 
-        # 3. Account states from PersonaRouter
+        # 3. Account states and SQLite metrics from PersonaRouter
         accounts_info = []
         candidates = self.router.registry.list_by_side(self.side)
         for p in candidates:
             state = self.router.get_state(p.account_id)
+            metrics = self.router.store.get_account_metrics(p.account_id)
             in_cd = state.is_in_cooldown(now_monotonic, p.cooldown_s)
             rem_cd = state.remaining_cooldown(now_monotonic, p.cooldown_s)
             accounts_info.append({
@@ -83,9 +95,13 @@ class MacroStateCollector:
                 "name": p.name,
                 "archetype": p.archetype,
                 "bio": p.bio,
+                "is_frozen": state.is_frozen,
+                "is_banned": state.is_banned,
                 "in_cooldown": in_cd,
                 "remaining_cooldown_s": round(rem_cd, 1),
                 "post_count": state.post_count,
+                "allied_reply_count": metrics.get("allied_reply_count", 0),
+                "opposing_reply_count": metrics.get("opposing_reply_count", 0),
             })
 
         return {
@@ -99,6 +115,10 @@ class MacroStateCollector:
             },
             "vip_npc_posts": clean_post_list(vip_posts_raw),
             "accounts": accounts_info,
+            "allied_reply_stats": {
+                "recent_1h_count": self.router.store.count_recent_allied_replies(3600.0),
+                "qualifying_seen_total": self.router.store.get_counter("allied_qualifying_seen"),
+            },
         }
 
     def collect_sync(self) -> dict[str, Any]:

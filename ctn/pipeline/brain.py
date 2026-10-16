@@ -28,7 +28,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from ..jev import JevPostflightChecker, JevWorkflow, MaterialBrief, TextSpan
+from ..jev import (
+    JevPostflightChecker,
+    JevWorkflow,
+    MaterialBrief,
+    MaterialUse,
+    TextSpan,
+    check_incoming_post_language,
+)
 from ..llm import DraftOptions, ReplyGenerator
 from ..models import ActionKind, Decision, JevAnswers, Post, Side, Tier
 from ..persona import PersonaRouter
@@ -57,6 +64,8 @@ class JevLlmBrain:
         postflight: JevPostflightChecker | None = None,
         options: DraftOptions | None = None,
         information_gap: str = DEFAULT_INFORMATION_GAP,
+        allied_reply_every_n: int = 3,
+        allied_reply_hourly_cap: int = 3,
     ) -> None:
         if side not in (Side.YES, Side.NO):
             raise ValueError("JevLlmBrain needs an assigned side (yes/no)")
@@ -67,6 +76,8 @@ class JevLlmBrain:
         self.postflight = postflight if postflight is not None else JevPostflightChecker(workflow.evaluator.client)
         self.options = options or DraftOptions()
         self.information_gap = information_gap
+        self.allied_reply_every_n = allied_reply_every_n
+        self.allied_reply_hourly_cap = allied_reply_hourly_cap
 
     # ---- input mapping --------------------------------------------------- #
     def payload_for(self, post: Post) -> dict[str, Any]:
@@ -83,30 +94,95 @@ class JevLlmBrain:
 
     # ---- decision -------------------------------------------------------- #
     def think(self, post: Post) -> BrainVerdict:
+        # Tier-1 Input Language Gate: Drop heavy/pure non-Latin bait before spending JEV calls
+        lang_ok, lang_reason = check_incoming_post_language(post.text)
+        if not lang_ok:
+            return BrainVerdict(
+                ActionKind.NONE,
+                reason=f"preflight:{lang_reason}",
+                detail={"language_gate": lang_reason},
+            )
+
         payload = self.payload_for(post)
         package = self.workflow.evaluate(payload)
         data = package.to_dict()
         action = data["action_decision"]
+        rel_stance = data["flow"].get("relative_stance")
         detail = {
+            "language_gate": lang_reason,
             "flow_status": data["flow"]["status"],
             "action_status": action["status"],
             "action": action.get("action"),
-            "relative_stance": data["flow"].get("relative_stance"),
+            "relative_stance": rel_stance,
             "new_attempt_count": data.get("new_attempt_count"),
         }
         if action["status"] != "decided":
             return BrainVerdict(reason=f"jev:{action['status']}", detail=detail)
         if action["action"] == "like":
+            self.router.store.log_interaction(
+                engine="micro",
+                account_id="bot_default",
+                action="like",
+                target_post_id=post.post_id,
+                target_author=post.author,
+                target_stance=str(rel_stance or ""),
+            )
             return BrainVerdict(ActionKind.LIKE, reason="jev:like", detail=detail)
         if action["action"] != "reply":
             return BrainVerdict(reason=f"jev:{action['action']}", detail=detail)
 
         selected = (data.get("response_decision") or {}).get("prompt_type")
-        if selected not in (None, "P08"):
+        if selected not in (None, "P08", "P01"):
             return BrainVerdict(reason=f"needs_materials:{selected}", prompt_type=selected, detail=detail)
 
-        # Select persona and account via PersonaRouter
-        routing = self.router.route(data=data, post_text=post.text, side=self.side.value)
+        # Allied (same-camp) reply strategy: P01 cross-persona support gated by 3-level SQLite valve
+        is_aligned = (rel_stance == "aligned")
+        if is_aligned:
+            bot_ids = {p.account_id for p in self.router.registry.list_all()}
+            can_reply_allied, gate_reason = self.router.store.check_allied_reply_gate(
+                target_post_id=post.post_id,
+                target_author=post.author,
+                bot_account_ids=bot_ids,
+                every_n=self.allied_reply_every_n,
+                hourly_cap=self.allied_reply_hourly_cap,
+            )
+            detail["allied_reply_gate"] = gate_reason
+            if not can_reply_allied:
+                # Downgrade throttled allied replies to a cost-free LIKE
+                self.router.store.log_interaction(
+                    engine="micro",
+                    account_id="bot_default",
+                    action="like",
+                    target_post_id=post.post_id,
+                    target_author=post.author,
+                    target_stance="aligned",
+                    purpose="like_downgrade",
+                )
+                return BrainVerdict(
+                    ActionKind.LIKE,
+                    reason=f"jev:like({gate_reason})",
+                    detail=detail,
+                )
+            active_purpose = selected or "P01"
+        else:
+            active_purpose = selected or "P08"
+
+        # Select persona and account via PersonaRouter (uses cross-persona complementarity for P01)
+        try:
+            routing = self.router.route(
+                data=data,
+                post_text=post.text,
+                side=self.side.value,
+                prompt_type=active_purpose,
+            )
+        except ValueError as exc:
+            detail["routing_error"] = str(exc)
+            return BrainVerdict(
+                ActionKind.NONE,
+                reason="all_accounts_disabled",
+                prompt_type=active_purpose,
+                detail=detail,
+            )
         detail["routing"] = routing.to_dict()
         detail["selected_account"] = routing.account_id
 
@@ -115,34 +191,49 @@ class JevLlmBrain:
             return BrainVerdict(
                 ActionKind.NONE,
                 reason=f"account_cooldown:{routing.account_id}",
-                prompt_type=selected,
+                prompt_type=active_purpose,
                 detail=detail,
             )
 
         text = post.text
-        brief = MaterialBrief(
-            "P08", TextSpan(("content", "post", "text"), 0, len(text), text),
-            information_gap=self.information_gap,
-        )
+        span = TextSpan(("content", "post", "text"), 0, len(text), text)
+        if active_purpose == "P01":
+            brief = MaterialBrief("P01", span, support=(MaterialUse(span, "addition"),))
+        else:
+            brief = MaterialBrief("P08", span, information_gap=self.information_gap)
+
         # Attempt 1: generate candidate draft using selected persona
         draft = self.generator.generate(package, brief, options=self.options, persona=routing.persona)
         detail["draft"] = draft.to_dict()
         if draft.status != "draft" or not draft.reply:
             return BrainVerdict(reason=f"llm:{draft.status}:{draft.reason}", prompt_type=draft.prompt_type, detail=detail)
 
-        # Postflight gate check 1
+        # Postflight gate check 1 (strict_alignment=True for P01 allied support, False for P08 clarification)
+        strict_mode = (active_purpose == "P01")
         pv1 = self.postflight.check(
             post_id=post.post_id,
             target_text=post.text,
             reply_text=draft.reply,
             assigned_side=self.side.value,
-            intended_purpose=draft.prompt_type or "P08",
+            intended_purpose=draft.prompt_type or active_purpose,
+            persona=routing.persona,
+            strict_alignment=strict_mode,
         )
         detail["postflight"] = pv1.to_dict()
 
         if pv1.can_send:
-            self.router.mark_used(routing.account_id)
-            return BrainVerdict(ActionKind.REPLY, draft.reply, "approved", draft.prompt_type, detail)
+            self.router.mark_used(routing.account_id, target_stance=str(rel_stance or ""))
+            self.router.store.log_interaction(
+                engine="micro",
+                account_id=routing.account_id,
+                action="reply",
+                target_post_id=post.post_id,
+                target_author=post.author,
+                target_stance=str(rel_stance or ""),
+                purpose=draft.prompt_type or active_purpose,
+                text=draft.reply,
+            )
+            return BrainVerdict(ActionKind.REPLY, draft.reply, "approved", draft.prompt_type or active_purpose, detail)
 
         # Option B: One targeted retry if postflight rejected attempt 1
         detail["postflight_attempt_1_rejected"] = pv1.reason
@@ -159,13 +250,25 @@ class JevLlmBrain:
             target_text=post.text,
             reply_text=draft_retry.reply,
             assigned_side=self.side.value,
-            intended_purpose=draft_retry.prompt_type or "P08",
+            intended_purpose=draft_retry.prompt_type or active_purpose,
+            persona=routing.persona,
+            strict_alignment=strict_mode,
         )
         detail["postflight_retry"] = pv2.to_dict()
 
         if pv2.can_send:
-            self.router.mark_used(routing.account_id)
-            return BrainVerdict(ActionKind.REPLY, draft_retry.reply, "approved_on_retry", draft_retry.prompt_type, detail)
+            self.router.mark_used(routing.account_id, target_stance=str(rel_stance or ""))
+            self.router.store.log_interaction(
+                engine="micro",
+                account_id=routing.account_id,
+                action="reply",
+                target_post_id=post.post_id,
+                target_author=post.author,
+                target_stance=str(rel_stance or ""),
+                purpose=draft_retry.prompt_type or active_purpose,
+                text=draft_retry.reply,
+            )
+            return BrainVerdict(ActionKind.REPLY, draft_retry.reply, "approved_on_retry", draft_retry.prompt_type or active_purpose, detail)
 
         # Abort reply after failed retry to protect account safety and write quota
         return BrainVerdict(ActionKind.NONE, reason=f"postflight_rejected:{pv2.reason}", prompt_type=draft.prompt_type, detail=detail)

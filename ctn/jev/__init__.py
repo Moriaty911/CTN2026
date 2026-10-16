@@ -54,7 +54,7 @@ from .evaluator import (
 )
 from .handoff import HANDOFF_SCHEMA_VERSION, HandoffPackage, HandoffValidationError, build_handoff, build_comparison_handoff
 from .audit import JevAuditLog
-from .postflight import JevPostflightChecker, PostflightVerdict
+from .postflight import JevPostflightChecker, PostflightVerdict, check_incoming_post_language
 from .calibration import (
     CalibrationSample, CalibrationValidationError, HumanReference, ObservedFeedback,
     replay_routes, review_assessments, compare_assessment_runs,
@@ -163,4 +163,5 @@ __all__ = [
     "decide_response",
     "JevPostflightChecker",
     "PostflightVerdict",
+    "check_incoming_post_language",
 ]

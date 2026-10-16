@@ -163,6 +163,60 @@ class PostflightTests(unittest.TestCase):
         self.assertEqual(verdict.action, ActionKind.NONE)
         self.assertTrue(verdict.reason.startswith("postflight_rejected:"))
 
+    def test_postflight_strict_alignment_blocks_neutral_in_proactive_mode(self):
+        def handler(body, data):
+            if "side_alignment" in data["answers"]:
+                choose(data, "side_alignment", "neutral")
+
+        transport = FakeTransport(handler)
+        client = JevClient(JevConfig(api_key="synthetic-test-key", max_retries=0), transport=transport)
+        checker = JevPostflightChecker(client)
+
+        # In micro mode (strict_alignment=False), neutral is allowed for P08 clarification
+        micro_verdict = checker.check(
+            post_id="post_001",
+            target_text="What is the policy?",
+            reply_text="Which section are you referring to?",
+            assigned_side="yes",
+            intended_purpose="P08",
+            strict_alignment=False,
+        )
+        self.assertTrue(micro_verdict.can_send)
+
+        # In macro proactive mode (strict_alignment=True), neutral is rejected
+        macro_verdict = checker.check(
+            post_id="proactive_publish",
+            target_text="Kingstonia referendum",
+            reply_text="Both sides have valid points on transit.",
+            assigned_side="yes",
+            intended_purpose="branch_A",
+            strict_alignment=True,
+        )
+        self.assertFalse(macro_verdict.can_send)
+        self.assertEqual(macro_verdict.reason, "neutral_stance_not_allowed")
+
+    def test_postflight_blocks_formal_or_off_persona_style(self):
+        def handler(body, data):
+            if "persona_and_style" in data["answers"]:
+                choose(data, "persona_and_style", "formal_or_off_persona")
+
+        transport = FakeTransport(handler)
+        client = JevClient(JevConfig(api_key="synthetic-test-key", max_retries=0), transport=transport)
+        checker = JevPostflightChecker(client)
+
+        verdict = checker.check(
+            post_id="proactive_publish",
+            target_text="Kingstonia referendum",
+            reply_text="Pursuant to municipal subsection 4.2, aforementioned protocols are mandated.",
+            assigned_side="yes",
+            intended_purpose="branch_A",
+            persona_profile="Marcus Cole (grassroots_worker): Bus driver.",
+            strict_alignment=True,
+        )
+        self.assertFalse(verdict.can_send)
+        self.assertEqual(verdict.reason, "formal_or_off_persona")
+        self.assertEqual(verdict.persona_and_style, "formal_or_off_persona")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,6 +26,7 @@ import random
 import uuid
 from typing import Sequence
 
+from ..jev.postflight import check_incoming_post_language
 from ..models import ActionKind, Decision, JevAnswers, Post, Side, Tier
 from .compose import compose_reply
 
@@ -86,6 +87,10 @@ def decide(
             decision_id=uuid.uuid4().hex[:12], post_id=post.post_id, tier=tier,
             account=account, scores=scores, rationale=why, action=action, text=text,
         )
+
+    lang_ok, lang_reason = check_incoming_post_language(post.text)
+    if not lang_ok:
+        return make(Tier.OBSERVE, ActionKind.NONE, f"preflight:{lang_reason}")
 
     if align is None:
         return make(Tier.OBSERVE, ActionKind.NONE, "side not assigned yet")

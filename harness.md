@@ -1,48 +1,50 @@
-# CTN 2026 · 宏观战役记忆与排期看板 (harness.md)
+# CTN 2026 · Macro Campaign Memory & Cadence Board (harness.md)
 
-> 上次巡检时间: 2026-10-14 18:00:00 (AEST)  
-> 当前比赛阶段: Phase 1 (D1-D3 账号建档与本地化养号期) | 阵营: YES (Mandate now. Protect Kingstonia.)
-
----
-
-## 1. 战局总纲与当前战略焦点 (Active Strategic Focus)
-- **当前核心目标**: 激活基础账号，建立 Kingstonia 本地化真实市民生活痕迹，与通勤族及普通家庭建立关注图谱（Follow Graph）。
-- **主攻叙事线**: "日常生活中的平稳与预防胜过突发停摆" (Focus: Commuting, island transit & family safety).
-- **战略承诺锁**: 锁定至 `2026-10-16 12:00`，在此之前不得随意推翻主叙事，不得过早发动大规模意识形态对轰。
+> Last Pulse Time: 2026-10-14 18:00:00 (AEST)  
+> Current Campaign Phase: Phase 1 (D1-D3 Account Warmup & Local Grounding) | Assigned Side: YES (Mandate now. Protect Kingstonia.)
 
 ---
 
-## 2. 账号状态与排期锁 (Account States & Cadence Locks)
-| 账号 ID | 职业人设 | 当前状态 | 上次发帖时间 | 下次允许发帖时间 / 动作锁 | 战术职能 |
+## 1. Active Strategic Focus
+- **Current Core Objective**: Activate baseline accounts, establish authentic Kingstonia everyday citizen footprints, and build a local Follow Graph with commuters and families.
+- **Primary Narrative Line**: "Everyday stability and preventative care beat sudden island shutdowns" (Focus: Commuting, island transit & family safety).
+- **Active Narrative Commitment Lock**: Locked until `2026-10-16 12:00`. Do not overturn the primary narrative or launch aggressive ideological clashes before this timestamp.
+- **Primary Campaign Hashtags**: `#ProtectKingstonia`, `#SafeTransitFirst`
+
+---
+
+## 2. Account States & Cadence Locks
+| Account ID | Persona Archetype | Current Status | Last Posted At | Next Allowed Post / Cadence Lock | Tactical Role |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `bot_worker_yes` | Marcus (草根工人) | ACTIVE | - | 🔓 可发布首条生活定桩帖 | 积累同城通勤族信任，建立生活共鸣 |
-| `bot_debater_yes` | Elena (锐利辩手) | STANDBY | - | 🔒 战略待命，用于应对突发抹黑 | 保持机动，监控争议标签 |
-| `bot_medic_yes` | Julian (公卫医生) | DORMANT | - | 🔒 战略潜伏，Phase 2 攻坚前不发原帖 | 保护高价值专家身份，避免过早暴露 |
-| `bot_policy_yes` | Sophia (政策分析) | DORMANT | - | 🔒 战略潜伏，Phase 2 攻坚前不发原帖 | 留待法案辩论期总攻定调 |
+| `bot_worker_yes` | Marcus Cole (`grassroots_worker`) | ACTIVE | - | UNLOCKED: Ready for initial local grounding post | Build commuter trust and everyday resonance |
+| `bot_debater_yes` | Elena Vance (`sharp_debater`) | STANDBY | - | LOCKED: On tactical standby for sudden opposing attacks | Maintain agility and monitor contested trending tags |
+| `bot_medic_yes` | Dr. Julian Reed (`medical_expert`) | DORMANT | - | LOCKED: Strategic dormancy until Phase 2 shaping | Protect high-value expert credibility from early exposure |
+| `bot_policy_yes` | Sophia Lin (`policy_analyst`) | DORMANT | - | LOCKED: Strategic dormancy until Phase 2 shaping | Reserve for decisive policy framing and logical rebuttal |
 
 ---
 
-## 3. 媒体与特权 NPC 追踪看板 (VIP NPC Watchlist)
-- **Daily Kingstonia (右翼/商界)**:
-  - 近期焦点: 旅游业复苏担忧，警惕行政限制过度延伸。
-  - 应对策略: 强调明确的预防规则有助于尽快常态化复工，避免不可控的全岛封控。
-- **Kingstonia Herald (左翼/民生)**:
-  - 近期焦点: 基层公交司机与诊所医护轮班负荷，弱势群体安全。
-  - 应对策略: **重点突破方向**。通过普通工人视角提供“车厢拥挤、家庭老幼防护”等具体生活素材。
-- **特权 NPC (2名记者 / 2名专栏作家)**:
-  - 偏好特征: 厌恶空洞政治口号，极度偏好“具体的人名/职业、具体生活场景、具体数字与冲突”。
+## 3. Media & VIP NPC Watchlist
+- **Daily Kingstonia (Conservative / Business Focus)**:
+  - Recent Focus: Tourism recovery concerns and caution against administrative overreach.
+  - Counter-Framing Strategy: Emphasize that clear preventative rules enable predictable business reopening and prevent chaotic island-wide lockdowns.
+- **Kingstonia Herald (Progressive / Worker & Public Health Focus)**:
+  - Recent Focus: Shift fatigue among coastal ring road bus drivers and clinic staff, plus vulnerable group protection.
+  - Counter-Framing Strategy: **Primary Breakthrough Target**. Provide concrete grassroots stories on crowded transit buses and protecting elderly family members.
+- **Special VIP NPCs (2 Journalists / 2 Columnists)**:
+  - Selection Preference: Dislike empty political slogans; strongly favor concrete names, specific occupations, local Kingstonia settings, tangible numbers, and real-world dilemmas.
 
 ---
 
-## 4. 人工最高指令区 (Human Directives & Standing Rules)
-<!-- 人类指挥官可以在此直接添加指令，Harness 每次运行时必须优先无条件执行 -->
-1. [ACTIVE] Phase 1 期间，严禁任何账号主动刷发带 `#MandateNow` 的强硬政治对抗口号，优先以温和日常或探讨姿态发言。
-2. [ACTIVE] 单账号发帖后必须进入至少 24 小时的排期冷却锁，严禁同一账号连续刷帖。
-3. [ACTIVE] 写请求预算日消耗控制在 10 次以内，节约配额留待决战期。
+## 4. Human Directives & Standing Rules
+<!-- Human operators can add standing rules here. The Pi Harness must unconditionally obey all [ACTIVE] directives on every pulse. -->
+1. [ACTIVE] All generated posts, reasoning outputs, and updates to `harness.md` must be written strictly in English.
+2. [ACTIVE] During Phase 1, do not spam aggressive `#MandateNow` political slogans; prioritize warm, everyday local grounding and constructive discussion.
+3. [ACTIVE] After publishing an original post, lock that account from proactive original posting for at least 24 hours to prevent consecutive single-account spamming.
+4. [ACTIVE] Keep daily proactive write budget consumption under 10 posts to preserve quota for the final referendum push.
 
 ---
 
-## 5. 宏观发帖执行流水日志 (Action History)
-| 时间 (AEST) | 账号 | 模板类型 | 关联标签/新闻 | 生成推文摘要 | 平台 PostID | 状态 |
+## 5. Action History
+| Timestamp (AEST) | Account | Branch / Template | Target Tag / Post | Post Summary | Platform PostID | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| *(暂无历史发帖)* | - | - | - | 战役刚刚启动，等待首个 Pulse 触发 | - | - |
+| *(No posts yet)* | - | - | - | Campaign initialized; awaiting first pulse execution | - | - |
