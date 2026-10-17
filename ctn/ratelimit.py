@@ -68,7 +68,7 @@ class TokenBucket:
                 wait = 0.0
             else:
                 deficit = n - self._tokens
-                wait = deficit / self.rate
+                wait = max(0.0, self._updated - now) + deficit / self.rate
                 # Reserve into the future so concurrent waiters queue up fairly
                 # instead of all waking at once.
                 self._tokens = 0.0
@@ -191,7 +191,6 @@ class ActionGate:
 # --------------------------------------------------------------------------- #
 # Budget ledger
 # --------------------------------------------------------------------------- #
-@dataclass
 class BudgetLedger:
     """Tracks how much of the platform request allowance we have spent.
 
@@ -199,11 +198,19 @@ class BudgetLedger:
     tightens, instead of discovering the ceiling by being cut off.
     """
 
-    total: int
-    read_share: float
-    warn_at: float
-    reads: int = 0
-    writes: int = 0
+    def __init__(self, total, read_share, warn_at, reads=0, writes=0, *, store=None):
+        if total <= 0 or not 0 < read_share < 1 or not 0 <= warn_at < 1:
+            raise ValueError("invalid request budget")
+        self.total, self.read_share, self.warn_at = total, read_share, warn_at
+        self._reads, self._writes, self.store = reads, writes, store
+
+    @property
+    def reads(self):
+        return self.store.get_counter('http_read') if self.store else self._reads
+
+    @property
+    def writes(self):
+        return self.store.get_counter('http_write') if self.store else self._writes
 
     @property
     def read_cap(self) -> int:
@@ -226,10 +233,12 @@ class BudgetLedger:
         return self.writes / self.write_cap if self.write_cap else 1.0
 
     def record(self, kind: str) -> None:
-        if kind == ActionGate.READ:
-            self.reads += 1
+        if self.store:
+            self.store.increment_counter('http_' + kind)
+        elif kind == ActionGate.READ:
+            self._reads += 1
         else:
-            self.writes += 1
+            self._writes += 1
 
     @property
     def read_pressure(self) -> float:
@@ -260,9 +269,10 @@ def build_gate(cfg: RateConfig) -> ActionGate:
     return ActionGate(cfg)
 
 
-def build_ledger(cfg) -> BudgetLedger:
+def build_ledger(cfg, store=None) -> BudgetLedger:
     return BudgetLedger(
         total=cfg.total_requests,
         read_share=cfg.read_share,
         warn_at=cfg.warn_at,
+        store=store,
     )

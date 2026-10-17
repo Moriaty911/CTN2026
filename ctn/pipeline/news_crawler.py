@@ -14,11 +14,6 @@ from typing import Any, Mapping
 from ..client.legit_v1 import parse_timestamp
 from ..jev.postflight import check_incoming_post_language
 
-# Ensure local clone `./pypi-capturethenarrative/src` is importable even if not pip-installed.
-_LOCAL_SDK_SRC = Path(__file__).resolve().parents[2] / "pypi-capturethenarrative" / "src"
-if _LOCAL_SDK_SRC.is_dir() and str(_LOCAL_SDK_SRC) not in sys.path:
-    sys.path.insert(0, str(_LOCAL_SDK_SRC))
-
 from capturethenarrative import DEFAULT_NEWS_SITES_URL, NewsSites  # noqa: E402
 
 # Canonical mapping from publication sub_url / name to our internal snake_case newspaper key.

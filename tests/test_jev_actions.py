@@ -130,7 +130,7 @@ class ActionTests(unittest.TestCase):
             {"platform_levels": (("x", "high"), ("x", "standard"))}, {"platform_levels": (("x", {}),)}, {"aligned_reply_above": float("nan")}, {"version": {}}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ActionValidationError):
                 ActionPolicy(**kwargs)
-        for version in ("../v2", "v3", None):
+        for version in ("../v2", "v99", None):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 load_rubric("post", version=version)
 

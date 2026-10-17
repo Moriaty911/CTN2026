@@ -1,343 +1,163 @@
-"""Rule-based persona routing engine with per-account cooldown tracking."""
-
-from __future__ import annotations
-
+"""Occupation routing with shared account eligibility and persisted-plan sampling."""
+import random
+import re
 import time
+import math
 from typing import Any
-
-from .models import AccountState, Persona, PersonaArchetype, RoutingDecision
+from .models import AccountState, RoutingDecision
 from .registry import PersonaRegistry, get_default_registry
+from .policy import REPLY_POLICY
+from .catalog import GROUP_ALLOCATION
 
-
-# Keyword heuristics to supplement structured JEV signals
-_MEDICAL_KEYWORDS: tuple[str, ...] = (
-    "flu", "vaccin", "virus", "infect", "health", "hospital",
-    "doctor", "trial", "safe", "dose", "h2d2", "medicine", "clinical",
-    "epidemi", "pathogen", "transmission", "immunity",
-)
-
-_POLICY_KEYWORDS: tuple[str, ...] = (
-    "policy", "version", "rule", "ordinance", "clause", "statute",
-    "regulation", "law", "mandate", "govern", "condition", "section",
-    "legal", "requirement", "council", "amendment",
-)
-
-_SHARP_KEYWORDS: tuple[str, ...] = (
-    "fake", "scam", "sheep", "clown", "wake up", "lie", "idiot",
-    "nonsense", "tyranny", "propaganda", "brainwash", "hoax",
-)
-
-_GRASSROOTS_KEYWORDS: tuple[str, ...] = (
-    "bus", "transit", "park", "store", "family", "work", "job",
-    "commute", "daily", "kid", "school", "shop", "subway", "train",
-    "grocery", "neighbor", "living",
-)
-
-
-def _extract_jev_answers(data: dict[str, Any]) -> dict[str, Any]:
-    """Safely extract the deepest answers map from JEV workflow data."""
-    if not isinstance(data, dict):
-        return {}
-    # Direct answers dict
-    if "answers" in data and isinstance(data["answers"], dict):
-        return data["answers"]
-    flow = data.get("flow") or {}
-    deep = flow.get("deep") or {}
-    assessment = deep.get("assessment") or {}
-    output = assessment.get("output") or {}
-    answers = output.get("answers") or {}
-    if isinstance(answers, dict):
-        return answers
-    return {}
-
-
-def _get_val(ans_obj: Any) -> Any:
-    """Extract scalar value from a JEV answer node."""
-    if isinstance(ans_obj, dict):
-        return ans_obj.get("value")
-    return ans_obj
-
-
-# Cross-persona complementarity matrix for allied (P01) support replies:
-# Maps the detected topic archetype of an allied post to (primary_complement, secondary_complement).
-_COMPLEMENTARY_ARCHETYPES: dict[PersonaArchetype, tuple[PersonaArchetype, PersonaArchetype]] = {
-    "grassroots_worker": ("medical_expert", "policy_analyst"),
-    "medical_expert": ("grassroots_worker", "policy_analyst"),
-    "policy_analyst": ("grassroots_worker", "sharp_debater"),
-    "sharp_debater": ("policy_analyst", "medical_expert"),
+SCENARIOS={
+ 'transport':('bus','ferry','transport','commut','driver','passenger','delivery'),
+ 'business':('shop','restaurant','cafe','business','cost','tourist','booking','retail'),
+ 'tourism':('touris','hotel','visitor','dive','guest','marina'),
+ 'education':('school','classroom','student','campus','teacher','university'),
+ 'sport':('sport','coach','team training','oval','lesson'),
+ 'outdoor':('park','outdoor','garden','beach','oval','market'),
+ 'healthcare':('hospital','clinic','care worker','patient','health system','nurse'),
+ 'vaccine_evidence':('trial','clinical','study','efficacy','side effect','transmission','immune','vaccine evidence'),
+ 'privacy':('privacy','tracking','personal data','visit history','database','retaining'),
+ 'technology':('app','phone','qr','digital','scanner','connection','software'),
+ 'rural':('farm','rural','outer island','orchard','grower','fishing'),
+ 'workplace':('workplace','shift','staff','employer','contractor','worksite'),
+ 'administration':('procedure','guidance','implementation','proof','certificate','requirement'),
+ 'law':('law','legal','rights','statute','proportional','exemption','clause','policy version','municipal','ordinance'),
+ 'access':('access','entrance','entry','public space'),
+ 'discussion':('argument','explain','clarify','evidence','meaning'),
 }
+TOPIC_TAGS={'vaccine_evidence':'vaccine_evidence','public_health':'healthcare',
+    'public_access':'access','economic_effects':'business','voting_process':'administration'}
+
+
+def _extract_jev_answers(data):
+    if not isinstance(data,dict): return {}
+    if isinstance(data.get('answers'),dict): return data['answers']
+    assessment = ((data.get('flow') or {}).get('deep') or {}).get('assessment') or {}
+    return (assessment.get('output') or {}).get('answers',{})
+
+
+def _get_val(answer):
+    return answer.get('value') if isinstance(answer,dict) else answer
+
+
+def scenario_tags(data,text):
+    lower=text.lower()
+    tags={tag for tag,words in SCENARIOS.items() if any(re.search(r'\b'+re.escape(word),lower) for word in words)}
+    topic=_get_val(_extract_jev_answers(data).get('topic'))
+    if topic in TOPIC_TAGS:tags.add(TOPIC_TAGS[topic])
+    return tags
+
+
+def preferred_group(data):
+    answer=_extract_jev_answers(data).get('preferred_occupation') or {}
+    if not isinstance(answer,dict) or answer.get('status')!='valid':return None
+    probabilities=answer.get('probabilities') or {}
+    selected=answer.get('value')
+    if selected not in GROUP_ALLOCATION or not isinstance(probabilities,dict) or selected not in probabilities:return None
+    if any(type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=1 for v in probabilities.values()):return None
+    p=probabilities[selected]
+    margin=p-max((v for k,v in probabilities.items() if k!=selected),default=0)
+    return selected if p>=REPLY_POLICY['occupation_min_probability'] and margin>=REPLY_POLICY['occupation_min_margin'] else None
 
 
 class PersonaRouter:
-    """Routes target posts to the most suitable account persona, backed by SQLite StateStore."""
-
-    def __init__(
-        self,
-        registry: PersonaRegistry | None = None,
-        *,
-        default_side: str = "yes",
-        store: Any | None = None,
-        db_path: str = ":memory:",
-    ) -> None:
+    def __init__(self,registry=None,*,default_side='yes',store=None,db_path=':memory:',allow_unbound=False,rng=None):
         from ctn.storage import StateStore
+        self.store=store if store is not None else StateStore(db_path)
+        self.registry=(registry if registry is not None else get_default_registry()).attach(self.store)
+        self.default_side=default_side
+        self.allow_unbound=allow_unbound
+        self.rng=rng or random.Random()
+        self._states={}
 
-        self.registry = registry if registry is not None else get_default_registry()
-        self.default_side = default_side
-        self.store: StateStore = store if store is not None else StateStore(db_path)
-        self._states: dict[str, AccountState] = {}
+    def get_state(self,account_id):
+        return self.store.get_account_state(account_id)
 
-    def get_state(self, account_id: str) -> AccountState:
-        """Return or create the runtime state for an account, synchronized with SQLite."""
-        state = self.store.get_account_state(account_id)
-        self._states[account_id] = state
-        return state
+    def mark_used(self,account_id,now=None,*,target_stance=''):
+        self.store.mark_account_used(account_id,now=now,target_stance=target_stance)
 
-    def mark_used(
-        self,
-        account_id: str,
-        now: float | None = None,
-        *,
-        target_stance: str = "",
-    ) -> None:
-        """Record that an account just published a post or reply and persist to SQLite."""
-        current_time = time.time() if now is None else now
-        state = self.get_state(account_id)
-        state.mark_used(current_time)
-        self.store.save_account_state(state, target_stance=target_stance)
+    def set_account_frozen(self,account_id,frozen=True):return self.store.set_account_frozen(account_id,frozen=frozen)
+    def set_account_banned(self,account_id,banned=True):return self.store.set_account_banned(account_id,banned=banned)
+    def reset_states(self):self.store.reset_accounts()
+    def dump_states(self):return {k:v.to_dict() for k,v in self.store.load_all_account_states().items()}
+    def load_states(self,states_data):
+        for account,data in states_data.items():
+            self.store.save_account_state(AccountState(**{k:v for k,v in {**data,'account_id':account}.items() if k in AccountState.__dataclass_fields__}))
 
-    def set_account_frozen(self, account_id: str, frozen: bool = True) -> AccountState:
-        """Mark an account as temporarily frozen (or unfreeze it) in memory and SQLite."""
-        st = self.store.set_account_frozen(account_id, frozen=frozen)
-        self._states[account_id] = st
-        return st
+    def context_for(self,persona):
+        return {'persona_id':persona.persona_id,'persona_version':persona.version,
+            'occupation_group':persona.occupation_group,'catalog_hash':self.registry.catalog_hash,
+            'voice_style':persona.profile.get('voice',{}).get('style',''),
+            'cooldown_s':persona.cooldown_s}
 
-    def set_account_banned(self, account_id: str, banned: bool = True) -> AccountState:
-        """Mark an account as permanently banned (or unban it) in memory and SQLite."""
-        st = self.store.set_account_banned(account_id, banned=banned)
-        self._states[account_id] = st
-        return st
-
-    def reset_states(self) -> None:
-        """Reset all account runtime states in memory and SQLite."""
-        self._states.clear()
-        self.store.reset_accounts()
-
-    def load_states(self, states_data: dict[str, dict[str, Any]]) -> None:
-        """Load account states from dictionary and persist into SQLite."""
-        for acc_id, d in states_data.items():
-            st = AccountState(
-                account_id=acc_id,
-                last_posted_at=float(d.get("last_posted_at", 0.0)),
-                post_count=int(d.get("post_count", 0)),
-                is_frozen=bool(d.get("is_frozen", False)),
-                is_banned=bool(d.get("is_banned", False)),
-            )
-            self._states[acc_id] = st
-            self.store.save_account_state(st)
-
-    def dump_states(self) -> dict[str, dict[str, Any]]:
-        """Dump all account states to a dictionary."""
-        for acc_id, st in list(self._states.items()):
-            self.store.save_account_state(st)
-        all_states = self.store.load_all_account_states()
-        self._states.update(all_states)
-        return {acc_id: s.to_dict() for acc_id, s in self._states.items()}
-
-    def score_archetypes(
-        self,
-        data: dict[str, Any],
-        post_text: str,
-        prompt_type: str | None = None,
-    ) -> dict[PersonaArchetype, float]:
-        """Compute match scores for all archetypes given JEV data and post text."""
-        answers = _extract_jev_answers(data)
-        text_lower = post_text.lower()
-
-        # Extract normalized JEV signals
-        topic = str(_get_val(answers.get("topic")) or "").lower()
-        func = str(_get_val(answers.get("expression_function")) or "").lower()
-        claim_kind = str(_get_val(answers.get("claim_kind")) or "").lower()
-        try:
-            emotion_val = float(_get_val(answers.get("emotion_intensity")) or 0.0)
-        except (ValueError, TypeError):
-            emotion_val = 0.0
-        try:
-            fact_check_val = float(_get_val(answers.get("fact_check_needed")) or 0.0)
-        except (ValueError, TypeError):
-            fact_check_val = 0.0
-
-        scores: dict[PersonaArchetype, float] = {
-            "sharp_debater": 0.1,
-            "medical_expert": 0.1,
-            "policy_analyst": 0.1,
-            "grassroots_worker": 0.25,  # Baseline working-class default
-        }
-
-        # 1. Sharp debater heuristics
-        if func == "venting":
-            scores["sharp_debater"] += 0.6
-        if emotion_val >= 2.0:
-            scores["sharp_debater"] += 0.3
-        if prompt_type == "P03":
-            scores["sharp_debater"] += 0.2
-        if any(w in text_lower for w in _SHARP_KEYWORDS):
-            scores["sharp_debater"] += 0.4
-
-        # 2. Medical expert heuristics
-        if topic in ("public_health", "vaccine_evidence"):
-            scores["medical_expert"] += 0.6
-        if fact_check_val >= 0.5:
-            scores["medical_expert"] += 0.3
-        if prompt_type in ("P02", "P07"):
-            scores["medical_expert"] += 0.2
-        if any(w in text_lower for w in _MEDICAL_KEYWORDS):
-            scores["medical_expert"] += 0.3
-
-        # 3. Policy analyst heuristics
-        if prompt_type in ("P04", "P05", "P08"):
-            scores["policy_analyst"] += 0.3
-        elif prompt_type in ("P02", "P03"):
-            scores["policy_analyst"] += 0.2
-        if topic in ("public_access", "economic_effects", "voting_process"):
-            scores["policy_analyst"] += 0.4
-        if claim_kind == "policy_proposal":
-            scores["policy_analyst"] += 0.3
-        if any(w in text_lower for w in _POLICY_KEYWORDS):
-            scores["policy_analyst"] += 0.4
-
-        # 4. Grassroots worker heuristics
-        if func in ("experience", "call_to_action"):
-            scores["grassroots_worker"] += 0.5
-        if prompt_type == "P07":
-            scores["grassroots_worker"] += 0.25
-        if topic in ("personal_experience", "personal_choice"):
-            scores["grassroots_worker"] += 0.4
-        if any(w in text_lower for w in _GRASSROOTS_KEYWORDS):
-            scores["grassroots_worker"] += 0.3
-
-        return scores
-
-    def route(
-        self,
-        data: dict[str, Any],
-        post_text: str,
-        side: str | None = None,
-        prompt_type: str | None = None,
-        now: float | None = None,
-        *,
-        complementary: bool | None = None,
-    ) -> RoutingDecision:
-        """Match target post to best available persona, handling disabled accounts, cooldown, fallbacks, and allied complementarity."""
-        current_time = time.time() if now is None else now
-        target_side = (side or self.default_side).lower()
-
-        # Retrieve candidate personas assigned to the side
-        candidates = self.registry.list_by_side(target_side)
-        if not candidates:
-            raise ValueError(f"No registered personas for side '{target_side}'")
-
-        # Derive prompt_type if not passed explicitly
-        if prompt_type is None:
-            resp_dec = data.get("response_decision") or {}
-            gen_task = data.get("generation_task") or {}
-            prompt_type = resp_dec.get("prompt_type") or gen_task.get("prompt_type")
-
-        # Score archetypes based on topic/emotion
-        archetype_scores = self.score_archetypes(data, post_text, prompt_type=prompt_type)
-        detected_archetype = max(archetype_scores.items(), key=lambda item: item[1])[0]
-
-        # Determine whether to apply Cross-Persona Complementarity for allied P01 statements
-        if complementary is None:
-            flow = data.get("flow") or {}
-            rel_stance = flow.get("relative_stance")
-            answers = _extract_jev_answers(data)
-            func = str(_get_val(answers.get("expression_function")) or "").lower()
-            is_question = (func == "question") or ("?" in post_text)
-            use_complementary = (rel_stance == "aligned" and not is_question) or (prompt_type == "P01" and not is_question)
-        else:
-            use_complementary = complementary
-
-        if use_complementary and detected_archetype in _COMPLEMENTARY_ARCHETYPES:
-            primary_comp, secondary_comp = _COMPLEMENTARY_ARCHETYPES[detected_archetype]
-            base_max = archetype_scores[detected_archetype]
-            archetype_scores = dict(archetype_scores)
-            archetype_scores[primary_comp] = base_max + 0.5
-            archetype_scores[secondary_comp] = base_max + 0.25
-
-        # Sort candidates by (score * weight) descending
-        scored_candidates: list[tuple[Persona, float]] = []
+    def _eligible(self,data,side,now):
+        if self.registry.catalog_hash and self.store.policy('active_persona_catalog')!=self.registry.catalog_hash:
+            raise ValueError('persona_catalog_mismatch')
+        candidates=[p for p in self.registry.list_by_side(side) if p.account_id]
+        states=self.store.account_states_for(p.account_id for p in candidates)
+        if self.allow_unbound:
+            for p in candidates:
+                if p.account_id not in states:states[p.account_id]=self.get_state(p.account_id)
+        requirements=data.get('action_decision') or {}
+        high='high' in (requirements.get('required_account_level'),requirements.get('minimum_account_level'))
+        bindings=self.store.persona_bindings()
+        available=[];cooling=[]
         for p in candidates:
-            base_score = archetype_scores.get(p.archetype, 0.1)
-            final_score = base_score * p.weight
-            scored_candidates.append((p, final_score))
+            state=states.get(p.account_id)
+            if state is None or state.is_disabled() or (high and state.capability_tier!='high'):continue
+            if not self.allow_unbound and not bindings.get(p.persona_id)==p.account_id:continue
+            if state.is_in_cooldown(now,p.cooldown_s):cooling.append((p,state))
+            else:available.append((p,state))
+        return available,cooling
 
-        scored_candidates.sort(key=lambda item: item[1], reverse=True)
-        top_persona, top_score = scored_candidates[0]
-        target_archetype = top_persona.archetype
-        match_reason = (
-            f"complementary_{target_archetype}_for_{detected_archetype}"
-            if use_complementary and target_archetype != detected_archetype
-            else f"matched_{target_archetype}"
-        )
+    def route(self,data,post_text,side=None,prompt_type=None,now=None,*,complementary=None):
+        now=time.time() if now is None else now
+        side=(side or self.default_side).lower()
+        available,cooling=self._eligible(data,side,now)
+        tags=scenario_tags(data,post_text);preferred=preferred_group(data)
+        if not available:
+            if not cooling:raise ValueError('no_bound_active_capable_accounts')
+            p,state=min(cooling,key=lambda pair:pair[1].remaining_cooldown(now,pair[0].cooldown_s))
+            return RoutingDecision(p.account_id,p,p.occupation_group,0,'all_accounts_in_cooldown',True,True)
+        preferred_available=[pair for pair in available if pair[0].occupation_group==preferred]
+        if preferred_available:
+            group=preferred;pool=preferred_available;score=1+len(set(pool[0][0].topic_tags)&tags);reason='jev_preferred_occupation'
+        else:
+            scores={p.occupation_group:len(set(p.topic_tags)&tags) for p,_ in available}
+            best=max(scores.values(),default=0)
+            groups=[g for g,s in scores.items() if s==best]
+            if best==0:
+                general=[g for g in groups if g in ('office_community','independent_commentary')]
+                groups=general or groups
+            group=self.rng.choice(sorted(groups));pool=[pair for pair in available if pair[0].occupation_group==group]
+            score=best;reason='scenario_tag_match' if best else 'general_clarification_fallback'
+        least=min(s.last_posted_at for _,s in pool)
+        p,state=self.rng.choice([pair for pair in pool if pair[1].last_posted_at==least])
+        return RoutingDecision(p.account_id,p,group,float(score),reason,preferred is not None and preferred!=group)
 
-        # Check suspension/ban and cooldown status for candidates
-        available: list[tuple[Persona, float]] = []
-        in_cooldown_list: list[tuple[Persona, float, float]] = []  # persona, score, remaining_time
-        top_state = self.get_state(top_persona.account_id)
-
-        for p, score in scored_candidates:
-            st = self.get_state(p.account_id)
-            if st.is_disabled():
-                continue
-            if st.is_in_cooldown(current_time, p.cooldown_s):
-                rem = st.remaining_cooldown(current_time, p.cooldown_s)
-                in_cooldown_list.append((p, score, rem))
-            else:
-                available.append((p, score))
-
-        if not available and not in_cooldown_list:
-            raise ValueError(f"All registered accounts for side '{target_side}' are frozen or banned")
-
-        # Case 1: Ideal match is active and ready
-        if available and available[0][0].account_id == top_persona.account_id:
-            return RoutingDecision(
-                account_id=top_persona.account_id,
-                persona=top_persona,
-                target_archetype=target_archetype,
-                score=round(top_score, 3),
-                reason=match_reason,
-                fallback_used=False,
-                in_cooldown=False,
-            )
-
-        # Case 2: Ideal match is cooling down or disabled, but an alternative active persona is ready
-        if available:
-            fallback_persona, fallback_score = available[0]
-            if top_state.is_banned:
-                fb_reason = f"fallback_from_{top_persona.account_id}_banned"
-            elif top_state.is_frozen:
-                fb_reason = f"fallback_from_{top_persona.account_id}_frozen"
-            else:
-                fb_reason = f"fallback_from_{top_persona.account_id}_cooling_down"
-            return RoutingDecision(
-                account_id=fallback_persona.account_id,
-                persona=fallback_persona,
-                target_archetype=target_archetype,
-                score=round(fallback_score, 3),
-                reason=fb_reason,
-                fallback_used=True,
-                in_cooldown=False,
-            )
-
-        # Case 3: All active accounts are in cooldown; select one with shortest remaining wait
-        in_cooldown_list.sort(key=lambda item: item[2])  # sort by remaining wait time
-        best_cool_persona, best_cool_score, _ = in_cooldown_list[0]
-        return RoutingDecision(
-            account_id=best_cool_persona.account_id,
-            persona=best_cool_persona,
-            target_archetype=target_archetype,
-            score=round(best_cool_score, 3),
-            reason=f"all_accounts_in_cooldown_earliest_{best_cool_persona.account_id}",
-            fallback_used=(best_cool_persona.account_id != top_persona.account_id),
-            in_cooldown=True,
-        )
+    def additional_candidates(self,data,post_text,primary_account,count,*,rng=None,now=None,purpose=None,materials=None):
+        rng=rng or self.rng;now=time.time() if now is None else now
+        if materials is not None:
+            if (purpose not in ('P01','P02','P03','P07','P08') or materials.get('prompt_type')!=purpose
+                or (materials.get('action_decision') or {}).get('action')!='reply'):
+                return []
+            if purpose=='P08':
+                if not materials.get('information_gap'):return []
+            elif not materials.get('support'):return []
+        available,_=self._eligible(data,self.default_side,now)
+        tags=scenario_tags(data,post_text);preferred=preferred_group(data)
+        pool=[pair for pair in available if pair[0].account_id!=primary_account and
+              (set(pair[0].topic_tags)&tags or pair[0].occupation_group==preferred)]
+        selected=[]
+        for _ in range(count):
+            groups=sorted({p.occupation_group for p,_ in pool})
+            if not groups:break
+            group=rng.choice(groups)
+            choices=[pair for pair in pool if pair[0].occupation_group==group]
+            least=min(s.last_posted_at for _,s in choices)
+            p,_=rng.choice([pair for pair in choices if pair[1].last_posted_at==least])
+            selected.append(p)
+            pool=[pair for pair in pool if pair[0].account_id!=p.account_id]
+        return selected

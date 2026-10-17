@@ -1,0 +1,659 @@
+"""Transactional runtime state shared by the Pi CLI and Python service.
+
+No transaction in this module spans network I/O. A sending action whose owner
+dies is UNKNOWN, never automatically replayed. Scores are evidence points,
+not probabilities or platform truth.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+import uuid
+from pathlib import Path
+
+DEFAULT_EVIDENCE_POLICY=json.loads((Path(__file__).resolve().parents[2]/"policies/evidence-v1.json").read_text())
+
+SCHEMA_VERSION = 4
+RUNTIME_SCHEMA = """
+CREATE TABLE IF NOT EXISTS runtime_policy(key TEXT PRIMARY KEY,value_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS action_intents(
+ id TEXT PRIMARY KEY, action_key TEXT NOT NULL UNIQUE, kind TEXT NOT NULL,
+ account_id TEXT NOT NULL,target_id TEXT NOT NULL,text TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL,owner TEXT NOT NULL,lease_until REAL NOT NULL,
+ created_at REAL NOT NULL,updated_at REAL NOT NULL,detail TEXT NOT NULL DEFAULT '',
+ metadata_json TEXT NOT NULL DEFAULT '{}',response_json TEXT NOT NULL DEFAULT '{}');
+CREATE INDEX IF NOT EXISTS idx_intents_status ON action_intents(status,lease_until);
+CREATE INDEX IF NOT EXISTS idx_intents_account ON action_intents(account_id,status);
+CREATE TABLE IF NOT EXISTS account_leases(
+ account_id TEXT PRIMARY KEY,action_id TEXT NOT NULL,lease_until REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS post_tasks(
+ post_id TEXT NOT NULL,version INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'queued',
+ next_attempt_at REAL NOT NULL,expires_at REAL NOT NULL,lease_until REAL NOT NULL DEFAULT 0,
+ owner TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,
+ draft_json TEXT NOT NULL DEFAULT '',draft_at REAL NOT NULL DEFAULT 0,
+ PRIMARY KEY(post_id,version));
+CREATE INDEX IF NOT EXISTS idx_tasks_ready ON post_tasks(status,next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_expiry ON post_tasks(status,expires_at);
+CREATE TABLE IF NOT EXISTS comment_queue(
+ post_id TEXT PRIMARY KEY,priority INTEGER NOT NULL,next_fetch_at REAL NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS idx_comment_priority ON comment_queue(priority DESC,next_fetch_at);
+CREATE TABLE IF NOT EXISTS request_slots(
+ bucket TEXT PRIMARY KEY,next_at REAL NOT NULL DEFAULT 0,blocked_until REAL NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS wire_slots(bucket TEXT PRIMARY KEY,next_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS request_attempts(
+ id TEXT PRIMARY KEY,kind TEXT NOT NULL,buckets_json TEXT NOT NULL,status TEXT NOT NULL,
+ due_at REAL NOT NULL,expires_at REAL NOT NULL,created_at REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_request_reservations ON request_attempts(kind,status,expires_at);
+CREATE TABLE IF NOT EXISTS bot_evidence(
+ account_id TEXT NOT NULL,evidence_key TEXT NOT NULL,family TEXT NOT NULL,
+ points REAL NOT NULL,detail_json TEXT NOT NULL,created_at REAL NOT NULL,policy_version TEXT NOT NULL,
+ PRIMARY KEY(account_id,evidence_key));
+CREATE INDEX IF NOT EXISTS idx_evidence_author ON bot_evidence(account_id,family);
+CREATE TABLE IF NOT EXISTS moderation_events(
+ event_id TEXT PRIMARY KEY,subject_kind TEXT NOT NULL,subject_id TEXT NOT NULL,
+ outcome TEXT NOT NULL,ruled_at REAL NOT NULL,source TEXT NOT NULL,raw_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS account_reports(
+ target_author TEXT PRIMARY KEY,report_id TEXT NOT NULL DEFAULT '',outcome TEXT NOT NULL,
+ submitted_at REAL NOT NULL,ruled_at REAL NOT NULL DEFAULT 0,reason TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS simulation_log(
+ id INTEGER PRIMARY KEY,created_at REAL NOT NULL,kind TEXT NOT NULL,account_id TEXT NOT NULL,
+ target_id TEXT NOT NULL,payload_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS confirmed_account_activity(
+ account_id TEXT PRIMARY KEY,action_count INTEGER NOT NULL,observed_at REAL NOT NULL,source TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS legacy_bot_profiles(account_id TEXT PRIMARY KEY,snapshot_json TEXT NOT NULL);
+"""
+
+
+class RuntimeStoreMixin:
+    def migrate_runtime(self):
+        old_version=self._conn.execute('PRAGMA user_version').fetchone()[0]
+        columns = {
+            'account_states': {'mode': "TEXT NOT NULL DEFAULT 'active'",
+                'last_original_at': 'REAL NOT NULL DEFAULT 0', 'last_reply_at': 'REAL NOT NULL DEFAULT 0',
+                'original_locked_until': 'REAL NOT NULL DEFAULT 0', 'capability_tier': "TEXT NOT NULL DEFAULT 'standard'"},
+            'observed_posts': {'version': 'INTEGER NOT NULL DEFAULT 1','root_post_id': "TEXT NOT NULL DEFAULT ''"},
+            'interaction_log': {'text': "TEXT NOT NULL DEFAULT ''"},
+            'bot_registry': {'verified': 'INTEGER NOT NULL DEFAULT 0',
+                'true_team_id': "TEXT NOT NULL DEFAULT ''", 'evidence_groups': 'INTEGER NOT NULL DEFAULT 0'},
+            'report_log': {'report_id': "TEXT NOT NULL DEFAULT ''", 'ruled_at': 'REAL NOT NULL DEFAULT 0',
+                'ruling_day': "TEXT NOT NULL DEFAULT ''"},
+        }
+        for table, definitions in columns.items():
+            existing = {r['name'] for r in self._conn.execute(f'PRAGMA table_info({table})')}
+            for col, ddl in definitions.items():
+                if col not in existing:
+                    self._conn.execute(f'ALTER TABLE {table} ADD COLUMN {col} {ddl}')
+        for statement in RUNTIME_SCHEMA.split(';'):
+            if statement.strip():
+                self._conn.execute(statement)
+        self._conn.execute('INSERT OR IGNORE INTO comment_queue(post_id,priority,next_fetch_at) '
+            "SELECT post_id,MAX(0,replies-replies_crawled),comments_crawled_at FROM observed_posts "
+            "WHERE replies>replies_crawled")
+        self._conn.execute('CREATE INDEX IF NOT EXISTS idx_observed_root ON observed_posts(root_post_id,created_at)')
+        if old_version<3:
+            self._conn.execute("UPDATE observed_posts SET root_post_id=COALESCE(CAST(json_extract(raw_json,'$.root_post_id') AS TEXT),parent_id),"
+                "parent_id=COALESCE(CAST(json_extract(raw_json,'$.reply_to_post_id') AS TEXT),parent_id)")
+            # Old scores had different weights and rejected reports used to certify
+            # NPC identity. Preserve the original data, but do not carry that inference forward.
+            for row in self._conn.execute('SELECT * FROM bot_registry').fetchall():
+                self._conn.execute('INSERT OR IGNORE INTO legacy_bot_profiles VALUES(?,?)',
+                    (row['account_id'],json.dumps(dict(row))))
+            self._conn.execute("UPDATE bot_registry SET status='unknown',suspicion_score=0,evidence_json='[]' "
+                "WHERE status IN ('confirmed_bot','suspected_bot') OR (status='verified_npc' AND account_id IN "
+                "(SELECT target_author FROM report_log WHERE outcome='rejected'))")
+            # Legacy logs cannot distinguish a dry run from an actual send. Quarantine
+            # those actions until positive history evidence (or an operator review) resolves them.
+            for row in self._conn.execute("SELECT * FROM interaction_log WHERE action IN ('post','reply','like','repost','report')").fetchall():
+                text=row['text'] or row['normalized_text']
+                key=self.action_key(row['action'],row['account_id'],row['target_post_id'],text)
+                ident=uuid.uuid4().hex
+                meta={'engine':row['engine'],'target_author':row['target_author'],
+                    'target_stance':row['target_stance'],'purpose':row['purpose'],'accounting_already_applied':True}
+                self._conn.execute("INSERT OR IGNORE INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,lease_until,created_at,updated_at,detail,metadata_json) "
+                    "VALUES(?,?,?,?,?,?,'unknown','legacy',0,?,?,?,?)",
+                    (ident,key,row['action'],row['account_id'],row['target_post_id'],text,row['created_at'],row['created_at'],
+                     'legacy result requires reconciliation',json.dumps(meta)))
+                if row['action'] in ('post','reply'):
+                    actual=self._conn.execute('SELECT id FROM action_intents WHERE action_key=?',(key,)).fetchone()[0]
+                    self._conn.execute('INSERT OR IGNORE INTO account_leases VALUES(?,?,1e20)',(row['account_id'],actual))
+            ts=time.time()
+            self._conn.execute("INSERT OR IGNORE INTO post_tasks(post_id,version,status,next_attempt_at,expires_at,reason) "
+                "SELECT p.post_id,p.version,CASE WHEN EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='reply' "
+                "AND a.target_id=p.post_id AND a.status='unknown') THEN 'unknown' "
+                "WHEN p.first_seen_at+1800<=? THEN 'expired' ELSE 'queued' END,MAX(p.first_seen_at,?),"
+                "p.first_seen_at+1800,'legacy_observation_import' FROM observed_posts p",(ts,ts))
+        self._conn.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
+
+    def policy(self, key, default=None):
+        with self._lock:
+            r = self._conn.execute('SELECT value_json FROM runtime_policy WHERE key=?', (key,)).fetchone()
+            return json.loads(r[0]) if r else default
+
+    def set_policy(self, key, value):
+        with self.batch_transaction():
+            self._conn.execute('INSERT INTO runtime_policy VALUES(?,?) ON CONFLICT(key) '
+                'DO UPDATE SET value_json=excluded.value_json', (key, json.dumps(value, allow_nan=False)))
+
+    def seed_campaign_policy(self, personas):
+        """Once-only defaults from the existing harness; operator changes survive restart."""
+        with self.batch_transaction():
+            if self.policy('campaign_seeded', False):
+                return
+            for p in personas:
+                if not p.account_id: continue
+                exists=self._conn.execute('SELECT 1 FROM account_states WHERE account_id=?',(p.account_id,)).fetchone()
+                if not exists:
+                    self.get_account_state(p.account_id)
+                    self._conn.execute("UPDATE account_states SET mode='standby' WHERE account_id=?",(p.account_id,))
+            for key,value in (('original_lock_seconds',86400),('daily_original_limit',10),('phase','warmup')):
+                if self.policy(key) is None:self.set_policy(key,value)
+            if self.policy('evidence_policy') is None: self.set_policy('evidence_policy',DEFAULT_EVIDENCE_POLICY)
+            self.set_policy('campaign_seeded',True)
+
+    def bind_campaign_side(self, side):
+        if side not in ('yes','no'): raise ValueError('campaign side is unassigned')
+        with self.batch_transaction():
+            previous=self.policy('assigned_side')
+            if previous and previous!=side: raise ValueError('assigned side conflicts with shared database')
+            self.set_policy('assigned_side',side)
+
+    def bind_data_source(self, source):
+        if source not in ('mock','real'): raise ValueError('invalid dataset source')
+        with self.batch_transaction():
+            previous=self.policy('data_source')
+            if previous and previous!=source:
+                raise ValueError('mock and real observations require separate databases; select --state-file')
+            self.set_policy('data_source',source)
+
+    def set_account_policy(self, account, *, mode=None, capability_tier=None, original_locked_until=None):
+        with self.batch_transaction():
+            self.get_account_state(account)
+            for name, value, allowed in (
+                ('mode',mode,{'active','standby','dormant'}),
+                ('capability_tier',capability_tier,{'standard','high'}),
+                ('original_locked_until',original_locked_until,None)):
+                if value is not None:
+                    if allowed is not None and value not in allowed:
+                        raise ValueError(f'invalid {name}')
+                    if allowed is None and (not isinstance(value,(int,float)) or value<0):
+                        raise ValueError('invalid lock timestamp')
+                    self._conn.execute(f'UPDATE account_states SET {name}=? WHERE account_id=?',(value,account))
+
+    def mark_account_used(self, account, *, now=None, kind='reply', target_stance=''):
+        ts = time.time() if now is None else float(now)
+        with self.batch_transaction():
+            self.get_account_state(account)
+            self._conn.execute('UPDATE account_states SET last_posted_at=MAX(last_posted_at,?), '
+                'post_count=post_count+1, allied_reply_count=allied_reply_count+?, '
+                'opposing_reply_count=opposing_reply_count+?,last_original_at=CASE WHEN ? THEN ? ELSE last_original_at END,'
+                'last_reply_at=CASE WHEN ? THEN ? ELSE last_reply_at END,'
+                'original_locked_until=CASE WHEN ? THEN ? ELSE original_locked_until END WHERE account_id=?',
+                (ts,int(kind=='reply' and target_stance=='aligned'),int(kind=='reply' and target_stance=='opposing'),
+                 kind=='post',ts,kind=='reply',ts,kind=='post',
+                 ts+float(self.policy('original_lock_seconds',86400)),account))
+
+    def action_key(self, kind, account, target, text='', metadata=None):
+        from .sqlite_store import normalize_text,compute_post_norm_hash
+        subject = (compute_post_norm_hash(text) or normalize_text(text)) if kind=='post' else str(target)
+        owner = account if kind in ('like','repost','follow','unfollow','delete_account') else 'team'
+        if kind=='reply' and (metadata or {}).get('reply_batch_id'):
+            subject=[str(target),metadata['reply_batch_id'],metadata['reply_slot']]
+        return hashlib.sha256(json.dumps([self.policy('campaign_id','ctn2026'),kind,owner,subject]).encode()).hexdigest()
+
+    def claim_action(self, kind, account, target='', text='', *, metadata=None, now=None):
+        from .sqlite_store import current_sydney_day
+        ts=time.time() if now is None else float(now)
+        meta=metadata or {}
+        with self.batch_transaction():
+            self.recover_actions(now=ts)
+            ready,reason=self.catalog_write_ready(account,meta)
+            if not ready:return None,reason
+            if kind in ('post','reply'):
+                ready,reason=self.persona_action_ready(account,meta)
+                if not ready:return None,reason
+            if kind=='reply':
+                ready,reason=self.reply_slot_ready(account,target,meta)
+                if not ready:return None,reason
+            key=self.action_key(kind,account,target,text,meta)
+            old=self._conn.execute('SELECT * FROM action_intents WHERE action_key=?',(key,)).fetchone()
+            if old and old['status']!='failed':
+                return None, 'action_'+old['status']
+            st=self.get_account_state(account)
+            if st.is_disabled() and kind!='delete_account':
+                return None,'account_disabled'
+            if kind in ('post','reply'):
+                if st.is_in_cooldown(ts,float(meta.get('cooldown_s',60))):
+                    return None,'account_cooldown'
+                leased=self._conn.execute('SELECT 1 FROM account_leases WHERE account_id=? AND lease_until>?',
+                    (account,ts)).fetchone()
+                if leased:
+                    return None,'account_claimed'
+                occupied=self._conn.execute("SELECT batch_id,slot FROM reply_slots WHERE account_id=? AND status IN ('claimed','sending','unknown') AND lease_until>?",(account,ts)).fetchall()
+                if any(r['batch_id']!=meta.get('reply_batch_id') or r['slot']!=meta.get('reply_slot') for r in occupied):
+                    return None,'account_occupied_by_reply_slot'
+            if kind=='reply' and meta.get('target_stance')=='aligned':
+                sent=self.count_recent_allied_replies(now=ts)
+                reserved=self._conn.execute("SELECT COUNT(*) FROM action_intents WHERE kind='reply' "
+                    "AND status IN ('claimed','sending','unknown') AND json_extract(metadata_json,'$.target_stance')='aligned'").fetchone()[0]
+                if sent+reserved>=int(meta.get('allied_hourly_cap',3)):
+                    return None,'allied_hourly_cap'
+            if kind=='post':
+                if st.original_locked_until>ts:
+                    return None,'original_locked'
+                day=current_sydney_day(ts)
+                # Reservations and uncertain sends consume quota until reconciled.
+                rows=self._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' "
+                    "AND status IN ('claimed','sending','unknown','succeeded')").fetchall()
+                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day for r in rows)>=int(self.policy('daily_original_limit',10)):
+                    return None,'daily_original_limit'
+            if kind in ('report','report_account'):
+                if self.is_reporting_suspended(now=ts)[0]:
+                    return None,'reporting_suspended'
+                author=str(meta.get('target_author') or target)
+                prof=self.get_bot_profile(author)
+                if prof['status'] in ('own_bot','verified_npc') or prof.get('verified'):
+                    return None,'protected_account'
+                if not self.report_evidence_ready(prof) or not meta.get('detail'):
+                    return None,'insufficient_report_evidence'
+                pending=self._conn.execute("SELECT target_author FROM report_log WHERE outcome='pending' UNION ALL "
+                    "SELECT target_author FROM account_reports WHERE outcome='pending'").fetchall()
+                intents=self._conn.execute("SELECT metadata_json FROM action_intents WHERE kind IN ('report','report_account') "
+                    "AND status IN ('claimed','sending','unknown')").fetchall()
+                authors=[r[0] for r in pending]+[json.loads(r[0]).get('target_author') for r in intents]
+                if len(authors)>=int(self.policy('max_pending_reports',10)):
+                    return None,'pending_team_limit'
+                if authors.count(author)>=int(self.policy('max_pending_per_author',1)):
+                    return None,'pending_author_limit'
+            ident=old['id'] if old else uuid.uuid4().hex
+            self._conn.execute('INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,'
+                'lease_until,created_at,updated_at,metadata_json) VALUES(?,?,?,?,?,?,\'claimed\',?,?,?,?,?) '
+                'ON CONFLICT(action_key) DO UPDATE SET status=\'claimed\',owner=excluded.owner,'
+                'lease_until=excluded.lease_until,updated_at=excluded.updated_at,detail=\'\','
+                'account_id=excluded.account_id,text=excluded.text,metadata_json=excluded.metadata_json,response_json=\'{}\'',
+                (ident,key,kind,account,target,text,uuid.uuid4().hex,ts+900,ts,ts,json.dumps(meta)))
+            if kind in ('post','reply'):
+                self._conn.execute('INSERT INTO account_leases VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE '
+                    'SET action_id=excluded.action_id,lease_until=excluded.lease_until',(account,ident,ts+900))
+            if kind=='reply' and meta.get('reply_batch_id'):
+                self._conn.execute('UPDATE reply_slots SET action_id=? WHERE batch_id=? AND slot=?',
+                    (ident,meta['reply_batch_id'],meta['reply_slot']))
+            return ident,'claimed'
+
+    def recover_actions(self, *, now=None):
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            self._conn.execute("UPDATE action_intents SET status='unknown',detail='owner_lost_during_send' "
+                "WHERE status='sending' AND lease_until<?",(ts,))
+            self._conn.execute("UPDATE account_leases SET lease_until=1e20 WHERE action_id IN "
+                "(SELECT id FROM action_intents WHERE status='unknown')")
+            self._conn.execute("UPDATE action_intents SET status='failed',detail='claim_expired_before_send' "
+                "WHERE status='claimed' AND lease_until<?",(ts,))
+            self._conn.execute('DELETE FROM account_leases WHERE lease_until<?',(ts,))
+            self._conn.execute("INSERT OR IGNORE INTO account_leases(account_id,action_id,lease_until) SELECT account_id,MIN(id),1e20 "
+                "FROM action_intents WHERE status='unknown' AND kind IN ('post','reply') GROUP BY account_id")
+
+    def start_action(self, ident):
+        with self.batch_transaction():
+            return self._conn.execute("UPDATE action_intents SET status='sending',updated_at=? "
+                "WHERE id=? AND status='claimed'",(time.time(),ident)).rowcount==1
+
+    def renew_action(self, ident):
+        with self.batch_transaction():
+            self._conn.execute("UPDATE action_intents SET lease_until=? WHERE id=? AND status='sending'",(time.time()+900,ident))
+            self._conn.execute('UPDATE account_leases SET lease_until=? WHERE action_id=? AND lease_until<1e20',
+                (time.time()+900,ident))
+
+    def guard_wire_action(self, ident, *, now=None):
+        """Recheck after all pacing/login waits and immediately before the actual write."""
+        from .sqlite_store import current_sydney_day
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            row=self._conn.execute('SELECT * FROM action_intents WHERE id=?',(ident,)).fetchone()
+            if not row or row['status']!='sending': return False,'action_not_sending'
+            meta=json.loads(row['metadata_json'])
+            ready,reason=self.catalog_write_ready(row['account_id'],meta)
+            if not ready:return False,reason
+            if row['kind'] in ('post','reply'):
+                ready,reason=self.persona_action_ready(row['account_id'],meta)
+                if not ready:return False,reason
+            if row['kind']=='reply':
+                ready,reason=self.reply_slot_ready(row['account_id'],row['target_id'],meta,sending=True)
+                if not ready:return False,reason
+            if ts>min(meta.get('draft_expires_at',1e20),meta.get('opportunity_expires_at',1e20)):
+                return False,'draft_or_opportunity_expired'
+            state=self.get_account_state(row['account_id'])
+            if state.is_disabled() and row['kind']!='delete_account': return False,'account_disabled'
+            if meta.get('required_account_level')=='high' and state.capability_tier!='high': return False,'account_level_required'
+            if row['kind'] in ('reply','like','repost') and meta.get('target_version'):
+                post=self.get_observed_post(row['target_id'])
+                if not post or post['version']!=meta['target_version']: return False,'target_edited'
+            if row['kind']=='post':
+                if state.original_locked_until>ts: return False,'original_locked'
+                day=current_sydney_day(ts)
+                others=self._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' "
+                    "AND status IN ('claimed','sending','unknown','succeeded') AND id<>?",(ident,)).fetchall()
+                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day for r in others)>=int(self.policy('daily_original_limit',10)):
+                    return False,'daily_original_limit'
+                self._conn.execute("UPDATE action_intents SET metadata_json=json_set(metadata_json,'$.execution_day',?) WHERE id=?",(day,ident))
+            if row['kind'] in ('report','report_account'):
+                if self.is_reporting_suspended(now=ts)[0]: return False,'reporting_suspended'
+                prof=self.get_bot_profile(meta.get('target_author',row['target_id']))
+                if prof.get('verified') or prof['status'] in ('own_bot','verified_npc'): return False,'protected_account'
+                if not self.report_evidence_ready(prof): return False,'evidence_changed'
+            return True,'ready'
+
+    def finish_action(self, ident, status, *, response=None, detail='', now=None):
+        if status not in ('succeeded','failed','unknown'):
+            raise ValueError('invalid action terminal state')
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            r=self._conn.execute('SELECT * FROM action_intents WHERE id=?',(ident,)).fetchone()
+            if not r or r['status'] in ('succeeded','failed'):
+                return False
+            self._conn.execute('UPDATE action_intents SET status=?,updated_at=?,detail=?,response_json=? WHERE id=?',
+                (status,ts,detail,json.dumps(response or {}),ident))
+            if status != 'unknown':
+                self._conn.execute('DELETE FROM account_leases WHERE action_id=?',(ident,))
+            else:
+                self._conn.execute('UPDATE account_leases SET lease_until=1e20 WHERE action_id=?',(ident,))
+            if r['kind']=='reply' and status in ('succeeded','failed'):
+                self._conn.execute("UPDATE post_tasks SET status=CASE WHEN ?='succeeded' THEN 'succeeded' "
+                    "WHEN expires_at<=? THEN 'expired' ELSE 'queued' END,reason='action_reconciled',next_attempt_at=? "
+                    "WHERE post_id=? AND status='unknown'",(status,ts,ts,r['target_id']))
+            if status=='succeeded':
+                meta=json.loads(r['metadata_json'])
+                if meta.get('accounting_already_applied'):
+                    if r['kind']=='post':
+                        self._conn.execute('UPDATE account_states SET original_locked_until=MAX(original_locked_until,?),last_original_at=MAX(last_original_at,?) WHERE account_id=?',
+                            (ts+float(self.policy('original_lock_seconds',86400)),ts,r['account_id']))
+                    return True
+                if r['kind']=='report':
+                    self.log_report(r['target_id'], meta.get('target_author',''),
+                        target_team=meta.get('true_team_id',''),reporter_account=r['account_id'],
+                        reason=meta.get('detail',''),now=ts)
+                    self._conn.execute('UPDATE report_log SET report_id=? WHERE post_id=?',
+                        (str((response or {}).get('report_id','')),r['target_id']))
+                elif r['kind']=='report_account':
+                    self._conn.execute('INSERT INTO account_reports VALUES(?,?,\'pending\',?,0,?)',
+                        (r['target_id'],str((response or {}).get('report_id','')),ts,meta.get('detail','')))
+                if r['kind'] in ('post','reply'):
+                    self.mark_account_used(r['account_id'],now=ts,kind=r['kind'],target_stance=meta.get('target_stance',''))
+                self.log_interaction(engine=meta.get('engine','micro'),account_id=r['account_id'],action=r['kind'],
+                    target_post_id=str(((response or {}).get('post_id') or r['target_id']) if r['kind']=='post' else r['target_id']),
+                    target_author=meta.get('target_author',''),target_stance=meta.get('target_stance',''),
+                    purpose=meta.get('purpose',''),text=r['text'],now=ts)
+            return True
+
+    def list_actions(self, status=None):
+        with self._lock:
+            rows=self._conn.execute('SELECT * FROM action_intents'+(' WHERE status=?' if status else '')+
+                ' ORDER BY created_at', (status,) if status else ()).fetchall()
+            return [dict(r) for r in rows]
+
+    def log_simulation(self, kind, account, target, payload):
+        with self.batch_transaction():
+            self._conn.execute('INSERT INTO simulation_log(created_at,kind,account_id,target_id,payload_json) '
+                'VALUES(?,?,?,?,?)',(time.time(),kind,account,target,json.dumps(payload)))
+
+    def enqueue_post(self, post_id, version=1, *, now=None, ttl=1800):
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            # The persistent plan owns this target, including after a restart or edit.
+            planned=self._conn.execute('SELECT target_version FROM reply_batches WHERE target_id=?',(post_id,)).fetchone()
+            self._conn.execute("UPDATE post_tasks SET status='skipped',reason='superseded' WHERE post_id=? "
+                "AND version<>? AND status IN ('queued','claimed')",(post_id,version))
+            self._conn.execute('INSERT OR IGNORE INTO post_tasks(post_id,version,next_attempt_at,expires_at) VALUES(?,?,?,?)',
+                (post_id,version,ts,ts+ttl))
+            if planned:
+                self._conn.execute("UPDATE post_tasks SET status=?,reason='target_already_planned' WHERE post_id=? AND version=? AND status IN ('queued','claimed')",
+                    ('planned' if planned[0]==version else 'skipped',post_id,version))
+
+    def claim_post_tasks(self, limit=8, *, now=None, lease_s=120):
+        ts=time.time() if now is None else float(now)
+        owner=uuid.uuid4().hex
+        with self.batch_transaction():
+            self._conn.execute("UPDATE post_tasks SET status='expired',reason='opportunity_expired' "
+                "WHERE status IN ('queued','claimed') AND expires_at<=?",(ts,))
+            self._conn.execute("UPDATE post_tasks SET status='queued' WHERE status='claimed' AND lease_until<=?",(ts,))
+            rows=self._conn.execute("SELECT * FROM post_tasks WHERE status='queued' AND next_attempt_at<=? "
+                'ORDER BY next_attempt_at,post_id LIMIT ?',(ts,max(1,limit))).fetchall()
+            for r in rows:
+                self._conn.execute("UPDATE post_tasks SET status='claimed',owner=?,lease_until=?,attempts=attempts+1 "
+                    'WHERE post_id=? AND version=?',(owner,ts+lease_s,r['post_id'],r['version']))
+            return [{**dict(r),'owner':owner} for r in rows]
+
+    def update_post_task(self, task, status, *, reason='', delay=0, draft=None, draft_at=None, now=None):
+        if status not in ('queued','planned','succeeded','skipped','expired','unknown','simulated'):
+            raise ValueError('invalid task status')
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            return self._conn.execute('UPDATE post_tasks SET status=?,reason=?,next_attempt_at=?,lease_until=0,'
+                'draft_json=?,draft_at=? WHERE post_id=? AND version=? AND owner=? AND status=\'claimed\'',
+                (status,reason,ts+delay,json.dumps(draft) if draft else '',(draft_at or ts) if draft else 0,
+                 task['post_id'],task['version'],task['owner'])).rowcount==1
+
+    def post_task_send_ready(self, task, *, now=None):
+        ts=time.time() if now is None else float(now)
+        with self._lock:
+            r=self._conn.execute('SELECT t.status,t.owner,t.lease_until,t.expires_at,p.version '
+                'FROM post_tasks t JOIN observed_posts p USING(post_id) WHERE t.post_id=? AND t.version=?',
+                (task['post_id'],task['version'])).fetchone()
+            return bool(r and r['status']=='claimed' and r['owner']==task['owner'] and r['version']==task['version']
+                and r['lease_until']>ts and r['expires_at']>ts)
+
+    def renew_post_tasks(self, tasks, *, now=None):
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            for t in tasks:
+                self._conn.execute('UPDATE post_tasks SET lease_until=? WHERE post_id=? AND version=? '
+                    "AND owner=? AND status='claimed'",(ts+120,t['post_id'],t['version'],t['owner']))
+
+    def task_counts(self):
+        with self._lock:
+            return {r[0]:r[1] for r in self._conn.execute('SELECT status,COUNT(*) FROM post_tasks GROUP BY status')}
+
+    def runtime_metrics(self, *, now=None):
+        ts=time.time() if now is None else float(now)
+        with self._lock:
+            oldest=self._conn.execute("SELECT MIN(expires_at-1800) FROM post_tasks WHERE status='queued'").fetchone()[0]
+            pending=self._conn.execute("SELECT (SELECT COUNT(*) FROM report_log WHERE outcome='pending')+"
+                "(SELECT COUNT(*) FROM account_reports WHERE outcome='pending')").fetchone()[0]
+            unknown=self._conn.execute("SELECT COUNT(*) FROM action_intents WHERE status='unknown'").fetchone()[0]
+            batches=dict(self._conn.execute('SELECT status,COUNT(*) FROM reply_batches GROUP BY status'))
+            slots=dict(self._conn.execute('SELECT status,COUNT(*) FROM reply_slots GROUP BY status'))
+            performance=dict(self._conn.execute('SELECT status,COUNT(*) FROM performance_jobs GROUP BY status'))
+            return {'tasks':self.task_counts(),'oldest_task_age_s':max(0,ts-oldest) if oldest else 0,
+                'reply_batches':batches,'reply_slots':slots,'performance_jobs':performance,
+                'pending_reports':pending,'unknown_actions':unknown,
+                'reporting_suspended_s':self.is_reporting_suspended(now=ts)[1]}
+
+    def record_confirmed_activity(self, account, count, *, observed_at, source):
+        if type(count) is not int or count<0 or not source or observed_at<=0:
+            raise ValueError('activity requires explicit count, observation time and source')
+        with self.batch_transaction():
+            self._conn.execute('INSERT INTO confirmed_account_activity VALUES(?,?,?,?) ON CONFLICT(account_id) '
+                'DO UPDATE SET action_count=excluded.action_count,observed_at=excluded.observed_at,source=excluded.source '
+                'WHERE excluded.observed_at>confirmed_account_activity.observed_at',(account,count,observed_at,source))
+
+    def confirmed_activity(self, account):
+        with self._lock:
+            row=self._conn.execute('SELECT * FROM confirmed_account_activity WHERE account_id=?',(account,)).fetchone()
+            return dict(row) if row else None
+
+    def reserve_requests(self, buckets, *, kind, cap, now=None):
+        return self.reserve_http_request(buckets,kind=kind,cap=cap,now=now)[1]
+
+    def reserve_http_request(self, buckets, *, kind, cap, now=None):
+        """Atomic multi-bucket virtual-time reservation, one actual HTTP attempt."""
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            used=self.get_counter('http_'+kind)+self._conn.execute("SELECT COUNT(*) FROM request_attempts "
+                "WHERE kind=? AND status='reserved' AND expires_at>?",(kind,ts)).fetchone()[0]
+            if used>=cap:
+                raise RuntimeError(kind+' request budget exhausted')
+            due=ts
+            for key,rate in buckets:
+                if rate<=0:
+                    raise ValueError('request rate must be positive')
+                r=self._conn.execute('SELECT * FROM request_slots WHERE bucket=?',(key,)).fetchone()
+                if r:
+                    due=max(due,r['next_at'],r['blocked_until'])
+            for key,rate in buckets:
+                self._conn.execute('INSERT INTO request_slots(bucket,next_at) VALUES(?,?) ON CONFLICT(bucket) '
+                    'DO UPDATE SET next_at=excluded.next_at',(key,due+1/rate))
+            self.increment_counter('http_reserved_'+kind)
+            ident=uuid.uuid4().hex
+            self._conn.execute("INSERT INTO request_attempts VALUES(?,?,?,'reserved',?,?,?)",
+                (ident,kind,json.dumps(buckets),due,due+300,ts))
+            return ident,due-ts
+
+    def mark_http_sent(self, ident, *, cap):
+        return self.try_mark_http_sent(ident,cap=cap)[0]
+
+    def try_mark_http_sent(self, ident, *, cap, now=None):
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            row=self._conn.execute('SELECT kind,status,buckets_json FROM request_attempts WHERE id=?',(ident,)).fetchone()
+            if not row or row['status']!='reserved': return False,None
+            if self.get_counter('http_'+row['kind'])>=cap: return False,None
+            buckets=json.loads(row['buckets_json'])
+            due=ts
+            for key,rate in buckets:
+                slot=self._conn.execute('SELECT next_at FROM wire_slots WHERE bucket=?',(key,)).fetchone()
+                if slot: due=max(due,slot[0])
+                due=max(due,self.request_blocked_until(key))
+            if due>ts+1e-8: return False,due-ts
+            for key,rate in buckets:
+                self._conn.execute('INSERT INTO wire_slots VALUES(?,?) ON CONFLICT(bucket) DO UPDATE SET next_at=excluded.next_at',
+                    (key,ts+1/rate))
+            self._conn.execute("UPDATE request_attempts SET status='sent' WHERE id=?",(ident,))
+            self.increment_counter('http_'+row['kind'])
+            return True,0.
+
+    def cancel_http_reservation(self, ident):
+        with self.batch_transaction():
+            self._conn.execute("UPDATE request_attempts SET status='cancelled' WHERE id=? AND status='reserved'",(ident,))
+
+    def reschedule_http_request(self, ident, buckets, *, now=None):
+        """A later Retry-After requeues existing waiters instead of waking them together."""
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            due=ts
+            for key,rate in buckets:
+                row=self._conn.execute('SELECT next_at,blocked_until FROM request_slots WHERE bucket=?',(key,)).fetchone()
+                if row: due=max(due,row['next_at'],row['blocked_until'])
+            for key,rate in buckets:
+                self._conn.execute('UPDATE request_slots SET next_at=? WHERE bucket=?',(due+1/rate,key))
+            self._conn.execute("UPDATE request_attempts SET due_at=?,expires_at=? WHERE id=? AND status='reserved'",
+                (due,due+300,ident))
+            return due-ts
+
+    def block_request_bucket(self, bucket, until):
+        with self.batch_transaction():
+            self._conn.execute('INSERT INTO request_slots(bucket,blocked_until) VALUES(?,?) ON CONFLICT(bucket) '
+                'DO UPDATE SET blocked_until=MAX(blocked_until,excluded.blocked_until)',(bucket,until))
+
+    def request_blocked_until(self, bucket):
+        with self._lock:
+            r=self._conn.execute('SELECT blocked_until FROM request_slots WHERE bucket=?',(bucket,)).fetchone()
+            return float(r[0]) if r else 0.
+
+    def add_weighted_evidence(self, account, family, points, detail, *, evidence_key, now=None):
+        policy=self.policy('evidence_policy',DEFAULT_EVIDENCE_POLICY)
+        caps=policy['caps']
+        if family not in caps:
+            raise ValueError('unknown evidence family')
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            prof=self.get_bot_profile(account)
+            if prof['status'] in ('own_bot','verified_npc') or prof.get('verified'):
+                return prof
+            self._conn.execute('INSERT OR IGNORE INTO bot_evidence VALUES(?,?,?,?,?,?,?)',
+                (account,evidence_key,family,float(points),json.dumps(detail),ts,policy['version']))
+            return self._recompute_evidence(account)
+
+    def _recompute_evidence(self,account):
+        protected=self.get_bot_profile(account)
+        if protected.get('verified') or protected['status'] in ('own_bot','verified_npc'):
+            return protected
+        policy=self.policy('evidence_policy',DEFAULT_EVIDENCE_POLICY)
+        caps=policy['caps']
+        with self.batch_transaction():
+            rows=self._conn.execute('SELECT family,SUM(points) FROM bot_evidence WHERE account_id=? GROUP BY family',
+                (account,)).fetchall()
+            grouped={r[0]:max(-caps[r[0]],min(caps[r[0]],r[1])) for r in rows}
+            score=max(0,min(100,sum(grouped.values())))
+            groups=sum(v>0 for k,v in grouped.items() if k not in ('weak','moderator'))
+            status='confirmed_bot' if score>=policy['report_threshold'] and groups>=policy['minimum_substantive_groups'] else ('suspected_bot' if score>=policy['observe_below'] else 'unknown')
+            tags=[r[0] for r in self._conn.execute('SELECT evidence_key FROM bot_evidence WHERE account_id=? ORDER BY created_at LIMIT 100',
+                (account,))]
+            self._conn.execute('INSERT INTO bot_registry(account_id,status,suspicion_score,evidence_groups,evidence_json) '
+                'VALUES(?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET status=excluded.status,'
+                'suspicion_score=excluded.suspicion_score,evidence_groups=excluded.evidence_groups,evidence_json=excluded.evidence_json',
+                (account,status,score,groups,json.dumps(tags)))
+            return self.get_bot_profile(account)
+
+    def report_evidence_ready(self, profile):
+        policy=self.policy('evidence_policy',DEFAULT_EVIDENCE_POLICY)
+        return (profile['suspicion_score']>=policy['report_threshold'] and
+            profile.get('evidence_groups',0)>=policy['minimum_substantive_groups'])
+
+    def invalidate_post_evidence(self,post_id):
+        with self.batch_transaction():
+            rows=self._conn.execute("SELECT account_id,evidence_key FROM bot_evidence WHERE family<>'moderator' AND "
+                "(json_extract(detail_json,'$.post_id')=? OR EXISTS(SELECT 1 FROM json_each(detail_json,'$.related_posts') WHERE value=?))",
+                (post_id,post_id)).fetchall()
+            for row in rows:
+                self._conn.execute('DELETE FROM bot_evidence WHERE account_id=? AND evidence_key=?',tuple(row))
+            for account in {r[0] for r in rows}: self._recompute_evidence(account)
+
+    def evidence_for(self, account):
+        with self._lock:
+            return [dict(r) for r in self._conn.execute('SELECT * FROM bot_evidence WHERE account_id=? ORDER BY created_at',
+                (account,))]
+
+    def apply_moderation_event(self, event):
+        """Consume an explicit ruling, not a disappearance/404. Idempotent and ordered."""
+        from .sqlite_store import current_sydney_day
+        required={'event_id','subject_kind','subject_id','outcome','ruled_at','source'}
+        if not required<=event.keys() or event['subject_kind'] not in ('post','account') or event['outcome'] not in (
+                'upheld','rejected','dismissed') or not event['source'] or float(event['ruled_at'])<=0:
+            raise ValueError('invalid explicit moderation event')
+        with self.batch_transaction():
+            table,col=('report_log','post_id') if event['subject_kind']=='post' else ('account_reports','target_author')
+            r=self._conn.execute(f'SELECT * FROM {table} WHERE {col}=?',(str(event['subject_id']),)).fetchone()
+            if not r:
+                raise ValueError('ruling has no submitted report')
+            submitted = float(r['created_at'] if table=='report_log' else r['submitted_at'])
+            if float(event['ruled_at']) < submitted:
+                raise ValueError('ruling predates report submission')
+            prior=self._conn.execute('SELECT 1 FROM moderation_events WHERE subject_kind=? AND subject_id=?',
+                (event['subject_kind'],str(event['subject_id']))).fetchone()
+            if prior:
+                return False
+            cur=self._conn.execute('INSERT OR IGNORE INTO moderation_events VALUES(?,?,?,?,?,?,?)',
+                (event['event_id'],event['subject_kind'],str(event['subject_id']),event['outcome'],
+                 float(event['ruled_at']),event['source'],json.dumps(event)))
+            if not cur.rowcount:
+                return False
+            author=r['target_author']
+            ruled=float(event['ruled_at'])
+            if table=='report_log':
+                self._conn.execute('UPDATE report_log SET outcome=?,ruled_at=?,ruling_day=? WHERE post_id=?',
+                    (event['outcome'],ruled,current_sydney_day(ruled),str(event['subject_id'])))
+                if event['outcome']=='upheld':
+                    self._conn.execute('UPDATE bot_registry SET upheld_strikes=upheld_strikes+1,'
+                        'is_suspended=CASE WHEN upheld_strikes+1>=3 THEN 1 ELSE is_suspended END WHERE account_id=?',(author,))
+            else:
+                self._conn.execute('UPDATE account_reports SET outcome=?,ruled_at=? WHERE target_author=?',
+                    (event['outcome'],ruled,author))
+                if event['outcome']=='upheld':
+                    self._conn.execute('UPDATE bot_registry SET is_suspended=1 WHERE account_id=?',(author,))
+            if event['outcome']=='rejected':
+                until=int((ruled+21600)*1000)
+                self.set_counter('report_suspended_until_ms',max(self.get_counter('report_suspended_until_ms'),until))
+            if event['outcome'] in ('upheld','rejected'):
+                self.add_weighted_evidence(author,'moderator',5 if event['outcome']=='upheld' else -5,
+                    {'event_id':event['event_id'],'outcome':event['outcome']},evidence_key='ruling:'+event['event_id'],now=ruled)
+            return True

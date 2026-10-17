@@ -78,7 +78,8 @@ tmp/
 local_*
 
 # ---- Docs and previews (not needed at runtime; keeps the image small) -----
-docs/
+docs/*
+!docs/personas-80/
 *.html
 *.png
 *.jpg

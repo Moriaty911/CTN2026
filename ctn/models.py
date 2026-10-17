@@ -77,6 +77,7 @@ class ActionKind(str, Enum):
     FOLLOW = "follow"
     UNFOLLOW = "unfollow"
     REPORT = "report"
+    DELETE_ACCOUNT = "delete_account"
 
 
 class GuardVerdict(str, Enum):
@@ -205,6 +206,15 @@ class ActionResult:
     latency_ms: float = 0.0
     response: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
+    status: str = ""
+    action_id: str = ""
+
+    def __post_init__(self):
+        if not self.status:
+            self.status = "succeeded" if self.ok else "failed"
+        if self.status not in {"succeeded", "simulated", "failed", "unknown", "blocked"}:
+            raise ValueError("invalid action result status")
+        self.ok = self.status == "succeeded"
 
 
 def to_jsonable(obj: Any) -> Any:

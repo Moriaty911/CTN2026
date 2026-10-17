@@ -15,6 +15,8 @@ import contextlib
 from datetime import datetime
 import hashlib
 import json
+import os
+import weakref
 from pathlib import Path
 import re
 import sqlite3
@@ -24,8 +26,10 @@ from typing import Any, Iterable, Iterator
 from zoneinfo import ZoneInfo
 
 from ctn.persona.models import AccountState
+from .runtime import RuntimeStoreMixin, SCHEMA_VERSION
+from .campaign import CampaignStoreMixin
 
-DEFAULT_DB_PATH = ".ctn_state.db"
+DEFAULT_DB_PATH = "state/ctn.sqlite3"
 SYDNEY_TZ = ZoneInfo("Australia/Sydney")
 
 _SCHEMA_SQL = """
@@ -190,7 +194,7 @@ def current_sydney_day(ts: float | None = None) -> str:
     return datetime.fromtimestamp(epoch, tz=SYDNEY_TZ).strftime("%Y-%m-%d")
 
 
-class StateStore:
+class StateStore(CampaignStoreMixin, RuntimeStoreMixin):
     """SQLite-backed store for account cooldowns, post history mirror, bot intelligence, and reporting gates."""
 
     def __init__(self, db_path: str | Path = ":memory:") -> None:
@@ -198,43 +202,88 @@ class StateStore:
         self._lock = threading.RLock()
         self._closed = False
         self._batch_depth = 0
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=10.0)
+        if self.db_path != ":memory:":
+            path = Path(self.db_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+            os.close(fd)
+            path.chmod(0o600)
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0)
+        self._finalizer = weakref.finalize(self, self._conn.close)
         self._conn.row_factory = sqlite3.Row
         with self._lock:
-            self._conn.execute("PRAGMA temp_store=MEMORY;")
+            self._conn.execute("PRAGMA temp_store=MEMORY")
+            self._conn.execute("PRAGMA busy_timeout=5000")
             if self.db_path != ":memory:":
-                self._conn.execute("PRAGMA journal_mode=WAL;")
-                self._conn.execute("PRAGMA synchronous=NORMAL;")
-                self._conn.execute("PRAGMA busy_timeout=5000;")
-                self._conn.execute("PRAGMA cache_size=-32000;")
-                self._conn.execute("PRAGMA mmap_size=67108864;")
-            self._conn.executescript(_SCHEMA_SQL)
-            self._ensure_columns()
-            self._conn.commit()
+                self._conn.execute("PRAGMA journal_mode=WAL")
+                self._conn.execute("PRAGMA synchronous=NORMAL")
+                self._conn.execute("PRAGMA cache_size=-32000")
+                self._conn.execute("PRAGMA mmap_size=67108864")
+            version = self._conn.execute("PRAGMA user_version").fetchone()[0]
+            if version > SCHEMA_VERSION:
+                raise ValueError("database schema is newer than this executable")
+            existed = self._conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'").fetchone()
+            if existed and version < SCHEMA_VERSION and self.db_path != ":memory:":
+                self.backup(self.db_path + f".before-v{SCHEMA_VERSION}.bak")
+            with self.batch_transaction():
+                statements = [q.strip() for q in _SCHEMA_SQL.split(';') if q.strip()]
+                for sql in statements:
+                    if sql.startswith('CREATE TABLE'):
+                        self._conn.execute(sql)
+                self._ensure_columns()
+                self.migrate_runtime()
+                self.migrate_campaign()
+                for sql in statements:
+                    if sql.startswith('CREATE INDEX'):
+                        self._conn.execute(sql)
+
+    def backup(self, destination):
+        target = Path(destination)
+        target.parent.mkdir(parents=True,exist_ok=True)
+        if target.exists():
+            raise FileExistsError(str(target))
+        fd = os.open(target, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+        os.close(fd)
+        try:
+            with self._lock, contextlib.closing(sqlite3.connect(target)) as connection:
+                self._conn.backup(connection)
+        except BaseException:
+            target.unlink(missing_ok=True)
+            raise
 
     def _commit(self) -> None:
-        """Commit immediately unless inside an active `batch_transaction()` block."""
-        if self._batch_depth <= 0:
+        if self._batch_depth == 0:
             self._conn.commit()
 
     @contextlib.contextmanager
     def batch_transaction(self) -> Iterator[None]:
-        """Group multiple SQLite mutations into a single atomic commit on outermost exit."""
+        """Short write transaction; nested blocks have independent savepoints."""
         with self._lock:
+            depth = self._batch_depth
+            savepoint = f"nested_{depth}"
+            if depth == 0:
+                # Some legacy single-write methods start an implicit transaction.
+                if not self._conn.in_transaction:
+                    self._conn.execute('BEGIN IMMEDIATE')
+            else:
+                self._conn.execute(f'SAVEPOINT {savepoint}')
             self._batch_depth += 1
             try:
                 yield
-            except Exception:
-                self._batch_depth -= 1
-                if self._batch_depth <= 0:
-                    self._batch_depth = 0
+            except BaseException:
+                if depth == 0:
                     self._conn.rollback()
+                else:
+                    self._conn.execute(f'ROLLBACK TO {savepoint}')
+                    self._conn.execute(f'RELEASE {savepoint}')
                 raise
             else:
-                self._batch_depth -= 1
-                if self._batch_depth <= 0:
-                    self._batch_depth = 0
+                if depth == 0:
                     self._conn.commit()
+                else:
+                    self._conn.execute(f'RELEASE {savepoint}')
+            finally:
+                self._batch_depth = depth
 
     def _ensure_columns(self) -> None:
         """Ensure newly added columns exist on older SQLite database files."""
@@ -250,6 +299,12 @@ class StateStore:
             self._conn.execute(
                 "ALTER TABLE account_states ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0;"
             )
+
+        for col, ddl in (("allied_reply_count", "INTEGER NOT NULL DEFAULT 0"),
+                         ("opposing_reply_count", "INTEGER NOT NULL DEFAULT 0"),
+                         ("locked_until", "REAL NOT NULL DEFAULT 0")):
+            if col not in existing_cols:
+                self._conn.execute(f"ALTER TABLE account_states ADD COLUMN {col} {ddl}")
 
         observed_cols = {
             str(row["name"])
@@ -311,7 +366,7 @@ class StateStore:
         """Close the underlying SQLite connection."""
         with self._lock:
             if not self._closed:
-                self._conn.close()
+                self._finalizer()
                 self._closed = True
 
     def __del__(self) -> None:
@@ -323,10 +378,10 @@ class StateStore:
     # ---- Account States -------------------------------------------------- #
     def get_account_state(self, account_id: str) -> AccountState:
         """Fetch or initialize account state from SQLite."""
-        with self._lock:
+        with self.batch_transaction():
             row = self._conn.execute(
                 """
-                SELECT account_id, last_posted_at, post_count, is_frozen, is_banned
+                SELECT *
                 FROM account_states WHERE account_id = ?
                 """,
                 (account_id,),
@@ -340,7 +395,7 @@ class StateStore:
                     """,
                     (account_id,),
                 )
-                self._conn.commit()
+                self._commit()
                 return AccountState(account_id=account_id)
             return AccountState(
                 account_id=str(row["account_id"]),
@@ -348,6 +403,9 @@ class StateStore:
                 post_count=int(row["post_count"]),
                 is_frozen=bool(row["is_frozen"]),
                 is_banned=bool(row["is_banned"]),
+                mode=str(row["mode"]), capability_tier=str(row["capability_tier"]),
+                original_locked_until=float(row["original_locked_until"]),
+                last_original_at=float(row["last_original_at"]), last_reply_at=float(row["last_reply_at"]),
             )
 
     def save_account_state(
@@ -359,7 +417,7 @@ class StateStore:
         """Upsert an AccountState into SQLite, optionally incrementing stance reply counters."""
         allied_inc = 1 if target_stance == "aligned" else 0
         opposing_inc = 1 if target_stance == "opposing" else 0
-        with self._lock:
+        with self.batch_transaction():
             self._conn.execute(
                 """
                 INSERT INTO account_states (
@@ -368,8 +426,8 @@ class StateStore:
                     is_frozen, is_banned
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(account_id) DO UPDATE SET
-                    last_posted_at = excluded.last_posted_at,
-                    post_count = excluded.post_count,
+                    last_posted_at = MAX(account_states.last_posted_at, excluded.last_posted_at),
+                    post_count = MAX(account_states.post_count, excluded.post_count),
                     allied_reply_count = account_states.allied_reply_count + ?,
                     opposing_reply_count = account_states.opposing_reply_count + ?,
                     is_frozen = excluded.is_frozen,
@@ -387,21 +445,20 @@ class StateStore:
                     opposing_inc,
                 ),
             )
-            self._conn.commit()
+            self._commit()
 
     def set_account_frozen(self, account_id: str, frozen: bool = True) -> AccountState:
         """Mark an account as temporarily frozen (or unfreeze it)."""
-        state = self.get_account_state(account_id)
-        state.is_frozen = bool(frozen)
-        self.save_account_state(state)
-        return state
+        with self.batch_transaction():
+            self.get_account_state(account_id)
+            self._conn.execute('UPDATE account_states SET is_frozen=? WHERE account_id=?',(int(frozen),account_id))
+        return self.get_account_state(account_id)
 
     def set_account_banned(self, account_id: str, banned: bool = True) -> AccountState:
-        """Mark an account as permanently banned (or unban it)."""
-        state = self.get_account_state(account_id)
-        state.is_banned = bool(banned)
-        self.save_account_state(state)
-        return state
+        with self.batch_transaction():
+            self.get_account_state(account_id)
+            self._conn.execute('UPDATE account_states SET is_banned=? WHERE account_id=?',(int(banned),account_id))
+        return self.get_account_state(account_id)
 
     def get_account_metrics(self, account_id: str) -> dict[str, Any]:
         """Return extended SQLite metrics for an account (including allied/opposing reply counts and ban status)."""
@@ -428,23 +485,15 @@ class StateStore:
     def load_all_account_states(self) -> dict[str, AccountState]:
         """Load all persisted account states."""
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT account_id, last_posted_at, post_count, is_frozen, is_banned FROM account_states"
-            ).fetchall()
-            return {
-                str(r["account_id"]): AccountState(
-                    account_id=str(r["account_id"]),
-                    last_posted_at=float(r["last_posted_at"]),
-                    post_count=int(r["post_count"]),
-                    is_frozen=bool(r["is_frozen"]),
-                    is_banned=bool(r["is_banned"]),
-                )
-                for r in rows
-            }
+            ids=[r[0] for r in self._conn.execute('SELECT account_id FROM account_states')]
+            return {account:self.get_account_state(account) for account in ids}
 
     def reset_accounts(self) -> None:
         """Clear all account states, interaction logs, counters, observed posts, bot registry, managed accounts, and report logs."""
-        with self._lock:
+        with self.batch_transaction():
+            for table in ("runtime_policy","action_intents","account_leases","post_tasks","comment_queue",
+                          "request_slots","wire_slots","request_attempts","bot_evidence","moderation_events","account_reports","simulation_log","confirmed_account_activity"):
+                self._conn.execute(f"DELETE FROM {table}")
             self._conn.execute("DELETE FROM account_states;")
             self._conn.execute("DELETE FROM interaction_log;")
             self._conn.execute("DELETE FROM counters;")
@@ -452,7 +501,7 @@ class StateStore:
             self._conn.execute("DELETE FROM bot_registry;")
             self._conn.execute("DELETE FROM managed_accounts;")
             self._conn.execute("DELETE FROM report_log;")
-            self._conn.commit()
+            self._commit()
 
     # ---- Managed Account Sessions (Token & ID Pool) ---------------------- #
     def upsert_managed_account(
@@ -476,7 +525,7 @@ class StateStore:
         if not uname:
             raise ValueError("upsert_managed_account requires a non-empty username")
         ts = time.time() if now is None else float(now)
-        with self._lock:
+        with self.batch_transaction():
             cur = self._conn.execute(
                 "SELECT * FROM managed_accounts WHERE username = ?", (uname,)
             ).fetchone()
@@ -530,7 +579,7 @@ class StateStore:
             self.register_verified_accounts(
                 [{"username": uname, "account_id": new_aid}], status="own_bot", now=ts
             )
-            self._conn.commit()
+            self._commit()
             row = self._conn.execute(
                 "SELECT * FROM managed_accounts WHERE username = ?", (uname,)
             ).fetchone()
@@ -554,7 +603,7 @@ class StateStore:
         if not uname or clean_status not in {"active", "suspended", "deleted"}:
             raise ValueError("status must be 'active', 'suspended', or 'deleted'")
         ts = time.time() if now is None else float(now)
-        with self._lock:
+        with self.batch_transaction():
             cur = self._conn.execute(
                 "SELECT * FROM managed_accounts WHERE username = ?", (uname,)
             ).fetchone()
@@ -570,7 +619,7 @@ class StateStore:
                     """,
                     (clean_status, clear_tok, ts, uname),
                 )
-                self._conn.commit()
+                self._commit()
             if clean_status in {"suspended", "deleted"}:
                 self.set_account_banned(uname, True)
             row = self._conn.execute(
@@ -585,7 +634,7 @@ class StateStore:
         max_total: int = 200,
     ) -> dict[str, int]:
         """Return team account pool usage against the 2026 competition limits (50 active, 200 total)."""
-        with self._lock:
+        with self.batch_transaction():
             rows = self._conn.execute(
                 "SELECT status, COUNT(*) AS cnt FROM managed_accounts GROUP BY status"
             ).fetchall()
@@ -665,19 +714,15 @@ class StateStore:
     # ---- Atomic Counters ------------------------------------------------- #
     def increment_counter(self, name: str, delta: int = 1) -> int:
         """Atomically increment a named integer counter and return its new value."""
-        with self._lock:
-            self._conn.execute(
+        with self.batch_transaction():
+            row = self._conn.execute(
                 """
                 INSERT INTO counters (name, value) VALUES (?, ?)
-                ON CONFLICT(name) DO UPDATE SET value = counters.value + ?
+                ON CONFLICT(name) DO UPDATE SET value = counters.value + ? RETURNING value
                 """,
                 (name, delta, delta),
-            )
-            self._conn.commit()
-            row = self._conn.execute(
-                "SELECT value FROM counters WHERE name = ?",
-                (name,),
             ).fetchone()
+            self._commit()
             return int(row["value"]) if row else delta
 
     def get_counter(self, name: str) -> int:
@@ -691,7 +736,7 @@ class StateStore:
 
     def set_counter(self, name: str, value: int) -> None:
         """Set a named integer counter to an explicit value."""
-        with self._lock:
+        with self.batch_transaction():
             self._conn.execute(
                 """
                 INSERT INTO counters (name, value) VALUES (?, ?)
@@ -699,7 +744,7 @@ class StateStore:
                 """,
                 (name, int(value)),
             )
-            self._conn.commit()
+            self._commit()
 
     # ---- Interaction Log & Deduplication --------------------------------- #
     def log_interaction(
@@ -718,13 +763,13 @@ class StateStore:
         """Record a post, reply, or like event in the shared SQLite interaction log."""
         ts = time.time() if now is None else now
         norm = normalize_text(text) if text else ""
-        with self._lock:
+        with self.batch_transaction():
             self._conn.execute(
                 """
                 INSERT INTO interaction_log (
                     created_at, engine, account_id, action, target_post_id,
-                    target_author, target_stance, purpose, normalized_text
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    target_author, target_stance, purpose, normalized_text, text
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     ts,
@@ -735,10 +780,10 @@ class StateStore:
                     target_author,
                     target_stance,
                     purpose,
-                    norm,
+                    norm,text,
                 ),
             )
-            self._conn.commit()
+            self._commit()
 
     def has_replied_to_post(self, target_post_id: str) -> bool:
         """Return True if any of our accounts has already replied to target_post_id."""
@@ -810,7 +855,8 @@ class StateStore:
             return False, f"allied_hourly_cap_reached:{recent_count}/{hourly_cap}"
 
         step_n = max(1, every_n)
-        seen_count = self.increment_counter("allied_qualifying_seen", 1)
+        # Stable sampling does not mutate live counters during model evaluation/dry-run.
+        seen_count = int(hashlib.sha256(target_post_id.encode()).hexdigest()[:12],16)+1
         if (seen_count - 1) % step_n != 0:
             return False, f"allied_modulo_throttled:{seen_count}%{step_n}"
 
@@ -891,9 +937,9 @@ class StateStore:
         # opaque cursor string directly.
         parent_id = ""
         for key in (
+            "reply_to_post_id",
             "parent_id",
             "root_post_id",
-            "reply_to_post_id",
             "in_reply_to",
             "reply_to_id",
             "in_reply_to_post_id",
@@ -904,22 +950,29 @@ class StateStore:
                 break
         if parent_id == post_id:
             parent_id = ""
+        root_post_id=str(raw_dict.get('root_post_id') or '')
+        if not root_post_id and parent_id:
+            parent=self.get_observed_post(parent_id)
+            root_post_id=str((parent or {}).get('root_post_id') or parent_id)
 
-        with self._lock:
+
+        with self.batch_transaction():
             existing = self._conn.execute(
                 "SELECT * FROM observed_posts WHERE post_id = ?",
                 (post_id,),
             ).fetchone()
             is_new = existing is None
             prev_replies = 0 if existing is None else int(existing["replies"])
+            changed = existing is not None and text != str(existing["text"])
+            version = 1 if is_new else int(existing["version"]) + int(changed)
             if is_new:
                 self._conn.execute(
                     """
                     INSERT INTO observed_posts (
                         post_id, author, author_id, created_at, first_seen_at, last_seen_at,
                         norm_hash, text, likes, replies, reposts, is_reported, raw_json,
-                        parent_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                        parent_id, root_post_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
                     """,
                     (
                         post_id,
@@ -934,7 +987,7 @@ class StateStore:
                         replies,
                         reposts,
                         raw_json,
-                        parent_id,
+                        parent_id, root_post_id,
                     ),
                 )
                 record: dict[str, Any] = {
@@ -966,23 +1019,25 @@ class StateStore:
                     UPDATE observed_posts SET
                         author = ?,
                         author_id = ?,
+                        text = ?, norm_hash = ?, version = ?, created_at = ?,
                         last_seen_at = ?,
                         likes = ?,
                         replies = ?,
                         reposts = ?,
                         raw_json = ?,
-                        parent_id = ?
+                        parent_id = ?, root_post_id = ?
                     WHERE post_id = ?
                     """,
                     (
                         eff_author,
                         eff_author_id,
+                        text, norm_hash, version, created_at if created_at > 0 else float(existing["created_at"]),
                         ts,
                         likes,
                         replies,
                         reposts,
                         raw_json,
-                        eff_parent_id,
+                        eff_parent_id,root_post_id or str(existing["root_post_id"]),
                         post_id,
                     ),
                 )
@@ -990,11 +1045,11 @@ class StateStore:
                     "post_id": post_id,
                     "author": eff_author,
                     "author_id": eff_author_id,
-                    "created_at": float(existing["created_at"]),
+                    "created_at": created_at if created_at>0 else float(existing["created_at"]),
                     "first_seen_at": float(existing["first_seen_at"]),
                     "last_seen_at": ts,
-                    "norm_hash": str(existing["norm_hash"]),
-                    "text": str(existing["text"]),
+                    "norm_hash": norm_hash,
+                    "text": text,
                     "likes": likes,
                     "replies": replies,
                     "reposts": reposts,
@@ -1006,6 +1061,24 @@ class StateStore:
                     "comments_crawled_at": float(existing["comments_crawled_at"]),
                     "raw": raw_dict,
                 }
+            if changed:
+                if str(existing['author'])==record['author']:
+                    delta=int(text.rstrip().endswith('?'))-int(str(existing['text']).rstrip().endswith('?'))
+                    self._conn.execute('UPDATE bot_registry SET question_post_count=MAX(0,question_post_count+?) WHERE account_id=?',(delta,record['author']))
+                    self._conn.execute("DELETE FROM bot_evidence WHERE account_id=? AND evidence_key=? AND EXISTS "
+                        "(SELECT 1 FROM bot_registry WHERE account_id=? AND question_post_count<>post_seen_count)",
+                        (record['author'],'questions:'+record['author'],record['author']))
+                self.invalidate_post_evidence(post_id)
+                self._recompute_evidence(record["author"])
+            record["root_post_id"]=root_post_id
+            record["version"] = version
+            record["content_changed"] = changed
+            if is_new or changed:
+                self.enqueue_post(post_id, version, now=ts)
+            if replies > int(record.get("replies_crawled", 0)):
+                self._conn.execute('INSERT INTO comment_queue(post_id,priority,next_fetch_at) VALUES(?,?,?) '
+                    'ON CONFLICT(post_id) DO UPDATE SET priority=excluded.priority',
+                    (post_id, replies-int(record.get("replies_crawled",0)), float(record.get("comments_crawled_at",0))))
             self._commit()
             # Layer-1 hint for the background comment crawler: how many replies appeared since
             # the previous sighting, and how many are still not crawled in total.
@@ -1031,13 +1104,10 @@ class StateStore:
         with self._lock:
             rows = self._conn.execute(
                 """
-                SELECT *, (replies - replies_crawled) AS unseen_replies
-                FROM observed_posts
-                WHERE parent_id = ''
-                  AND (replies - replies_crawled) >= ?
-                  AND comments_crawled_at <= ?
-                ORDER BY unseen_replies DESC, comments_crawled_at ASC
-                LIMIT ?
+                SELECT p.*, q.priority AS unseen_replies
+                FROM comment_queue q JOIN observed_posts p ON p.post_id=q.post_id
+                WHERE q.priority >= ? AND q.next_fetch_at <= ?
+                ORDER BY q.priority DESC LIMIT ?
                 """,
                 (max(1, min_unseen_replies), ts - max(0.0, cooldown_s), max(1, limit)),
             ).fetchall()
@@ -1063,7 +1133,7 @@ class StateStore:
         stores the opaque page token / page number / last comment id for resuming without re-reading.
         """
         ts = time.time() if now is None else float(now)
-        with self._lock:
+        with self.batch_transaction():
             cur = self._conn.execute(
                 "SELECT replies_crawled, comment_cursor FROM observed_posts WHERE post_id = ?",
                 (post_id,),
@@ -1084,6 +1154,10 @@ class StateStore:
                 """,
                 (new_count, new_cursor, ts, post_id),
             )
+            self._conn.execute('DELETE FROM comment_queue WHERE post_id=?', (post_id,))
+            remaining = self._conn.execute('SELECT replies-replies_crawled FROM observed_posts WHERE post_id=?',(post_id,)).fetchone()[0]
+            if remaining>0:
+                self._conn.execute('INSERT INTO comment_queue VALUES(?,?,?)',(post_id,remaining,ts))
             self._commit()
             row = self._conn.execute(
                 "SELECT * FROM observed_posts WHERE post_id = ?", (post_id,)
@@ -1098,10 +1172,10 @@ class StateStore:
             rows = self._conn.execute(
                 """
                 SELECT * FROM observed_posts
-                WHERE parent_id = ?
+                WHERE parent_id = ? OR root_post_id = ?
                 ORDER BY created_at ASC, first_seen_at ASC LIMIT ?
                 """,
-                (parent_id, max(1, limit)),
+                (parent_id,parent_id, max(1, limit)),
             ).fetchall()
             return [self._unpack_observed_row(r) for r in rows]
 
@@ -1280,7 +1354,7 @@ class StateStore:
         if status not in ("verified_npc", "own_bot"):
             raise ValueError("status must be 'verified_npc' or 'own_bot'")
         ts = time.time() if now is None else float(now)
-        with self._lock:
+        with self.batch_transaction():
             for acc in account_ids:
                 platform_id = 0
                 if isinstance(acc, dict):
@@ -1311,11 +1385,14 @@ class StateStore:
                             ELSE bot_registry.platform_account_id
                         END,
                         status = excluded.status,
+                        verified = CASE WHEN excluded.status='verified_npc' THEN 1 ELSE bot_registry.verified END,
                         suspicion_score = 0.0,
                         evidence_json = '["protected_whitelist"]'
                     """,
                     (acc_id, platform_id, status, ts, ts),
                 )
+                if status == 'verified_npc':
+                    self._conn.execute('UPDATE bot_registry SET verified=1 WHERE account_id=?',(acc_id,))
             self._commit()
 
     def get_bot_profile(self, account_id: str) -> dict[str, Any]:
@@ -1329,7 +1406,7 @@ class StateStore:
                 return {
                     "account_id": account_id,
                     "platform_account_id": 0,
-                    "status": "unknown",
+                    "status": "unknown", "verified": False, "true_team_id": "", "evidence_groups": 0,
                     "suspicion_score": 0.0,
                     "inferred_side": "unknown",
                     "inferred_team": "",
@@ -1369,7 +1446,7 @@ class StateStore:
         Automatically promotes 'unknown' -> 'suspected_bot' -> 'confirmed_bot' when thresholds are met.
         """
         ts = time.time() if now is None else float(now)
-        with self._lock:
+        with self.batch_transaction():
             prof = self.get_bot_profile(account_id)
             cur_status = prof["status"]
             pid = (
@@ -1400,37 +1477,19 @@ class StateStore:
             if has_valid_timestamp and prev_last > 0 and abs(ts - prev_last) <= min_bot_interval_s:
                 fast_count += 1
 
-            # Also evaluate sorted creation timestamps from `observed_posts` so reverse-chronological
-            # or out-of-order feed/audit ingestion never misses sub-15s rapid-fire intervals.
-            rows_ts = self._conn.execute(
-                "SELECT created_at FROM observed_posts WHERE author = ? AND created_at > 0 ORDER BY created_at ASC",
-                (account_id,),
-            ).fetchall()
-            if len(rows_ts) >= 2:
-                times = [float(r["created_at"]) for r in rows_ts]
-                obs_fast = sum(
-                    1
-                    for i in range(1, len(times))
-                    if (times[i] - times[i - 1]) <= min_bot_interval_s
-                )
-                if obs_fast > fast_count:
-                    fast_count = obs_fast
+            if has_valid_timestamp:
+                prev = self._conn.execute('SELECT MAX(created_at) FROM observed_posts WHERE author=? AND created_at>0 AND created_at<?', (account_id, ts)).fetchone()[0]
+                nxt = self._conn.execute('SELECT MIN(created_at) FROM observed_posts WHERE author=? AND created_at>?', (account_id, ts)).fetchone()[0]
+                delta = int(prev is not None and ts-prev<=min_bot_interval_s) + int(nxt is not None and nxt-ts<=min_bot_interval_s)
+                if prev is not None and nxt is not None and nxt-prev<=min_bot_interval_s:
+                    delta -= 1
+                fast_count = max(int(prof['fast_interval_count']), int(prof['fast_interval_count']) + delta)
 
             evidence: list[str] = list(prof["evidence"])
             if evidence_tag and evidence_tag not in evidence:
                 evidence.append(evidence_tag)
 
             score = max(0.0, float(prof["suspicion_score"]) + float(suspicion_delta))
-
-            # Behavioral auto-heuristics:
-            # 1. Rapid-fire bursts (>= 2 sub-15s intervals)
-            if fast_count >= 2 and "rapid_fire_posting" not in evidence:
-                evidence.append("rapid_fire_posting")
-                score += 35.0
-            # 2. Pure question-machine pattern (>= 3 posts seen, 100% ending in '?')
-            if post_count >= 3 and q_count == post_count and "all_questions_p08_pattern" not in evidence:
-                evidence.append("all_questions_p08_pattern")
-                score += 45.0
 
             new_side = inferred_side if inferred_side in ("yes", "no") else prof["inferred_side"]
             new_team = inferred_team if inferred_team else prof["inferred_team"]
@@ -1526,7 +1585,7 @@ class StateStore:
     ) -> dict[str, Any]:
         """Add suspicion score and evidence tags to an account in `bot_registry` without incrementing `post_seen_count`."""
         ts = time.time() if now is None else float(now)
-        with self._lock:
+        with self.batch_transaction():
             prof = self.get_bot_profile(account_id)
             cur_status = prof["status"]
             pid = (
@@ -1674,7 +1733,7 @@ class StateStore:
                 row = self._conn.execute(
                     """
                     SELECT COUNT(*) AS cnt FROM report_log
-                    WHERE sydney_day = ? AND target_team = ? AND outcome != 'rejected'
+                    WHERE ruling_day = ? AND target_team = ? AND outcome = 'upheld'
                     """,
                     (day_str, target_team),
                 ).fetchone()
@@ -1682,7 +1741,7 @@ class StateStore:
                 row = self._conn.execute(
                     """
                     SELECT COUNT(*) AS cnt FROM report_log
-                    WHERE sydney_day = ? AND target_author = ? AND outcome != 'rejected'
+                    WHERE ruling_day = ? AND target_author = ? AND outcome = 'upheld'
                     """,
                     (day_str, target_author),
                 ).fetchone()
@@ -1731,17 +1790,6 @@ class StateStore:
         if prof["is_suspended"] or int(prof["upheld_strikes"]) >= max_strikes_per_account:
             return False, f"account_already_3_strike_suspended:{prof['upheld_strikes']}"
 
-        if int(prof["reports_submitted"]) >= max_strikes_per_account:
-            return False, f"account_report_cap_reached:{prof['reports_submitted']}/{max_strikes_per_account}"
-
-        effective_team = target_team or str(prof.get("inferred_team") or "")
-        if effective_team and max_daily_per_team > 0:
-            daily_cnt = self.count_daily_reports_against(
-                target_team=effective_team, sydney_day=sydney_day, now=now,
-            )
-            if daily_cnt >= max_daily_per_team:
-                return False, f"daily_team_quota_reached:{daily_cnt}/{max_daily_per_team}"
-
         return True, "eligible_to_report"
 
     def log_report(
@@ -1760,114 +1808,29 @@ class StateStore:
         """Record a submitted report in `report_log`, mark `observed_posts.is_reported = 1`, and update `bot_registry`."""
         ts = time.time() if now is None else float(now)
         day_str = sydney_day or current_sydney_day(ts)
-        with self._lock:
-            prof = self.get_bot_profile(target_author)
-            effective_team = target_team or str(prof.get("inferred_team") or "")
-            effective_side = (
-                target_side
-                if target_side in ("yes", "no")
-                else str(prof.get("inferred_side") or "unknown")
-            )
-            cur = self._conn.execute(
-                """
-                INSERT OR IGNORE INTO report_log (
-                    post_id, target_author, target_team, target_side,
-                    reporter_account, reason, sydney_day, created_at, outcome
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    post_id,
-                    target_author,
-                    effective_team,
-                    effective_side,
-                    reporter_account,
-                    reason,
-                    day_str,
-                    ts,
-                    outcome,
-                ),
-            )
-            if cur.rowcount == 0:
+        with self.batch_transaction():
+            self._conn.execute("INSERT OR IGNORE INTO bot_registry(account_id,status) VALUES(?,'unknown')",(target_author,))
+            cur=self._conn.execute("INSERT OR IGNORE INTO report_log(post_id,target_author,target_team,target_side,"
+                "reporter_account,reason,sydney_day,created_at,outcome) VALUES(?,?,?,?,?,?,?,?,'pending')",
+                (post_id,target_author,target_team,target_side,reporter_account,reason,day_str,ts))
+            if not cur.rowcount:
                 return False
-
-            self._conn.execute(
-                "UPDATE observed_posts SET is_reported = 1 WHERE post_id = ?",
-                (post_id,),
-            )
-
-            # Ensure author exists in bot_registry and increment reports_submitted
-            if prof["status"] == "unknown":
-                self.record_author_observation(
-                    target_author,
-                    inferred_side=effective_side,
-                    inferred_team=effective_team,
-                    force_status="confirmed_bot",
-                    evidence_tag=reason or "reported_as_bot",
-                    now=ts,
-                )
-            self._conn.execute(
-                """
-                UPDATE bot_registry SET
-                    reports_submitted = reports_submitted + 1,
-                    upheld_strikes = upheld_strikes + ?,
-                    is_suspended = CASE WHEN (upheld_strikes + ?) >= 3 THEN 1 ELSE is_suspended END
-                WHERE account_id = ?
-                """,
-                (
-                    1 if outcome == "upheld" else 0,
-                    1 if outcome == "upheld" else 0,
-                    target_author,
-                ),
-            )
-            self._conn.commit()
+            self._conn.execute('UPDATE observed_posts SET is_reported=1 WHERE post_id=?',(post_id,))
+            self._conn.execute('UPDATE bot_registry SET reports_submitted=reports_submitted+1 WHERE account_id=?',(target_author,))
+            if outcome != 'pending':
+                self.update_report_outcome(post_id,outcome,now=ts)
             return True
 
-    def update_report_outcome(
-        self,
-        post_id: str,
-        outcome: str,
-        *,
-        now: float | None = None,
-    ) -> dict[str, Any] | None:
-        """Update moderator ruling ('upheld' or 'rejected') for a previously filed report.
-
-        - If 'upheld': promotes author to 'confirmed_bot', increments `upheld_strikes`, and sets `is_suspended = 1` at 3 strikes.
-        - If 'rejected': activates the 6-hour reporting suspension circuit breaker and whitelists the author as 'verified_npc'.
-        """
-        if outcome not in ("upheld", "rejected", "pending"):
-            raise ValueError("outcome must be 'upheld', 'rejected', or 'pending'")
-        ts = time.time() if now is None else float(now)
+    def update_report_outcome(self, post_id, outcome, *, now=None):
+        if outcome == 'pending':
+            return self.get_bot_profile(self.get_observed_post(post_id)['author']) if self.get_observed_post(post_id) else None
+        if outcome not in ('upheld','rejected','dismissed'):
+            raise ValueError('invalid report outcome')
+        ts=time.time() if now is None else float(now)
         with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM report_log WHERE post_id = ?",
-                (post_id,),
-            ).fetchone()
-            if row is None:
-                return None
-
-            prev_outcome = str(row["outcome"])
-            target_author = str(row["target_author"])
-            self._conn.execute(
-                "UPDATE report_log SET outcome = ? WHERE post_id = ?",
-                (outcome, post_id),
-            )
-
-            if outcome == "upheld" and prev_outcome != "upheld":
-                self._conn.execute(
-                    """
-                    UPDATE bot_registry SET
-                        status = 'confirmed_bot',
-                        upheld_strikes = upheld_strikes + 1,
-                        is_suspended = CASE WHEN (upheld_strikes + 1) >= 3 THEN 1 ELSE is_suspended END
-                    WHERE account_id = ?
-                    """,
-                    (target_author,),
-                )
-            elif outcome == "rejected":
-                # False positive on a genuine citizen -> 6-hour suspension + protect author as verified_npc
-                self.set_report_suspension(21600.0, now=ts)
-                self.register_verified_accounts([target_author], status="verified_npc", now=ts)
-
-            self._conn.commit()
-            return self.get_bot_profile(target_author)
-
+            row=self._conn.execute('SELECT target_author FROM report_log WHERE post_id=?',(post_id,)).fetchone()
+        if row is None:
+            return None
+        self.apply_moderation_event({'event_id':'legacy:'+post_id, 'subject_kind':'post','subject_id':post_id,
+            'outcome':outcome,'ruled_at':ts,'source':'explicit-caller'})
+        return self.get_bot_profile(row[0])

@@ -53,32 +53,20 @@ def _ingest(
 ) -> tuple[bool, dict[str, Any], DetectionResult | None]:
     """Upsert one post. For brand-new posts also update the author's behavioural profile."""
     is_new, rec = store.upsert_observed_post(post, now=now)
-    if not is_new:
-        return False, rec, None
-
-    delta = extra_delta
-    tag = extra_tag
-    norm_hash = str(rec.get("norm_hash") or "")
-    if norm_hash and store.find_norm_hash_collisions(norm_hash, exclude_post_id=post.post_id, limit=1):
-        delta += DUPLICATE_TEXT_DELTA
-        tag = tag or "norm_hash_collision"
-
-    if post.author:
-        store.record_author_observation(
-            post.author,
-            platform_account_id=int(rec.get("author_id") or 0),
-            is_question=_is_question(post.text),
-            suspicion_delta=delta,
-            evidence_tag=tag,
-            has_valid_timestamp=(post.created_at > 0),
-            now=post.created_at if post.created_at > 0 else now,
-        )
+    if not is_new and not rec.get('content_changed'):
+        return False,rec,None
+    if post.author and (post.raw.get('verified') is True or post.raw.get('platform_level')=='verified'):
+        if store.get_bot_profile(post.author)['status']!='own_bot': store.register_verified_accounts([post.author])
+    if post.author and is_new:
+        store.record_author_observation(post.author,platform_account_id=int(rec.get('author_id') or 0),
+            is_question=_is_question(post.text),has_valid_timestamp=post.created_at>0,
+            now=post.created_at if post.created_at>0 else now)
     detection = (
         detector.inspect_post(post, record_observation=False, now=now)
         if detector is not None
         else None
     )
-    return True, rec, detection
+    return is_new or bool(rec.get("content_changed")), rec, detection
 
 
 async def audit_suspected_account(
@@ -101,30 +89,27 @@ async def audit_suspected_account(
     if not clean_author:
         return []
     prof = store.get_bot_profile(clean_author)
-    if prof["status"] != "suspected_bot" or "account_posts_audited" in prof["evidence"]:
+    if prof["status"] != "suspected_bot" or (now or time.time())-store.policy("audit:"+clean_author,0)<300:
         return []
     if getattr(actuator._client, "get_account_posts", None) is None:
         return []
 
     ts = time.time() if now is None else float(now)
-    store.add_bot_evidence(
-        clean_author,
-        suspicion_delta=0.0,
-        evidence_tags=["account_posts_audited"],
-        now=ts,
-    )
     rows = await actuator.get_account_posts(clean_author, limit=limit)
+    if rows: store.set_policy('audit:'+clean_author,ts)
     detections: list[DetectionResult] = []
-    with store.batch_transaction():
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            post = post_from_dict(row)
-            if post is None:
-                continue
-            is_new, _, det = _ingest(store, post, now=ts, detector=detector)
-            if is_new and det is not None:
-                detections.append(det)
+    def ingest_history():
+        with store.batch_transaction():
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                post = post_from_dict(row)
+                if post is None:
+                    continue
+                is_new, _, det = _ingest(store, post, now=ts, detector=detector)
+                if is_new and det is not None:
+                    detections.append(det)
+    await asyncio.to_thread(ingest_history)
     return detections
 
 
@@ -239,21 +224,24 @@ class FrontlineCrawler:
             rows = await self.actuator.search(report.source.split(":", 1)[1], limit=self.feed_limit)
 
         suspect_authors: list[str] = []
-        with self.store.batch_transaction():
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                post = post_from_dict(row)
-                if post is None:
-                    continue
-                report.fetched += 1
-                is_new, _, det = _ingest(self.store, post, now=ts, detector=self.detector)
-                if is_new:
-                    report.new_posts.append(post)
-                    if det is not None:
-                        report.detections.append(det)
-                        if det.is_suspected_bot and post.author and post.author not in suspect_authors:
-                            suspect_authors.append(post.author)
+        def ingest_rows():
+            with self.store.batch_transaction():
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    post = post_from_dict(row)
+                    if post is None:
+                        continue
+                    report.fetched += 1
+                    is_new, _, det = _ingest(self.store, post, now=ts, detector=self.detector)
+                    if is_new:
+                        report.new_posts.append(post)
+                        if det is not None:
+                            report.detections.append(det)
+                            if det.is_suspected_bot and post.author and post.author not in suspect_authors:
+                                suspect_authors.append(post.author)
+
+        await asyncio.to_thread(ingest_rows)
 
         if self.audit_suspects and self.detector is not None and suspect_authors:
             for suspect in suspect_authors:
@@ -357,7 +345,8 @@ class CommentCrawler:
             if not isinstance(row, dict):
                 continue
             row = dict(row)
-            row["parent_id"] = pid
+            if not row.get("parent_id"): row["parent_id"]=pid
+            row.setdefault("root_post_id",pid)
             post = post_from_dict(row)
             if post is not None:
                 parsed.append(post)
@@ -368,24 +357,27 @@ class CommentCrawler:
         )
         hit_existing = False
         suspect_authors: list[str] = []
-        with self.store.batch_transaction():
-            for post in parsed:
-                is_new, _, det = _ingest(
-                    self.store,
-                    post,
-                    now=ts,
-                    extra_delta=COORDINATED_BURST_DELTA if post.author in burst else 0.0,
-                    extra_tag="coordinated_reply_burst" if post.author in burst else "",
-                    detector=self.detector,
-                )
-                if is_new:
-                    report.new_comments.append(post)
-                    if det is not None:
-                        report.detections.append(det)
-                        if det.is_suspected_bot and post.author and post.author not in suspect_authors:
-                            suspect_authors.append(post.author)
-                else:
-                    hit_existing = True
+        def ingest_comments():
+            with self.store.batch_transaction():
+                for post in parsed:
+                    is_new, _, det = _ingest(
+                        self.store,
+                        post,
+                        now=ts,
+                        extra_delta=COORDINATED_BURST_DELTA if post.author in burst else 0.0,
+                        extra_tag="coordinated_reply_burst" if post.author in burst else "",
+                        detector=self.detector,
+                    )
+                    if is_new:
+                        report.new_comments.append(post)
+                        if det is not None:
+                            report.detections.append(det)
+                            if det.is_suspected_bot and post.author and post.author not in suspect_authors:
+                                suspect_authors.append(post.author)
+                    else:
+                        hit_existing = True
+
+        await asyncio.to_thread(ingest_comments)
 
         if self.audit_suspects and self.detector is not None and suspect_authors:
             for suspect in suspect_authors:
@@ -400,36 +392,17 @@ class CommentCrawler:
             # Empty page may be a failed read: just stamp the cooldown and retry later.
             self.store.update_comment_crawl_state(pid, add_crawled=0, now=ts)
         elif next_cursor:
-            if hit_existing:
-                report.done = True
-                self.store.update_comment_crawl_state(
-                    pid,
-                    replies_crawled=max(total_replies, int(target["replies_crawled"])),
-                    comment_cursor="",
-                    now=ts,
-                )
-            else:
-                self.store.update_comment_crawl_state(
-                    pid,
-                    add_crawled=len(report.new_comments),
-                    comment_cursor=str(next_cursor),
-                    now=ts,
-                )
-        elif hit_existing or len(parsed) < self.page_size or has_cursor_attr or caught_up_count:
-            report.done = True
-            self.store.update_comment_crawl_state(
-                pid,
-                replies_crawled=max(total_replies, int(target["replies_crawled"])),
-                comment_cursor="",
-                now=ts,
-            )
+            self.store.update_comment_crawl_state(pid,add_crawled=len(report.new_comments),
+                comment_cursor=str(next_cursor),now=ts)
+        elif has_cursor_attr or len(parsed)<self.page_size:
+            report.done=True
+            self.store.update_comment_crawl_state(pid,replies_crawled=max(total_replies,int(target['replies_crawled'])),
+                comment_cursor='',now=ts)
         else:
-            self.store.update_comment_crawl_state(
-                pid,
-                add_crawled=len(report.new_comments),
-                comment_cursor="",
-                now=ts,
-            )
+            # Legacy adapters expose offset pagination; duplicates never prove completion.
+            offset=int(cursor) if cursor and cursor.isdigit() else 0
+            self.store.update_comment_crawl_state(pid,add_crawled=len(report.new_comments),
+                comment_cursor=str(offset+len(parsed)),now=ts)
         return report
 
 

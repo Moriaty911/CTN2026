@@ -10,7 +10,7 @@ from ctn.jev.workflow import JevWorkflow, WorkflowValidationError
 from ctn.persona.models import Persona
 from ctn.telemetry import JsonlWriter
 from .client import DeepSeekClient
-from .models import DraftOptions, ReplyDraftResult, MODEL_NEEDS, LlmValidationError
+from .models import DraftOptions, ReplyDraftResult, MODEL_NEEDS, LlmValidationError,PROMPT_VERSION
 from .prompts import build_messages
 
 
@@ -120,9 +120,48 @@ class ReplyGenerator:
                 material["template_version"] != "jev-briefs.v1"):
                 return finish("needs_review", "generation_binding_mismatch")
             # Model instructions are constructed only from our versioned templates.
+            frozen = {"version":"ctn-frozen-reply.v1", "materials":material,
+                      'prompt_version':PROMPT_VERSION,
+                      "parent_request_id":base.parent_request_id}
+            frozen["fingerprint"] = hashlib.sha256(json.dumps(frozen,sort_keys=True,
+                ensure_ascii=False,allow_nan=False,separators=(',',':')).encode()).hexdigest()
+            base=replace(base,frozen_material_json=json.dumps(frozen,ensure_ascii=False,allow_nan=False))
             messages = build_messages(material, options, max_chars, persona=persona, retry_feedback=retry_feedback)
         except (ValueError, KeyError, TypeError, IndexError, WorkflowValidationError):
             return finish("needs_review", "invalid_handoff_binding")
+        return self._call(messages,base,max_chars)
+
+    def generate_frozen(self, frozen_json, *, persona, previous_replies, options=None, retry_feedback=None):
+        """Resume a locally persisted, checked batch. Never accepts a provider handoff."""
+        options=options or DraftOptions()
+        max_chars=options.max_reply_chars or self.client.config.max_reply_chars
+        base=ReplyDraftResult('needs_review','invalid_frozen_material',model=self.client.config.model)
+        try:
+            frozen=_strict_json(frozen_json)
+            fingerprint=frozen.pop('fingerprint')
+            if (set(frozen)!={'version','materials','parent_request_id','prompt_version'} or
+                frozen['version']!='ctn-frozen-reply.v1' or
+                frozen['prompt_version']!=PROMPT_VERSION or
+                hashlib.sha256(json.dumps(frozen,sort_keys=True,ensure_ascii=False,
+                    allow_nan=False,separators=(',',':')).encode()).hexdigest()!=fingerprint):
+                raise ValueError('invalid snapshot')
+            material=frozen['materials'];action=material['action_decision']
+            if (material['schema_version']!='jev-generation-material.v1' or action['status']!='decided'
+                or action['action']!='reply' or not material.get('action_policy_fingerprint')
+                or max_chars>self.client.config.max_reply_chars or not previous_replies):
+                raise ValueError('invalid scope')
+            if self.checker._has_secret(frozen_json):raise ValueError('sensitive snapshot')
+            messages=build_messages(material,options,max_chars,persona=persona,
+                retry_feedback=retry_feedback,previous_replies=previous_replies)
+            base=replace(base,target_post_id=material['target']['post_id'],prompt_type=material['prompt_type'],
+                parent_request_id=frozen['parent_request_id'],frozen_material_json=frozen_json)
+        except (ValueError,TypeError,KeyError,IndexError):
+            return self._finish(base)
+        return self._call(messages,base,max_chars)
+
+    def _call(self,messages,base,max_chars):
+        def finish(status,reason,**fields):
+            return self._finish(replace(base,status=status,reason=reason,**fields))
         call = self.client.call(messages)
         base = replace(base, request_id=call.request_id, attempt_count=call.attempt_count)
         if call.reason != "ok":

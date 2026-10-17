@@ -4,10 +4,9 @@ import json
 
 from ctn.persona.models import Persona
 from ctn.rag import get_campaign_guidance
-from .models import DraftOptions, LlmValidationError
+from .models import DraftOptions, LlmValidationError,PROMPT_VERSION
 
 
-PROMPT_VERSION = "ctn-reply-prompts.v1"
 PURPOSE_PROMPTS = {
     "P01": "Support the precise identified point. Add one useful explanation from the supplied addition; avoid generic praise or claiming consensus.",
     "P02": "Answer the genuine focal question first. Use the supplied answer basis and explicitly retain relevant qualifications; do not divert into an unrelated argument.",
@@ -41,6 +40,7 @@ def build_messages(
     *,
     persona: Persona | None = None,
     retry_feedback: str | None = None,
+    previous_replies: list | None = None,
 ):
     purpose = materials["prompt_type"]
     if purpose not in PURPOSE_PROMPTS or materials["schema_version"] != "jev-generation-material.v1":
@@ -58,6 +58,7 @@ def build_messages(
             f"Voice & Tone Instructions: {persona.tone_instruction} "
             "Strictly embody this persona's voice and perspective while remaining completely natural. "
             "Do not explicitly state your bio or introduce yourself by job title unless naturally relevant."
+            " Persona experiences are fictional characterization, not medical, legal or policy evidence."
         )
         if guidance:
             system += f"\n{guidance}"
@@ -71,5 +72,17 @@ def build_messages(
         "information_gap", "comments", "sample_scope", "human_verifications")}
     observations["selected_purpose"] = purpose
     observations["reply_quality"] = materials["action_decision"]["reply_quality"]
+    if persona is not None and persona.profile:
+        observations['persona_characterization']=persona.profile
+    if previous_replies:
+        system += ("\nThis is an additional reply in a fixed batch. Add one clearly distinct, useful contribution "
+                   "within the same approved purpose and evidence. Do not paraphrase earlier replies or invent "
+                   "new facts to make the contribution appear different. If none is possible, return "
+                   "{\"status\":\"needs_review\",\"reply\":null,\"needs\":[\"content_review\"]}.")
+        context={'previous_successful_replies':previous_replies}
+        import hashlib
+        context['fingerprint']=hashlib.sha256(json.dumps(previous_replies,sort_keys=True,
+            ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+        observations['batch_context']=context
     return [{"role": "system", "content": system},
             {"role": "user", "content": json.dumps(observations, ensure_ascii=False, allow_nan=False)}]

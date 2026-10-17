@@ -48,9 +48,11 @@ class HarnessFileIntegrityTests(unittest.TestCase):
     def test_account_table_has_all_personas(self):
         """Verify that all default accounts are tracked in the harness.md table."""
         content = self.harness_file.read_text(encoding="utf-8")
-        expected_accounts = ["bot_worker_yes", "bot_debater_yes", "bot_medic_yes", "bot_policy_yes"]
-        for acc in expected_accounts:
-            self.assertIn(acc, content, f"Account {acc} must be tracked in harness.md")
+        self.assertIn('config/personas/yes.v1.json',content)
+        self.assertIn('80 YES profiles',content)
+        self.assertIn('persona list',content)
+        for account in ('bot_worker_yes','bot_medic_yes','bot_policy_yes','bot_debater_yes'):
+            self.assertNotIn(account,content)
 
     def test_pi_skill_file_integrity(self):
         """Verify that .pi/skills/campaign-publisher/SKILL.md is valid and strictly in English."""
@@ -68,7 +70,7 @@ class HarnessFileIntegrityTests(unittest.TestCase):
         # Check required workflow keywords in instructions
         self.assertIn("harness.md", content)
         self.assertIn("python -m ctn.macro status", content)
-        self.assertIn("python -m ctn.macro publish", content)
+        self.assertIn('python -m ctn.macro --side "$CTN_SIDE" publish', content)
 
         # Verify SKILL.md contains strictly English text (no CJK characters)
         self.assertIsNone(
@@ -78,9 +80,20 @@ class HarnessFileIntegrityTests(unittest.TestCase):
 
 
 class MacroCliEdgeCaseTests(unittest.TestCase):
+    @staticmethod
+    def _bind(path):
+        from contextlib import closing
+        from ctn.storage import StateStore
+        from ctn.persona import PersonaRegistry
+        with closing(StateStore(path)) as store:
+            PersonaRegistry().attach(store)
+            store.bind_persona('yes_001','fresh_account')
+            store.set_persona_modes(['yes_001'],'active')
+
     def test_publish_unknown_account_fails_gracefully(self):
-        with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
             code = main([
+                "--mock","--side","yes",
                 "--state-file", tmp.name,
                 "publish",
                 "--account", "non_existent_account",
@@ -90,11 +103,13 @@ class MacroCliEdgeCaseTests(unittest.TestCase):
             self.assertEqual(code, 1)
 
     def test_publish_dry_run_flag(self):
-        with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+            self._bind(tmp.name)
             code = main([
+                "--mock","--side","yes",
                 "--state-file", tmp.name,
                 "publish",
-                "--account", "bot_debater_yes",
+                "--account", "fresh_account",
                 "--text", "Debate inquiry about Kingstonia policy.",
                 "--dry-run",
                 "--bypass-jev",
@@ -102,12 +117,14 @@ class MacroCliEdgeCaseTests(unittest.TestCase):
             self.assertEqual(code, 0)
 
     def test_warmup_cycling_index(self):
-        with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+            self._bind(tmp.name)
             # Seed index 0 on bot_worker_yes
             code0 = main([
+                "--mock","--side","yes",
                 "--state-file", tmp.name,
                 "warmup",
-                "--account", "bot_worker_yes",
+                "--account", "fresh_account",
                 "--index", "0",
                 "--dry-run",
             ])
@@ -115,9 +132,10 @@ class MacroCliEdgeCaseTests(unittest.TestCase):
 
             # Seed index 1 on bot_debater_yes (different account, so not blocked by worker cooldown)
             code1 = main([
+                "--mock","--side","yes",
                 "--state-file", tmp.name,
                 "warmup",
-                "--account", "bot_debater_yes",
+                "--account", "fresh_account",
                 "--index", "1",
                 "--dry-run",
             ])

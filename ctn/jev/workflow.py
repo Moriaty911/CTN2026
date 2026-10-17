@@ -1,6 +1,6 @@
 """Ready-to-use JEV evaluation, action decision and selected-purpose handoff.
 
-Uses post.v2 plus the independent response.v1 neutral/mixed stage with default
+Uses post.v3 plus the independent response.v1 neutral/mixed stage with default
 actions.v3. Explicit old policies remain available for historical replay.
 No account, LLM or platform calls.
 """
@@ -17,7 +17,7 @@ from .handoff import (HandoffPackage, build_handoff, build_comparison_handoff,
 from .materials import MaterialBrief, MaterialCheck, MaterialChecker
 from .planning import build_response_planning
 from .response import decide_response, validate_response_binding
-from .rubrics import load_rubric
+from .rubrics import load_rubric, ACTIVE_POST_VERSION
 
 
 class WorkflowValidationError(ValueError):
@@ -31,7 +31,7 @@ class JevWorkflow:
         if type(client) is not JevClient:
             raise WorkflowValidationError("client: expected JEV client")
         self.evaluator = evaluator if evaluator is not None else JevEvaluator(client,
-            post_questions=load_rubric("post", version="v2"))
+            post_questions=load_rubric("post", version=ACTIVE_POST_VERSION))
         self.action_policy = action_policy if action_policy is not None else ActionPolicy()
         self.material_checker = material_checker if material_checker is not None else MaterialChecker()
         self.audit_log = audit_log

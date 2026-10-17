@@ -28,7 +28,7 @@ PURPOSE_SIDE_GUIDANCE: dict[str, dict[str, str]] = {
         ),
         "P02": (
             "Answer the question directly and calmly from a pro-public-health perspective, "
-            "explaining how clear vaccination standards and fair medical exemptions protect everyone."
+            "using only verified supplied policy details; do not invent medical exemptions or statistics."
         ),
         "P03": (
             "Acknowledge the point raised, then gently pivot or counter by showing why proactive "

@@ -13,6 +13,8 @@ from tests.test_jev_evaluator import FakeTransport, choose
 from tests.test_jev_response import responder
 from tests.test_llm import response
 
+from tests.legacy_personas import legacy_router
+
 
 class PostflightTests(unittest.TestCase):
     def test_postflight_approves_safe_aligned_reply(self):
@@ -126,7 +128,7 @@ class PostflightTests(unittest.TestCase):
                              transport=httpx.MockTransport(llm_handler))
         generator = ReplyGenerator(workflow, llm)
 
-        brain = JevLlmBrain(workflow, generator, side=Side.YES, postflight=postflight)
+        brain = JevLlmBrain(workflow, generator, side=Side.YES, router=legacy_router(), postflight=postflight)
         post = Post(post_id="p1", author="alice", text="Is version A required for entry?")
 
         verdict = brain.think(post)
@@ -154,7 +156,7 @@ class PostflightTests(unittest.TestCase):
                              transport=httpx.MockTransport(lambda r: response("Bad reply")))
         generator = ReplyGenerator(workflow, llm)
 
-        brain = JevLlmBrain(workflow, generator, side=Side.YES, postflight=postflight)
+        brain = JevLlmBrain(workflow, generator, side=Side.YES, router=legacy_router(), postflight=postflight)
         post = Post(post_id="p1", author="alice", text="Is version A required for entry?")
 
         verdict = brain.think(post)

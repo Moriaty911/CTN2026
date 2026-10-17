@@ -33,6 +33,7 @@ def _load_dotenv(path: Path) -> None:
     """Minimal .env reader. Existing environment variables are never overwritten."""
     if not path.is_file():
         return
+    path.chmod(0o600)
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -371,6 +372,11 @@ class Settings:
     log_dir: Path = Path("logs")
     dry_run: bool = True            # never write to the platform unless False
     log_level: str = "INFO"
+    mode: str = "mock"
+    state_file: str = ""
+    auto_reports: bool = False
+    max_pending_reports: int = 10
+    max_pending_per_author: int = 1
 
     # ---- lifecycle ------------------------------------------------------- #
     @classmethod
@@ -406,8 +412,54 @@ class Settings:
             log_dir=log_dir,
             dry_run=_env_bool("CTN_DRY_RUN", True),
             log_level=_env_str("CTN_LOG_LEVEL", "INFO").upper(),
+            mode=_env_str("CTN_MODE", "dry-run" if _env_bool("CTN_DRY_RUN", True) else "live"),
+            state_file=_env_str("CTN_STATE_FILE"),
+            auto_reports=_env_bool("CTN_AUTO_REPORTS", False),
+            max_pending_reports=_env_int("CTN_MAX_PENDING_REPORTS",10),
+            max_pending_per_author=_env_int("CTN_MAX_PENDING_PER_AUTHOR",1),
         )
         return settings
+
+    def execution_mode(self, override: str | None = None) -> str:
+        mode = override or self.mode
+        if mode not in {"mock", "dry-run", "live"}:
+            raise ValueError("CTN_MODE must be mock, dry-run or live")
+        # CTN_MODE is authoritative when explicitly configured. Conflicting
+        # legacy configuration is rejected rather than enabling writes.
+        if override is None and "CTN_MODE" in os.environ and "CTN_DRY_RUN" in os.environ:
+            if (mode == "live") == self.dry_run:
+                raise ValueError("CTN_MODE conflicts with CTN_DRY_RUN")
+        return mode
+
+    def require_live_writes(self, *, replies: bool = False) -> None:
+        missing=[]
+        if self.side is Side.UNASSIGNED: missing.append("CTN_SIDE")
+        if not self.platform.api_key: missing.append("CTN_PLATFORM_API_KEY")
+        if not self.platform.bot_password: missing.append("CTN_BOT_PASSWORD")
+        if not self.jev.enabled or not self.jev.api_key: missing.append("enabled TYPESAFE_API_KEY")
+        if replies and not self.llm.api_key: missing.append("CTN_LLM_API_KEY")
+        if missing: raise ValueError("live writes require: " + ", ".join(missing))
+
+    def database_path(self, explicit: str | Path | None = None) -> Path:
+        """One path for both processes. Legacy migration is explicit in stderr."""
+        import sqlite3
+        from contextlib import closing
+        import sys
+        path=Path(explicit or self.state_file or self.state_dir / "ctn.sqlite3").expanduser().resolve()
+        if path.suffix == ".json":
+            raise ValueError("JSON is not shared runtime state; import it into SQLite first")
+        if explicit or self.state_file or path.exists():
+            return path
+        legacy=[p for p in (Path(".ctn_state.db"),self.state_dir/"ctn.db") if p.is_file() and p.resolve()!=path]
+        if len(legacy)>1:
+            raise ValueError("multiple legacy databases; select one with --state-file")
+        if legacy:
+            path.parent.mkdir(parents=True,exist_ok=True)
+            with closing(sqlite3.connect(legacy[0])) as source, closing(sqlite3.connect(path)) as dest:
+                source.backup(dest)
+            path.chmod(0o600)
+            print(f"Migrated legacy SQLite {legacy[0].resolve()} -> {path}; original preserved",file=sys.stderr)
+        return path
 
     # ---- guardrails ------------------------------------------------------ #
     def validate(self) -> list[str]:

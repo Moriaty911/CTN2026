@@ -36,6 +36,8 @@ _ENGLISH_WORD_PATTERN = re.compile(r"[a-zA-Z]{2,}")
 
 # Unified dictionary of Micro reply purposes and Macro proactive decision-tree branches
 PURPOSE_RULES: dict[str, str] = {
+    "warmup": "Neutral everyday Kingstonia life; no referendum alignment required. English, civil, no injection or unsupported factual assertions.",
+    "branch_unknown": "Insufficient evidence to determine a majority; do not assert a majority or invent factual support.",
     # Micro reactive reply purposes
     "P02": (
         "Purpose P02 (Direct Answer & Bridge): Answer the focal question directly and civilly from our "
@@ -104,6 +106,11 @@ def format_persona_profile(persona: Any | None, persona_profile: str = "") -> st
         return persona_profile
     if persona is None:
         return ""
+    if getattr(persona, 'profile', None):
+        import json
+        return json.dumps({'characterization':persona.profile,
+            'constraint':'Fictional experiences and job titles are voice data, never medical, legal or policy evidence.'},
+            ensure_ascii=False)
     name = getattr(persona, "name", "")
     archetype = getattr(persona, "archetype", "")
     bio = getattr(persona, "bio", "")
@@ -252,8 +259,17 @@ class JevPostflightChecker:
         persona: Any | None = None,
         persona_profile: str = "",
         strict_alignment: bool = False,
+        previous_replies: list | None = None,
+        approved_materials: dict | None = None,
     ) -> PostflightVerdict:
         """Run Layer-1 deterministic checks followed by Layer-2 JEV 5-dimension evaluation."""
+        additional=bool(previous_replies)
+        if additional:
+            normalized=lambda text: re.sub(r'\W+',' ',text.lower()).strip()
+            if any(normalized(reply_text)==normalized(p.get('text','')) for p in previous_replies):
+                return PostflightVerdict(False,'duplicate_batch_content')
+            if not approved_materials:
+                return PostflightVerdict(False,'missing_approved_materials')
         # Layer 1: Deterministic fast-fail checks (length, language, hashtag format)
         is_valid, validation_reason = validate_text_constraints(
             reply_text,
@@ -277,6 +293,10 @@ class JevPostflightChecker:
         }
         if resolved_persona:
             context_data["persona_profile"] = resolved_persona
+        if additional:
+            context_data['previous_successful_replies']=previous_replies
+            context_data['approved_materials']=approved_materials
+            context_data['batch_context_fingerprint']=_digest(previous_replies)
 
         state = {
             "content": {
@@ -291,7 +311,8 @@ class JevPostflightChecker:
             }
         }
 
-        questions = self.rubric.to_provider_questions("response")
+        rubric=load_rubric('postflight',version='v2') if additional else self.rubric
+        questions = rubric.to_provider_questions("response")
         body = {
             "model": self.client.config.model,
             "state": state,
@@ -315,8 +336,8 @@ class JevPostflightChecker:
             targets=(target,),
             issues=(),
             question_ids=tuple(questions),
-            question_set_version=self.rubric.version,
-            question_set_fingerprint=self.rubric.fingerprint,
+            question_set_version=rubric.version,
+            question_set_fingerprint=rubric.fingerprint,
             packing_fingerprint=_digest(body),
             input_fingerprint=_digest(state),
             request_id=request_id,
@@ -333,7 +354,7 @@ class JevPostflightChecker:
                 detail={"call_status": call.status, "error_code": call.error_code},
             )
 
-        parsed = self.parser.parse(call, question_set=self.rubric, expected_request_id=request_id)
+        parsed = self.parser.parse(call, question_set=rubric, expected_request_id=request_id)
         if parsed.status != "success" or parsed.output is None:
             return PostflightVerdict(
                 can_send=False,
@@ -358,6 +379,8 @@ class JevPostflightChecker:
             toxic_score = 1.0 if bool(raw_toxic) else 0.0
         toxic_val = toxic_score >= self.toxicity_threshold
         auth_val = getattr(send_authorization, "value", "unknown") if send_authorization else "unknown"
+        addition=output_answers.get('substantive_addition')
+        addition_val=getattr(addition,'value','unknown')
 
         answers_summary = {
             "side_alignment": side_val,
@@ -390,6 +413,10 @@ class JevPostflightChecker:
         elif auth_val != "approve":
             can_send = False
             reason = f"authorization_{auth_val}"
+        if additional and (getattr(addition,'status',None)!='valid' or addition_val!='new_supported_content'):
+            can_send=False
+            reason='no_substantive_addition'
+        if additional: answers_summary['substantive_addition']=addition_val
 
         return PostflightVerdict(
             can_send=can_send,

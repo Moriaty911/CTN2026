@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 
 DRAFT_SCHEMA_VERSION = "ctn-reply-draft.v1"
+PROMPT_VERSION = "ctn-reply-prompts.v2"
 LANGUAGES = {"follow_post", "en", "zh", "es", "fr", "de", "pt", "ar", "ru", "ja", "ko", "hi"}
 MODEL_NEEDS = {"supporting_evidence", "source_clarification", "scope_clarification",
                "comparison_material", "human_verification", "comment_sample", "content_review"}
@@ -33,13 +34,15 @@ class ReplyDraftResult:
     prompt_type: str | None = None
     request_id: str | None = None
     parent_request_id: str | None = None
-    prompt_version: str = "ctn-reply-prompts.v1"
+    prompt_version: str = PROMPT_VERSION
     material_version: str = "jev-generation-material.v1"
     model: str = "deepseek-flash"
     reply: str | None = field(default=None, repr=False)
     needs: tuple[str, ...] = ()
     attempt_count: int = 0
     usage: tuple[tuple[str, int], ...] = ()
+    # Only local validated generation may populate this; normal audit output omits it.
+    frozen_material_json: str = field(default="", repr=False)
 
     def to_dict(self, *, include_text=False):
         if type(include_text) is not bool:

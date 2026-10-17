@@ -18,25 +18,29 @@ from ctn.persona import Persona, PersonaRouter, get_warmup_seed, list_warmup_see
 from ctn.ratelimit import build_gate, build_ledger
 
 
+from tests.legacy_personas import legacy_router as PersonaRouter
+
+
 class TestWarmupSeeds(unittest.TestCase):
     def test_warmup_seeds_retrieval(self):
-        worker_seeds = list_warmup_seeds("bot_worker_yes")
+        worker_seeds = list_warmup_seeds("yes_001")
         self.assertGreater(len(worker_seeds), 0)
-        first_seed = get_warmup_seed("bot_worker_yes", 0)
-        self.assertIn("Crown Harbour", first_seed)
+        first_seed = get_warmup_seed("yes_001", 0)
+        self.assertIn("driver cover", first_seed)
 
         # Modulo index cycling
-        second_seed = get_warmup_seed("bot_worker_yes", 1)
+        second_seed = get_warmup_seed("yes_001", 1)
         self.assertNotEqual(first_seed, second_seed)
 
         # Unknown account fallback
-        unknown_seed = get_warmup_seed("bot_unknown_acc", 0)
-        self.assertTrue(len(unknown_seed) > 0)
+        with self.assertRaises(ValueError):
+            get_warmup_seed("bot_unknown_acc", 0)
 
 
 class TestMacroStateCollector(unittest.TestCase):
     def test_collector_snapshot(self):
         actuator = MagicMock()
+        actuator.trending_posts = AsyncMock(return_value=[{"post_id":"ranked1","text":"Ranked post"}])
         actuator.trending = AsyncMock(return_value=[
             {"hashtag": "#KingstoniaVotes", "text": "Post 1", "likes": 10},
             {"hashtag": "#PublicTransit", "text": "Post 2", "likes": 5},
@@ -121,6 +125,7 @@ class TestMacroStateCollector(unittest.TestCase):
         news_crawler = NewsSitesCrawler(news_sites=fake_news)
 
         actuator = MagicMock()
+        actuator.trending_posts = AsyncMock(return_value=[{"post_id":"ranked1","text":"Ranked post"}])
         actuator.trending = AsyncMock(return_value=[{"hashtag": "#H2D2"}])
         # Only 1 search call should be made (for "journalist"), because newspapers come from NewsSitesCrawler!
         actuator.search = AsyncMock(return_value=[
@@ -300,21 +305,28 @@ class TestStrategicPublisher(unittest.TestCase):
 
 class TestMacroCli(unittest.TestCase):
     def test_cli_status(self):
-        with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
-            code = main(["--mock", "--state-file", tmp.name, "status"])
+        with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+            code = main(["--side","yes","--mock", "--state-file", tmp.name, "status"])
             self.assertEqual(code, 0)
 
     def test_cli_warmup_and_persistence(self):
-        with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
             tmp_path = Path(tmp.name)
+            from ctn.storage import StateStore
+            from ctn.persona.registry import PersonaRegistry
+            from contextlib import closing
+            with closing(StateStore(tmp_path)) as store:
+                PersonaRegistry().attach(store)
+                store.bind_persona('yes_001','fresh_account')
+                store.set_persona_modes(['yes_001'],'active')
             # Run warmup command
-            code = main(["--mock", "--state-file", str(tmp_path), "warmup", "--account", "bot_worker_yes", "--dry-run"])
+            code = main(["--side","yes","--mock", "--state-file", str(tmp_path), "warmup", "--account", "fresh_account", "--dry-run"])
             self.assertEqual(code, 0)
 
             # Verify state was saved to file
             router = _load_router("yes", tmp_path)
             state = router.get_state("bot_worker_yes")
-            self.assertEqual(state.post_count, 1)
+            self.assertEqual(state.post_count, 0)
 
     def test_setup_environment_switches_between_official_and_mock_client(self):
         from unittest.mock import patch
@@ -336,7 +348,7 @@ class TestMacroCli(unittest.TestCase):
             actuator_live, _ = _setup_environment(dry_run=True, store=store)
             self.assertIsInstance(actuator_live._client, OfficialLegitClient)
             self.assertEqual(actuator_live._client.team_key, "team_secret_key_2026")
-            self.assertTrue(actuator_live._client.auto_register)
+            self.assertFalse(actuator_live._client.auto_register)
             self.assertIs(actuator_live._client.store, store)
 
             # With force_mock=True, falls back to MockLegitClient

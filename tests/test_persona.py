@@ -16,6 +16,7 @@ from ctn.persona import (
     get_default_registry,
 )
 from ctn.pipeline.brain import BrainVerdict, JevLlmBrain
+from tests.legacy_personas import legacy_router
 
 
 class TestPersonaModels(unittest.TestCase):
@@ -78,26 +79,17 @@ class TestPersonaModels(unittest.TestCase):
 
 class TestPersonaRegistry(unittest.TestCase):
     def test_default_registry_contents(self):
-        registry = get_default_registry()
-        yes_personas = registry.list_by_side("yes")
-        no_personas = registry.list_by_side("no")
-
-        self.assertEqual(len(yes_personas), 4)
-        self.assertEqual(len(no_personas), 4)
-
-        yes_archetypes = {p.archetype for p in yes_personas}
-        expected = {"sharp_debater", "medical_expert", "grassroots_worker", "policy_analyst"}
-        self.assertEqual(yes_archetypes, expected)
+        registry=get_default_registry()
+        self.assertEqual(len(registry.list_by_side('yes')),80)
+        self.assertEqual(registry.list_by_side('no'),[])
+        self.assertEqual(len({p.occupation_group for p in registry.list_all()}),11)
+        self.assertTrue(all(not p.account_id for p in registry.list_all()))
 
     def test_lookup_and_filter(self):
-        registry = get_default_registry()
-        debater = registry.get("bot_debater_yes")
-        self.assertIsNotNone(debater)
-        self.assertEqual(debater.name, "Elena Vance")
-
-        medic_yes = registry.list_by_archetype("medical_expert", side="yes")
-        self.assertEqual(len(medic_yes), 1)
-        self.assertEqual(medic_yes[0].account_id, "bot_medic_yes")
+        registry=get_default_registry()
+        self.assertIsNone(registry.get('bot_debater_yes'))
+        self.assertEqual(registry.get('yes_001').name,'Nolan Mercer')
+        self.assertEqual(len(registry.list_by_group('medical_public_health')),2)
 
     def test_custom_registration(self):
         registry = PersonaRegistry(personas=[])
@@ -116,7 +108,7 @@ class TestPersonaRegistry(unittest.TestCase):
 
 class TestPersonaRouter(unittest.TestCase):
     def setUp(self):
-        self.router = PersonaRouter(default_side="yes")
+        self.router = legacy_router(default_side="yes")
 
     def test_route_troll_venting_to_sharp_debater(self):
         jev_data = {
@@ -135,7 +127,7 @@ class TestPersonaRouter(unittest.TestCase):
         }
         post_text = "This whole thing is a complete fake scam and total nonsense!"
         decision = self.router.route(jev_data, post_text, side="yes")
-        self.assertEqual(decision.target_archetype, "sharp_debater")
+        self.assertEqual(decision.target_archetype, "independent_commentary")
         self.assertEqual(decision.account_id, "bot_debater_yes")
         self.assertFalse(decision.fallback_used)
 
@@ -156,7 +148,7 @@ class TestPersonaRouter(unittest.TestCase):
         }
         post_text = "What clinical trial data supports the safety of this vaccine against the flu virus?"
         decision = self.router.route(jev_data, post_text, side="yes")
-        self.assertEqual(decision.target_archetype, "medical_expert")
+        self.assertEqual(decision.target_archetype, "medical_public_health")
         self.assertEqual(decision.account_id, "bot_medic_yes")
         self.assertFalse(decision.fallback_used)
 
@@ -178,7 +170,7 @@ class TestPersonaRouter(unittest.TestCase):
         }
         post_text = "Which municipal council policy version governs transit regulation and exemption rules?"
         decision = self.router.route(jev_data, post_text, side="yes")
-        self.assertEqual(decision.target_archetype, "policy_analyst")
+        self.assertEqual(decision.target_archetype, "law_policy")
         self.assertEqual(decision.account_id, "bot_policy_yes")
         self.assertFalse(decision.fallback_used)
 
@@ -199,7 +191,7 @@ class TestPersonaRouter(unittest.TestCase):
         }
         post_text = "I take the crowded subway and bus to work every day, thinking about my kids and grocery bills."
         decision = self.router.route(jev_data, post_text, side="yes")
-        self.assertEqual(decision.target_archetype, "grassroots_worker")
+        self.assertEqual(decision.target_archetype, "transport_logistics")
         self.assertEqual(decision.account_id, "bot_worker_yes")
         self.assertFalse(decision.fallback_used)
 
@@ -218,7 +210,7 @@ class TestPersonaRouter(unittest.TestCase):
         # Next post arrives at t=110.0 (within 60s cooldown of bot_policy_yes)
         d2 = self.router.route(jev_data, post_text, side="yes", now=110.0)
         self.assertNotEqual(d2.account_id, "bot_policy_yes")
-        self.assertTrue(d2.fallback_used)
+        self.assertEqual(d2.reason,"general_clarification_fallback")
         self.assertFalse(d2.in_cooldown)
 
         # Fast forward past cooldown (t=165.0)
@@ -281,7 +273,7 @@ class TestBrainPersonaIntegration(unittest.TestCase):
         pf_verdict.to_dict.return_value = {"can_send": True, "answers": {"send_authorization": "send"}}
         postflight.check.return_value = pf_verdict
 
-        router = PersonaRouter(default_side="yes")
+        router = legacy_router(default_side="yes")
         brain = JevLlmBrain(
             workflow=workflow,
             generator=generator,
@@ -297,9 +289,9 @@ class TestBrainPersonaIntegration(unittest.TestCase):
         self.assertEqual(verdict.detail.get("selected_account"), "bot_medic_yes")
         self.assertIn("routing", verdict.detail)
 
-        # Verify router marked account as used
+        # Planning does not commit cooldown; only successful execution does.
         state = router.get_state("bot_medic_yes")
-        self.assertEqual(state.post_count, 1)
+        self.assertEqual(state.post_count, 0)
 
         # Verify generator received the selected persona
         call_kwargs = generator.generate.call_args[1]
@@ -317,7 +309,7 @@ class TestBrainPersonaIntegration(unittest.TestCase):
 
         generator = MagicMock()
         postflight = MagicMock()
-        router = PersonaRouter(default_side="yes")
+        router = legacy_router(default_side="yes")
 
         # Put all accounts into cooldown using current wall-clock time
         import time
@@ -351,8 +343,8 @@ class TestBrainPersonaIntegration(unittest.TestCase):
             db_path = Path(tmpdir) / "shared_state.db"
             store_a = StateStore(db_path)
             store_b = StateStore(db_path)
-            router_a = PersonaRouter(default_side="yes", store=store_a)
-            router_b = PersonaRouter(default_side="yes", store=store_b)
+            router_a = legacy_router(default_side="yes", store=store_a)
+            router_b = legacy_router(default_side="yes", store=store_b)
 
             # Warm up router_b's in-memory cache first
             initial_state_b = router_b.get_state("bot_policy_yes")
@@ -365,7 +357,7 @@ class TestBrainPersonaIntegration(unittest.TestCase):
             jev_data = {"response_decision": {"prompt_type": "P08"}}
             decision = router_b.route(jev_data, "Which policy version applies?", side="yes")
             self.assertNotEqual(decision.account_id, "bot_policy_yes")
-            self.assertTrue(decision.fallback_used)
+            self.assertEqual(decision.reason,"general_clarification_fallback")
 
             store_a.close()
             store_b.close()
@@ -429,7 +421,7 @@ class TestBrainPersonaIntegration(unittest.TestCase):
         pf_verdict.to_dict.return_value = {"can_send": True}
         postflight.check.return_value = pf_verdict
 
-        router = PersonaRouter(default_side="yes")
+        router = legacy_router(default_side="yes")
         brain = JevLlmBrain(
             workflow=workflow,
             generator=generator,

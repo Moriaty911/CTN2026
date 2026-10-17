@@ -1,10 +1,14 @@
+本批 80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[80 人预览](docs/personas-80/preview.md)。新人设默认未绑定，绑定后待命。
+
+运行入口与本轮修复：见 [修复交付说明](docs/repair-2026-10-17/implementation.md)、[启动和恢复](docs/repair-2026-10-17/operations.md)、[当前三棵逻辑树](docs/personas-80/logic-trees.md)。正式服务使用 `python -m ctn.main`；首次离线验证使用 `--mock --side yes --state-file state/mock.sqlite3 --once`。
+
 # CNT2026
 
 Python components for the Capture the Narrative 2026 project. The system operates as a **Dual-Engine Architecture** combining high-throughput **Micro-level Reactive Replies** (JEV stream evaluation + DeepSeek drafting + JEV 4-dimension pre-send gatekeeping) with a strategic **Macro-level Proactive Publishing Engine** driven by the `pi.dev` Agent harness, long-term state tracking via `harness.md`, and multi-account persona lifecycle management.
 
 The scenario is the fictional Kingstonia referendum on vaccination proof for access to public spaces. Supporting voluntary vaccination does not automatically mean supporting the access requirement. Alignment is calculated against the team's explicitly supplied side; a single post does not establish an author's permanent affiliation.
 
-**Status as of October 14, 2026:** Stage 1 implementation is fully operational with 436 passing unit tests. Features include real-time JEV evaluation, multi-account persona routing with cooldown fallback, JEV 4-dimension postflight gatekeeping with Option B retries, macro environment sensing (trending hashtags & dual newspaper monitoring), Kingstonia native warmup post seeds, and `pi.dev` strategic campaign harness integration.
+**October 17, 2026 update:** The default roster and production rubric have moved to 80 YES profiles and post.v3; see the delivery and validation documents linked above. The earlier Stage 1 baseline had 436 passing offline tests. Features include real-time JEV evaluation, multi-account persona routing with cooldown fallback, JEV 4-dimension postflight gatekeeping with Option B retries, macro environment sensing (trending hashtags & dual newspaper monitoring), Kingstonia native warmup post seeds, and `pi.dev` strategic campaign harness integration.
 
 ## Implemented capabilities
 
@@ -16,7 +20,7 @@ The scenario is the fictional Kingstonia referendum on vaccination proof for acc
 | Response parsing | Validates Choice, Score, and Noul answers against the exact request; preserves per-answer failures and applies information-sufficiency gates. |
 | Evaluation routing | Runs triage and, when appropriate, deep evaluation. Supports ordered batches, duplicate-request sharing, optional caching, and explicit post-pair comparisons. |
 | Interaction decisions | Applies confirmed aligned/opposing rules; asks JEV to select the action and primary response purpose for neutral/mixed posts. Ambiguous or unavailable decisions remain pending. |
-| Multi-account personas | 4 specialized archetypes (sharp debater, medical expert, grassroots worker, policy analyst) with signal-based routing, per-account cooldown tracking, and fallback. |
+| Multi-account personas | 80 versioned YES profiles in 11 occupation groups; explicit SQLite binding/activation, capability checks, scene routing, cooldown and fixed optional reply batches. |
 | Reply drafting | Calls DeepSeek from a locally bound, checked reply task using internal P01–P09 templates; injects persona background and voice instructions. |
 | Pre-send gatekeeper | Single JEV call (<0.3s) evaluating candidate drafts across 4 dimensions: side alignment, purpose compliance, toxicity/injection, and send authorization, with Option B targeted retry. |
 | Macro sensing | Collects platform trending hashtags, headlines from dual newspapers (*Daily Kingstonia* & *Kingstonia Herald*), VIP NPC posts, and account availability. |
@@ -76,7 +80,7 @@ flowchart TB
 
 The JEV module owns content preparation, evaluation, parsing, internal routing, interaction decisions, and generation-material checks. The separate LLM module owns service calls, internal drafting prompts and structural output checks. The macro module owns macro sensing, persistent campaign memory, and strategic proactive publishing via the Pi Agent harness. All platform writes pass through the JEV pre-send gatekeeper and the rate-limited, budgeted Actuator.
 
-`JevWorkflow` is the recommended integration entry point. It uses the confirmed `ctn-post.v2` rubric for new evaluations. Lower-level `JevEvaluator`, `JevPacker`, and `load_rubric("post")` retain their v1 defaults for compatibility; use explicit versions when working below the workflow layer. `build_handoff()` alone preserves a `pending_rules` placeholder and does not apply the workflow's action policy.
+`JevWorkflow` is the recommended integration entry point. It uses the confirmed `ctn-post.v3` rubric for new evaluations. Lower-level `JevEvaluator`, `JevPacker`, and `load_rubric("post")` retain their v1 defaults for compatibility; use explicit versions when working below the workflow layer. `build_handoff()` alone preserves a `pending_rules` placeholder and does not apply the workflow's action policy.
 
 The default action policy is `jev-actions.v3`, which adds JEV decisions for neutral/mixed posts. Explicit `ActionPolicy(version="jev-actions.v1")` retains pending rules; `jev-actions.v2` retains the historical downstream LLM planning behavior. Their serialized policies and fingerprints remain unchanged. The existing post rubric and aligned/opposing thresholds are unchanged. The new response rubric is `ctn-response.v1`.
 
@@ -159,7 +163,7 @@ Use `JevInput.from_dict(payload)` for input validation without a network call. S
 
 ### Triage and deep evaluation
 
-The v2 post rubric asks four triage questions and seventeen deep-evaluation questions. Deep evaluation includes the triage questions plus expression, claims, response opportunities, fact-check signals, and independently gated 0–4 scores.
+The active v3 post rubric asks four triage questions and nineteen deep-evaluation questions. It preserves v2 scoring and adds preferred occupation and optional multi-reply space judgments. Deep evaluation includes the triage questions plus expression, claims, response opportunities, fact-check signals, and independently gated 0–4 scores.
 
 Transport or whole-assessment failures are returned before routing. For usable assessments, the default triage rules are:
 
@@ -416,10 +420,10 @@ The Python CLI handles deterministic tasks, rate limits, and JEV safety gatekeep
 python -m ctn.macro status --side yes
 
 # 2. Publish a strategic post (automatically audited by JEV 4-dimension preflight gate)
-python -m ctn.macro publish --account bot_worker_yes --text "Morning transit crowded on the ring road." --tag "#KingstoniaVotes"
+python -m ctn.macro publish --account ACTUAL_BOUND_HANDLE --text "Morning transit crowded on the ring road." --tag "#KingstoniaVotes"
 
 # 3. Publish a pre-vetted Kingstonia native warmup post (establishes authentic citizen presence)
-python -m ctn.macro warmup --account bot_worker_yes --index 0
+python -m ctn.macro warmup --account ACTUAL_BOUND_HANDLE --index 0
 ```
 
 ### 3. Pi Agent Integration Tutorial (`pi.dev`)
@@ -501,7 +505,7 @@ python3 -m unittest discover -s tests -q
 
 The October 14, 2026 run passed **436 offline tests**, covering:
 - JEV workflow, inputs, routing, action decisions, rubric parsing, and calibration.
-- Multi-account persona models, archetype scoring, cooldown tracking, and fallback.
+- Historical persona models, cooldown tracking, and fallback (current occupation routing has separate tests).
 - JEV 4-dimension preflight gatekeeping with Option B retries.
 - Macro environment state collection, strategic publisher, warmup seed retrieval, and CLI commands.
 - Dual-engine integration (shared actuator, budget ledger, rate limiter, and persona cooldown).

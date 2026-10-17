@@ -57,10 +57,10 @@ services:
     # Two weeks unattended: if it dies, it must come back on its own
     restart: unless-stopped
 
-    # Give the main loop time to flush state to disk after SIGTERM, before
-    # SIGKILL. Compared with a two-week run, 30 seconds of downtime is
+    # Give model/network worker threads time to finish after SIGTERM, before
+    # SIGKILL. Compared with a two-week run, a short shutdown window is
     # negligible; losing data is not.
-    stop_grace_period: 30s
+    stop_grace_period: 120s
 
     # Correct signal forwarding and zombie reaping (the classic problem when
     # Python runs as PID 1)
@@ -81,9 +81,7 @@ services:
         max-size: "20m"
         max-file: "5"
 
-    # Enable once the main loop exists; the current default CMD is documented
-    # in the Dockerfile.
-    # command: ["python", "-m", "ctn.main"]
+    command: ["python", "-m", "ctn.main"]
 
   # -------------------------------------------------------------------------
   # Self-check (not started by default; run on demand)

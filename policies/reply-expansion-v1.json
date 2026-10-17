@@ -1,0 +1,14 @@
+{
+  "version": "ctn-reply-expansion.v1",
+  "multi_reply_min_probability": 0.90,
+  "occupation_min_probability": 0.70,
+  "occupation_min_margin": 0.15,
+  "extra_count_min": 1,
+  "extra_count_max": 3,
+  "occupation_sampling": "uniform_among_compatible_groups_with_replacement",
+  "account_sampling": "least_recently_used_with_random_ties_without_replacement",
+  "opportunity_ttl_seconds": 1800,
+  "draft_ttl_seconds": 300,
+  "failed_candidates_refilled": false,
+  "automatic_routing_adjustment": false
+}

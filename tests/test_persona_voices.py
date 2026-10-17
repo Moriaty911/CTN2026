@@ -42,7 +42,7 @@ class PersonaVoicePromptTests(unittest.TestCase):
     def test_voice_injection_for_all_yes_personas(self):
         """Verify that all YES personas inject their specific name, bio, and tone into system prompt."""
         yes_personas = self.registry.list_by_side("yes")
-        self.assertEqual(len(yes_personas), 4)
+        self.assertEqual(len(yes_personas), 80)
 
         for p in yes_personas:
             messages = build_messages(self.material, self.options, max_chars=280, persona=p)
@@ -57,7 +57,7 @@ class PersonaVoicePromptTests(unittest.TestCase):
     def test_voice_injection_for_all_no_personas(self):
         """Verify that all NO personas inject their specific name, bio, and tone into system prompt."""
         no_personas = self.registry.list_by_side("no")
-        self.assertEqual(len(no_personas), 4)
+        self.assertEqual(len(no_personas), 0)
 
         for p in no_personas:
             messages = build_messages(self.material, self.options, max_chars=280, persona=p)
@@ -79,7 +79,7 @@ class PersonaVoicePromptTests(unittest.TestCase):
 
     def test_prompt_with_retry_feedback(self):
         """When retry feedback is supplied, it is appended to the system instructions."""
-        persona = self.registry.get("bot_medic_yes")
+        persona = self.registry.get("yes_073")
         messages = build_messages(
             self.material,
             self.options,
@@ -96,7 +96,8 @@ class PersonaVoicePromptTests(unittest.TestCase):
     def test_persona_integrity(self):
         """Verify all default personas have valid fields and positive cooldowns."""
         for p in DEFAULT_PERSONAS:
-            self.assertTrue(len(p.account_id) > 0)
+            self.assertEqual(p.account_id, "")
+            self.assertTrue(p.persona_id.startswith("yes_"))
             self.assertTrue(len(p.name) > 0)
             self.assertTrue(len(p.bio) > 10)
             self.assertTrue(len(p.tone_instruction) > 10)

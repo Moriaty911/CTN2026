@@ -19,8 +19,11 @@ from ctn.llm import DeepSeekClient, DraftOptions, ReplyGenerator
 from ctn.models import ActionKind, Post, Side
 from ctn.pipeline import BotLoop, JevLlmBrain
 from ctn.ratelimit import build_gate, build_ledger
+from tests.runtime_helpers import with_test_background
 from tests.test_jev_actions import POLICY, set_score
 from tests.test_jev_evaluator import FakeTransport, choose
+
+from tests.legacy_personas import legacy_router
 
 ACCOUNTS = ["bot_001", "bot_002", "bot_003", "bot_004"]
 FAST = RateConfig(read_rps=100, write_rps=100, per_account_read_rps=100, per_account_write_rps=100)
@@ -61,13 +64,13 @@ def llm_client(handler=None):
 def make_loop(client, brain, *, dry_run=False, **kwargs):
     actuator = Actuator(client, build_gate(FAST), build_ledger(BudgetConfig()),
                         dry_run=dry_run, max_retries=0, backoff_s=0.01)
-    return BotLoop(actuator, side=Side.YES, accounts=ACCOUNTS, brain=brain,
+    return BotLoop(actuator, side=Side.YES, accounts=[p.account_id for p in brain.router.registry.list_by_side("yes")], brain=brain,
                    rng=random.Random(0), **kwargs)
 
 
 def make_brain(workflow, llm):
-    return JevLlmBrain(workflow, ReplyGenerator(workflow, llm), side=Side.YES,
-                       options=DraftOptions(max_reply_chars=280))
+    return with_test_background(JevLlmBrain(workflow, ReplyGenerator(workflow, llm), side=Side.YES,router=legacy_router(),
+                       options=DraftOptions(max_reply_chars=280)))
 
 
 def mock_platform():
@@ -214,7 +217,7 @@ class EndToEndTests(unittest.TestCase):
     def test_dry_run_sends_nothing_even_with_brain(self):
         platform, _, reports, _, _ = self.run_cycles(dry_run=True)
         self.assertEqual(platform.write_count, 0)
-        self.assertTrue(any(r.ok for rep in reports for r in rep.results))
+        self.assertTrue(any(r.status=="simulated" for rep in reports for r in rep.results))
 
     def test_ruled_out_posts_are_not_rejudged(self):
         platform = mock_platform()

@@ -1,26 +1,19 @@
-# ============================================================================
-#  CTN 2026 — pip dependencies
-# ============================================================================
-#  This is the source of truth for pip-side dependencies; both the Docker image
-#  and plain venvs install from it. Conda users should use environment.yml,
-#  which references this file so the two cannot drift.
-#
-#  Version policy: **exact pins**.
-#  Rationale: we already lost a day to a version difference (the same code
-#  passing 319 tests on one interpreter and failing 359 on another).
-#  Dependency versions carry the same risk. Do not upgrade anything during the
-#  competition (2026-10-19 -> 11-02).
-#
-#  Upgrade procedure: change the version locally -> run ./scripts/setup_env.sh
-#  (or the compose `verify` service) -> 319 tests pass -> only then commit.
-# ============================================================================
-
-# Async HTTP client for the platform API and LLM calls
+# Verified official SDK 0.5.0; PyPI 0.4 lacks required endpoints.
+capturethenarrative @ https://github.com/capturethenarrative/pypi-capturethenarrative/archive/ffa3a7cceb2a10fa4628ea893b3fb1e41af1260d.tar.gz#sha256=eb0ac7171f3c7209af7cf3daf7227de33e21e1a597d0bc9a8c2c379a0fd2f8c9
 httpx==0.28.1
-
-# ── Not added yet; add only when actually needed ────────────────────────
-# Official Legit Social Python client: install from a local wheel once the
-# organisers release it:
-#   ./vendor/legit_api_client-*.whl
-# If image upload turns out to be UI-only:
-#   playwright==<pinned>
+openai==3.33.0
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+h11==0.16.0
+httpcore==1.0.9
+httpcore2==2.13.1
+httpx2==2.13.1
+idna==3.20
+jiter==0.17.0
+pydantic==2.14.1
+pydantic_core==2.50.1
+sniffio==1.3.1
+truststore==0.10.5
+typing-inspection==0.4.4
+typing_extensions==4.16.0

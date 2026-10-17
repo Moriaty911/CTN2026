@@ -1,0 +1,170 @@
+{
+  "python": "3.14.6",
+  "sqlite": "3.53.3",
+  "system": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "storage": "temporary local file; WAL/NORMAL; warm cache",
+  "benchmarks": [
+    {
+      "rows": 10000,
+      "authors": 1000,
+      "confirmed_author_fraction": 0.05,
+      "bulk_population_seconds": 0.16,
+      "warm_cache_latency": {
+        "post_primary_key": {
+          "p50_ms": 0.0054,
+          "p95_ms": 0.0064,
+          "max_ms": 0.01,
+          "repeats": 40
+        },
+        "author_last20": {
+          "p50_ms": 0.0459,
+          "p95_ms": 0.0518,
+          "max_ms": 0.1011,
+          "repeats": 40
+        },
+        "norm_hash_lookup": {
+          "p50_ms": 0.0173,
+          "p95_ms": 0.0211,
+          "max_ms": 0.0425,
+          "repeats": 40
+        },
+        "comment_queue15": {
+          "p50_ms": 0.9065,
+          "p95_ms": 1.1458,
+          "max_ms": 1.4239,
+          "repeats": 40
+        },
+        "confirmed_corpus150": {
+          "p50_ms": 0.975,
+          "p95_ms": 1.264,
+          "max_ms": 1.3186,
+          "repeats": 40
+        },
+        "unconfirmed_candidates200": {
+          "p50_ms": 0.7092,
+          "p95_ms": 0.7735,
+          "max_ms": 0.7872,
+          "repeats": 40
+        },
+        "all_author_timestamps_update": {
+          "p50_ms": 0.0262,
+          "p95_ms": 0.0361,
+          "max_ms": 0.0964,
+          "repeats": 40
+        },
+        "scan_one_confirmed_author": {
+          "p50_ms": 1.2301,
+          "p95_ms": 1.3346,
+          "max_ms": 2.2588,
+          "repeats": 10
+        }
+      },
+      "ingest30_with_detector_ms": 35.741,
+      "ingest30_sql_statements": 362,
+      "ingest30_commits": 1,
+      "query_plans": {
+        "comment_queue": [
+          "SEARCH observed_posts USING INDEX idx_observed_posts_parent (parent_id=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "confirmed_corpus": [
+          "MULTI-INDEX OR",
+          "INDEX 1",
+          "SEARCH b USING INDEX idx_bot_registry_status (status=?)",
+          "INDEX 2",
+          "SEARCH b USING INDEX idx_bot_registry_suspended (is_suspended=?)",
+          "SEARCH p USING INDEX idx_observed_posts_author_created (author=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "pragmas": {
+        "journal_mode": "wal",
+        "synchronous": 1,
+        "busy_timeout": 5000,
+        "page_size": 4096
+      },
+      "database_mb": 5.94
+    },
+    {
+      "rows": 100000,
+      "authors": 1000,
+      "confirmed_author_fraction": 0.05,
+      "bulk_population_seconds": 1.836,
+      "warm_cache_latency": {
+        "post_primary_key": {
+          "p50_ms": 0.0057,
+          "p95_ms": 0.006,
+          "max_ms": 0.0087,
+          "repeats": 40
+        },
+        "author_last20": {
+          "p50_ms": 0.0775,
+          "p95_ms": 0.0815,
+          "max_ms": 0.1309,
+          "repeats": 40
+        },
+        "norm_hash_lookup": {
+          "p50_ms": 0.0172,
+          "p95_ms": 0.019,
+          "max_ms": 0.0396,
+          "repeats": 40
+        },
+        "comment_queue15": {
+          "p50_ms": 8.5462,
+          "p95_ms": 9.4207,
+          "max_ms": 13.2265,
+          "repeats": 40
+        },
+        "confirmed_corpus150": {
+          "p50_ms": 1.9437,
+          "p95_ms": 1.9961,
+          "max_ms": 2.2416,
+          "repeats": 40
+        },
+        "unconfirmed_candidates200": {
+          "p50_ms": 0.6951,
+          "p95_ms": 0.718,
+          "max_ms": 0.7337,
+          "repeats": 40
+        },
+        "all_author_timestamps_update": {
+          "p50_ms": 0.0424,
+          "p95_ms": 0.0502,
+          "max_ms": 0.0893,
+          "repeats": 40
+        },
+        "scan_one_confirmed_author": {
+          "p50_ms": 1.6816,
+          "p95_ms": 1.8235,
+          "max_ms": 2.7799,
+          "repeats": 10
+        }
+      },
+      "ingest30_with_detector_ms": 68.311,
+      "ingest30_sql_statements": 362,
+      "ingest30_commits": 1,
+      "query_plans": {
+        "comment_queue": [
+          "SEARCH observed_posts USING INDEX idx_observed_posts_parent (parent_id=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "confirmed_corpus": [
+          "MULTI-INDEX OR",
+          "INDEX 1",
+          "SEARCH b USING INDEX idx_bot_registry_status (status=?)",
+          "INDEX 2",
+          "SEARCH b USING INDEX idx_bot_registry_suspended (is_suspended=?)",
+          "SEARCH p USING INDEX idx_observed_posts_author_created (author=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "pragmas": {
+        "journal_mode": "wal",
+        "synchronous": 1,
+        "busy_timeout": 5000,
+        "page_size": 4096
+      },
+      "database_mb": 58.1
+    }
+  ]
+}

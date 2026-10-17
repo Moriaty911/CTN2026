@@ -1,0 +1,88 @@
+{
+  "client_date": "2026-10-18",
+  "scope": "offline persona80 occupation routing and reply batches",
+  "environment": {
+    "python": "3.14.6",
+    "sqlite": "3.53.3",
+    "official_sdk": "0.5.0"
+  },
+  "catalog": {
+    "version": "yes.v1",
+    "sha256": "b4abd5ef9e6867250ba14fb61056d502631100bfc7a288a39913bbf44cd3ad6a",
+    "profiles": 80,
+    "english_examples": 320,
+    "default_bindings": 0
+  },
+  "tests": {
+    "previous": 534,
+    "new": 37,
+    "total": 571,
+    "local": "passed",
+    "docker_verify": "passed",
+    "compileall": "passed",
+    "diff_check": "passed"
+  },
+  "gates": {
+    "post_rubric": "ctn-post.v3",
+    "addition_rubric": "ctn-postflight.v2",
+    "prompt_version": "ctn-reply-prompts.v2",
+    "multi_reply_min_probability": 0.9,
+    "max_slots": 4,
+    "refill_rejected_candidates": false
+  },
+  "host_service": {
+    "mode": "mock",
+    "unbound_startup": "passed",
+    "clean_one_cycle_shutdown": "passed"
+  },
+  "container": {
+    "network": "none",
+    "mode": "mock",
+    "health_before_and_after_restart": "passed",
+    "automatic_health_status": "healthy",
+    "clean_stop_exit_code": 0,
+    "oom_killed": false,
+    "binding_after_restart": [
+      "yes_001",
+      "smoke_unused",
+      "standby",
+      "standard"
+    ],
+    "schema": 4,
+    "action_intents": 0,
+    "publications": 0,
+    "http_write_count": 0,
+    "backup_restore_integrity": "ok",
+    "temporary_container_and_anonymous_volumes_removed": true,
+    "verify_image": {
+      "tag": "ctn2026/verify:persona80-20261018",
+      "id": "sha256:de66e42911d79957d5877255a1a22dbf71c15c84d8148c933bc2467c70254c97"
+    },
+    "runtime_image": {
+      "tag": "ctn2026/fleet:persona80-20261018",
+      "id": "sha256:8980e7a0364a6734bc7cf4903cdd881629622ddcf4a8d2490af5bb8412cbc1ab"
+    }
+  },
+  "local_backup_restore": {
+    "integrity": "ok",
+    "schema": 4,
+    "binding_preserved": true,
+    "freeze_preserved": true,
+    "counter_preserved": true,
+    "phase_preserved": true,
+    "source_unchanged": true
+  },
+  "benchmark_file": "benchmark.json",
+  "not_measured": [
+    "Live JEV quality or threshold calibration",
+    "Live complementarity quality",
+    "Persona popularity",
+    "NPC-attributed engagement",
+    "Vote change or competition revenue"
+  ],
+  "live_platform_writes_performed": 0,
+  "platform_accounts_registered": 0,
+  "raw_rag_expanded": false,
+  "reporting_policy_changed": false,
+  "reporter_startup_change": "Empty roster can start and submits no reports."
+}

@@ -78,15 +78,14 @@ class CrawlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sources, ["feed", "search:h2d2", "feed", "search:h2d2", "feed", "trending"])
         self.assertEqual(crawler.trending, ["#H2D2"])
 
-    async def test_frontline_records_author_behaviour_and_duplicates(self):
-        crawler = FrontlineCrawler(self.actuator, self.store, feed_account="bot_001")
-        text = "Everyone should read this exact copy pasted message about the vote"
-        self.client.feed_rows = [post("a1", author="bot_x", text=text), post("a2", author="bot_y", text=text)]
-        await crawler.step(now=1.0)
-        prof = self.store.get_bot_profile("bot_y")
-        self.assertEqual(prof["post_seen_count"], 1)
-        self.assertIn("norm_hash_collision", prof["evidence"])
-        self.assertGreater(prof["suspicion_score"], 0)
+    async def test_frontline_records_observations_without_cheap_auto_conviction(self):
+        crawler=FrontlineCrawler(self.actuator,self.store,feed_account='bot_001')
+        text='Everyone should read this exact copied message about the vote'
+        self.client.feed_rows=[post('a1',author='x',text=text),post('a2',author='y',text=text)]
+        await crawler.step(now=1)
+        self.assertEqual(self.store.get_bot_profile('y')['post_seen_count'],1)
+        self.assertEqual(self.store.get_bot_profile('y')['suspicion_score'],0)
+        self.assertEqual(self.store.task_counts().get('queued'),2)
 
     async def test_comment_crawler_fetches_one_page_and_finishes_thread(self):
         self.store.upsert_observed_post(post("top", replies=3), now=1.0)
@@ -129,21 +128,14 @@ class CrawlerTests(unittest.IsolatedAsyncioTestCase):
         # after cooldown the big thread is picked up again
         r3 = await crawler.step(now=200.0)
         self.assertEqual(r3.post_id, "plain")
-        self.assertTrue(r3.done)                        # page now hits already-stored comments
+        self.assertFalse(r3.done)                       # duplicates do not end a full page
+        self.assertEqual(self.store.get_observed_post("plain")["comment_cursor"],"8")
 
-    async def test_comment_burst_flags_coordinated_authors(self):
-        self.store.upsert_observed_post(post("hot", replies=4), now=1.0)
-        self.client.comment_rows["hot"] = [
-            post("b1", author="boost_1", text="Totally agree with this take here", created_at=500.0),
-            post("b2", author="boost_2", text="So true wow great point honestly", created_at=503.0),
-            post("b3", author="boost_3", text="Couldn't have said it better myself", created_at=506.0),
-            post("n1", author="normal_1", text="I walked past the clinic this morning", created_at=5000.0),
-        ]
-        crawler = CommentCrawler(self.actuator, self.store)
-        await crawler.step(now=100.0)
-        for handle in ("boost_1", "boost_2", "boost_3"):
-            self.assertIn("coordinated_reply_burst", self.store.get_bot_profile(handle)["evidence"])
-        self.assertNotIn("coordinated_reply_burst", self.store.get_bot_profile("normal_1")["evidence"])
+    async def test_single_thread_burst_is_not_substantive_coordination(self):
+        self.store.upsert_observed_post(post('hot',replies=4),now=1)
+        self.client.comment_rows['hot']=[post('b'+str(i),author='u'+str(i),created_at=500+i) for i in range(4)]
+        await CommentCrawler(self.actuator,self.store).step(now=100)
+        for i in range(4): self.assertEqual(self.store.get_bot_profile('u'+str(i))['suspicion_score'],0)
 
     async def test_comment_crawler_yields_on_throttle_and_empty_page_retries(self):
         self.store.upsert_observed_post(post("top", replies=2), now=1.0)
@@ -220,44 +212,20 @@ class CrawlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cursors_seen, [None, "cursor_page_2"])
         self.assertEqual(len(self.store.get_post_replies("top")), 4)
 
-    async def test_on_demand_audit_suspected_account_via_account_posts(self):
+    async def test_on_demand_audit_retries_failures_and_records_success(self):
+        from ctn.pipeline.crawl import audit_suspected_account
         from ctn.moderation import BotDetector
-
-        detector = BotDetector(self.store)
-        account_posts_calls: list[str] = []
-
-        async def fake_get_account_posts(target, *, limit=50):
-            account_posts_calls.append(target)
-            # Historical posts by suspect_bot_7 reveal two more sub-15s rapid-fire posts -> confirmed_bot!
-            return [
-                post("hist_2", author=target, text="Second rapid post from suspect bot about clinics", created_at=92.0),
-                post("hist_1", author=target, text="First rapid post from suspect bot about voting", created_at=85.0),
-            ]
-
-        self.client.get_account_posts = fake_get_account_posts
-        # Seed suspect_bot_7 with 55 suspicion score ('suspected_bot') before frontline sees its new post
-        self.store.add_bot_evidence(
-            "suspect_bot_7",
-            suspicion_delta=55.0,
-            evidence_tags=["prior_suspicion"],
-            now=50.0,
-        )
-        self.client.feed_rows = [
-            post("live_3", author="suspect_bot_7", text="Third rapid post from suspect bot today", created_at=100.0)
-        ]
-
-        crawler = FrontlineCrawler(
-            self.actuator, self.store, feed_account="bot_001", detector=detector
-        )
-        rep = await crawler.step(now=100.0)
-
-        # Verify get_account_posts was automatically called once for suspect_bot_7,
-        # historical posts were ingested, and suspect_bot_7 was promoted to confirmed_bot!
-        self.assertEqual(account_posts_calls, ["suspect_bot_7"])
-        prof = self.store.get_bot_profile("suspect_bot_7")
-        self.assertIn("account_posts_audited", prof["evidence"])
-        self.assertEqual(prof["status"], "confirmed_bot")
-        self.assertTrue(any(d.is_confirmed_bot and d.author == "suspect_bot_7" for d in rep.detections))
+        self.store.add_weighted_evidence('suspect','leak',50,{'post_id':'seed'},evidence_key='leak')
+        calls=[]
+        async def history(target,**kwargs):
+            calls.append(target)
+            return [] if len(calls)==1 else [post('history',author=target)]
+        self.client.get_account_posts=history
+        for now in (1000,1001,1002):
+            await audit_suspected_account(self.actuator,self.store,'suspect',detector=BotDetector(self.store),now=now)
+        self.assertEqual(len(calls),2)
+        self.assertIsNotNone(self.store.get_observed_post('history'))
+        self.assertEqual(self.store.policy('audit:suspect'),1001)
 
 
 if __name__ == "__main__":

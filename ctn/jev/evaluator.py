@@ -314,7 +314,10 @@ class JevEvaluator:
                     needs.append(EvaluationNeed("review" if status == "needs_review" else "assessment", decision.reason, decision.answer_ids))
             else:
                 output = deep.parsed.output
-                unavailable = tuple(key for key, answer in output.answers.items() if answer.status == "insufficient_context")
+                # Auxiliary v3 hints never disable the established single-reply path.
+                optional = {"preferred_occupation", "multi_reply_space"}
+                unavailable = tuple(key for key, answer in output.answers.items()
+                                    if answer.status == "insufficient_context" and key not in optional)
                 unclear = deep_decision.reason == "relevance_unclear"
                 weak_unrelated = deep_decision.reason == "weak_unrelated_signal"
                 if unclear or unavailable:

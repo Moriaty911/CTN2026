@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import re
 import time
 from typing import Any
@@ -39,7 +41,13 @@ class StrategicPublisher:
         self.postflight = postflight
         self.side = side.lower()
         self.router = router if router is not None else PersonaRouter(default_side=self.side)
+        if actuator.store is None:
+            actuator.store = self.router.store
+        elif actuator.store is not self.router.store and actuator.store.db_path != self.router.store.db_path:
+            raise ValueError("publisher and actuator must share SQLite")
+        if self.side in ("yes","no"): self.router.store.bind_campaign_side(self.side)
         self.max_post_chars = max_post_chars
+        self.actuator.catalog_hash=self.router.registry.catalog_hash
         self.max_hashtag_chars = max_hashtag_chars
         self._recent_normalized_posts: set[str] = set()
 
@@ -70,6 +78,11 @@ class StrategicPublisher:
     ) -> dict[str, Any]:
         """Publish a proactive post after cooldown and unified Layer-1 + Layer-2 verification."""
         now = time.time()
+        mock = self.actuator._client.__class__.__name__ == 'MockLegitClient'
+        if bypass_jev and not (mock or self.actuator.dry_run):
+            return {"ok":False,"status":"blocked","reason":"live_jev_bypass_forbidden"}
+        if self.side not in ('yes','no'):
+            return {"ok":False,"status":"blocked","reason":"side_unassigned"}
         persona = self.router.registry.get(account_id)
         if persona is None:
             return {
@@ -78,9 +91,20 @@ class StrategicPublisher:
                 "reason": f"unknown_account:{account_id}",
                 "account_id": account_id,
             }
+        if not persona.account_id:
+            return {'ok':False,'status':'blocked','reason':'persona_unbound'}
+        account_id=persona.account_id
+        ready,reason=self.router.store.persona_action_ready(account_id,self.router.context_for(persona))
+        if not ready:return {'ok':False,'status':'blocked','reason':reason}
 
         # 1. Suspension / Ban & Cooldown verification
         state = self.router.get_state(account_id)
+        if persona.assigned_side != self.side:
+            return {"ok":False,"status":"blocked","reason":"side_mismatch"}
+        if state.mode != 'active':
+            return {"ok":False,"status":"blocked","reason":"account_"+state.mode}
+        if state.original_locked_until > now:
+            return {"ok":False,"status":"blocked","reason":"original_locked"}
         if state.is_banned:
             return {
                 "ok": False,
@@ -139,7 +163,7 @@ class StrategicPublisher:
                 assigned_side=self.side,
                 intended_purpose=resolved_purpose,
                 persona_profile=persona_profile,
-                strict_alignment=True,
+                strict_alignment=(purpose != 'warmup'),
             )
             postflight_dict = verdict.to_dict()
             if not verdict.can_send:
@@ -155,22 +179,20 @@ class StrategicPublisher:
             postflight_dict = {"can_send": True, "bypassed": True}
 
         # 4. Execution via Actuator
-        res = await self.actuator.post(account_id, post_text)
+        material_context={'target_text':effective_target,'hashtags':hashtags or [],
+            'source':'supplied_macro_input','background_version':self.router.store.policy('background_version')}
+        material_version='macro-input.v1:'+hashlib.sha256(json.dumps(material_context,
+            sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+        res = await self.actuator.post(account_id, post_text,context={"engine":"macro",
+            **self.router.context_for(persona),'prompt_version':'pi-campaign.v2',
+            'material_version':material_version,'material_context':material_context,
+            'topic':branch or purpose,
+            "purpose":active_key,"assigned_side":self.side,"cooldown_s":persona.cooldown_s,"draft_expires_at":now+300})
         if res.ok:
-            self.router.mark_used(account_id, now=now)
             normalized = re.sub(r"\s+", " ", post_text.lower())
             self._recent_normalized_posts.add(normalized)
             post_id = res.response.get("post_id") if isinstance(res.response, dict) else ""
             final_id = post_id or res.decision_id
-            self.router.store.log_interaction(
-                engine="macro",
-                account_id=account_id,
-                action="post",
-                target_post_id=final_id,
-                target_stance="aligned",
-                purpose=active_key,
-                text=post_text,
-            )
             return {
                 "ok": True,
                 "status": "published",
@@ -183,7 +205,8 @@ class StrategicPublisher:
 
         return {
             "ok": False,
-            "status": "failed",
+            "status": res.status,
+            "action_id": res.action_id,
             "reason": f"actuator_failed:{res.detail}",
             "account_id": account_id,
         }

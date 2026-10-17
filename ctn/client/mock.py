@@ -359,7 +359,7 @@ class MockLegitClient:
             npc.follows.discard(account)
         return {"ok": True, "target": target}
 
-    async def report(self, account: str, post_id: str, *, reason: str = "") -> dict[str, Any]:
+    async def report(self, account: str, post_id: str, *, reason: str = "", detail: str = "") -> dict[str, Any]:
         self._check_account(account)
         await self._simulate(write=True)
         post = self.posts.get(post_id)
@@ -368,7 +368,7 @@ class MockLegitClient:
         # Reporting a genuine NPC citizen is rejected (6-hour penalty in 2026 rules);
         # reporting a player-bot post is upheld.
         is_npc = post.author in self.npcs
-        outcome = "rejected" if is_npc else "upheld"
+        outcome = "pending"
         return {
             "ok": True,
             "post_id": post_id,
@@ -376,6 +376,11 @@ class MockLegitClient:
             "reason": reason,
             "outcome": outcome,
         }
+
+    async def report_account(self,account,target,*,reason='inauthentic',detail=''):
+        self._check_account(account)
+        await self._simulate(write=True)
+        return {'ok':True,'account_id':target,'report_id':uuid.uuid4().hex,'outcome':'pending'}
 
     # ---- simulation helpers (not part of the Protocol) -------------------- #
     async def close(self) -> None:

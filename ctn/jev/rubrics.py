@@ -11,12 +11,16 @@ from typing import Literal
 
 from .questions import QuestionSet, QuestionValidationError
 
+ACTIVE_POST_VERSION = "v3"
+ACTIVE_POSTFLIGHT_VERSION = "v2"
+
 
 def load_rubric(name: Literal["post", "comparison", "response", "postflight"], *, version: str = "v1") -> QuestionSet:
     """Load a named baseline explicitly; never enables service calls or actions."""
     if type(name) is not str or name not in {"post", "comparison", "response", "postflight"}:
         raise QuestionValidationError("name", "enum", "unsupported rubric")
-    if type(version) is not str or version not in ({"v1", "v2"} if name == "post" else {"v1"}):
+    versions = {"post": {"v1", "v2", "v3"}, "postflight": {"v1", "v2"}}
+    if type(version) is not str or version not in versions.get(name, {"v1"}):
         raise QuestionValidationError("version", "enum", "unsupported rubric version")
     return QuestionSet.load(Path(__file__).with_name("rubrics") / f"{name}.{version}.json")
 

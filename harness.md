@@ -14,12 +14,14 @@
 ---
 
 ## 2. Account States & Cadence Locks
-| Account ID | Persona Archetype | Current Status | Last Posted At | Next Allowed Post / Cadence Lock | Tactical Role |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `bot_worker_yes` | Marcus Cole (`grassroots_worker`) | ACTIVE | - | UNLOCKED: Ready for initial local grounding post | Build commuter trust and everyday resonance |
-| `bot_debater_yes` | Elena Vance (`sharp_debater`) | STANDBY | - | LOCKED: On tactical standby for sudden opposing attacks | Maintain agility and monitor contested trending tags |
-| `bot_medic_yes` | Dr. Julian Reed (`medical_expert`) | DORMANT | - | LOCKED: Strategic dormancy until Phase 2 shaping | Protect high-value expert credibility from early exposure |
-| `bot_policy_yes` | Sophia Lin (`policy_analyst`) | DORMANT | - | LOCKED: Strategic dormancy until Phase 2 shaping | Reserve for decisive policy framing and logical rebuttal |
+
+SQLite is the executable source of account availability, original locks, daily limits and publication results. This table is a narrative snapshot. Read `python -m ctn.macro --side "$CTN_SIDE" status` before every pulse. A simulation or unknown outcome must never be recorded as a successful post. Phase changes do not activate dormant accounts automatically; apply an allowed activation through `ctn.ops persona activate --id <persona_id>`.
+
+The canonical roster is `config/personas/yes.v1.json`: 80 YES profiles across 11 occupation groups. New profiles start unbound; after explicit binding they remain on standby. The old four default identities have been removed from scheduling. Their account history and operational restrictions remain in SQLite.
+
+Use `python -m ctn.ops persona list` for current bindings and availability. Use `persona show --id <persona_id>` for the full background, fixed experiences, voice and examples. Authorized batch activation uses `persona activate --group <occupation_group>` or repeated `--id`; unbound profiles are never scheduled. Medical/public-health and law/policy groups stay on standby during warmup. Entering a new phase does not activate accounts.
+
+Inspect `python -m ctn.ops performance --group-by occupation_group --format markdown` before adjusting the roster. Keep sample coverage, content ages and observed scope in the decision note; no automatic reweighting is enabled.
 
 ---
 

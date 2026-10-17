@@ -31,13 +31,12 @@ channels:
 
 dependencies:
   # ── Interpreter: the most important line in this file ───────────────
-  - python=3.14
+  - python=3.14.6
 
   - pip>=25.1
 
   # ── Third-party dependencies ───────────────────────────────────────
-  # ctn/jev/ is currently pure standard library; the offline test suite needs
-  # no third-party packages at all.
+  # Official SDK, JEV/LLM transports and their transitive pins are in requirements.txt.
   #
   # pip dependencies are NOT listed again here — this references
   # requirements.txt, the single source of truth on the pip side (the Docker

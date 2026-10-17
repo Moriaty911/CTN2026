@@ -67,7 +67,7 @@ def test_dry_run_sends_nothing():
     client = make_client()
     actuator = make_actuator(client, dry_run=True)
     result = run(actuator.like("bot_001", next(iter(client.posts))))
-    assert result.ok and "dry run" in result.detail
+    assert result.status == "simulated" and not result.ok and "dry run" in result.detail
     assert client.write_count == 0
 
 
@@ -159,6 +159,13 @@ def test_cycle_without_side_observes():
     report = run(loop.run_cycle())
     assert report.status == "observed" and not report.results
     assert client.write_count == 0
+
+
+def load_tests(loader, tests, pattern):
+    import unittest
+    for name,fn in list(globals().items()):
+        if name.startswith('test_') and callable(fn): tests.addTest(unittest.FunctionTestCase(fn))
+    return tests
 
 
 if __name__ == "__main__":

@@ -255,12 +255,15 @@ class OfficialLegitClientAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rep_res["outcome"], "upheld")
 
     async def test_error_translation_with_actuator(self) -> None:
+        from ctn.storage import StateStore
+        store=StateStore()
+        self.addCleanup(store.close)
         actuator = Actuator(
             self.client,
             build_gate(FAST),
             build_ledger(BudgetConfig()),
             dry_run=False,
-            max_retries=0,
+            max_retries=0,store=store,
         )
 
         # 1. 429 RateLimited -> Throttled
@@ -277,6 +280,7 @@ class OfficialLegitClientAdapterTests(unittest.IsolatedAsyncioTestCase):
         res = await actuator.post("bot_001", "Trying to post while suspended")
         self.assertFalse(res.ok)
         self.assertIn("bot_001", actuator.suspended)
+        self.assertTrue(store.get_account_state("bot_001").is_banned)
 
     async def test_sqlite_session_persistence_verified_sync_and_author_id_lookup(self) -> None:
         from ctn.storage import StateStore

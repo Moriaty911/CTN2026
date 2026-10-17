@@ -25,6 +25,7 @@ from ctn.models import ActionKind, Post, Side
 from ctn.persona import PersonaRouter
 from ctn.pipeline.brain import JevLlmBrain
 from ctn.ratelimit import build_gate, build_ledger
+from tests.runtime_helpers import with_test_background
 from tests.test_jev_actions import POLICY, set_score
 from tests.test_jev_evaluator import FakeTransport, choose
 
@@ -65,6 +66,9 @@ def create_mock_llm_client():
     return DeepSeekClient(LLMConfig(api_key="mock-dual-llm-key", max_retries=0), transport=httpx.MockTransport(send))
 
 
+from tests.legacy_personas import legacy_router as PersonaRouter
+
+
 class DualEngineIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.mock_platform = MockLegitClient(failure_rate=0.0)
@@ -101,6 +105,8 @@ class DualEngineIntegrationTests(unittest.TestCase):
             postflight=self.postflight,
         )
 
+        with_test_background(self.brain)
+
         # Initialize Macro Strategic Publisher
         self.macro_publisher = StrategicPublisher(
             actuator=self.actuator,
@@ -133,7 +139,7 @@ class DualEngineIntegrationTests(unittest.TestCase):
         # Because bot_worker_yes is in cooldown, the router should have fallen back to another available account
         selected_acc = verdict.detail.get("selected_account")
         self.assertNotEqual(selected_acc, "bot_worker_yes")
-        self.assertTrue(verdict.detail["routing"]["fallback_used"])
+        self.assertEqual(verdict.detail["routing"]["reason"],"general_clarification_fallback")
 
     def test_shared_account_cooldown_from_micro_to_macro(self):
         """When micro publishes a reply, macro cannot immediately publish from that account."""
@@ -143,6 +149,8 @@ class DualEngineIntegrationTests(unittest.TestCase):
         self.assertEqual(verdict.action, ActionKind.REPLY)
         used_acc = verdict.detail.get("selected_account")
         self.assertTrue(used_acc.startswith("bot_"))
+
+        asyncio.run(self.actuator.reply(used_acc,post.post_id,verdict.text))
 
         # Step 2: Macro tries to publish from the exact same account immediately
         macro_res = self.macro_publisher.publish_sync(
@@ -157,7 +165,7 @@ class DualEngineIntegrationTests(unittest.TestCase):
     def test_shared_budget_ledger_exhaustion(self):
         """When write budget ledger is exhausted, both micro and macro write operations fail gracefully."""
         # Set writes to write_cap so can_write() returns False
-        self.actuator.ledger.writes = self.actuator.ledger.write_cap
+        self.actuator.ledger._writes = self.actuator.ledger.write_cap
 
         # Attempt to publish fails due to exhausted budget
         res = self.macro_publisher.publish_sync("bot_worker_yes", "Post text", bypass_jev=True)

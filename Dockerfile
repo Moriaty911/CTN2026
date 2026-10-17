@@ -30,7 +30,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — dependencies (separate layer; code changes do not reinstall)
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim AS deps
+FROM python:3.14.6-slim AS deps
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
@@ -56,7 +56,7 @@ RUN /opt/venv/bin/python scripts/check_env.py --tests
 # ---------------------------------------------------------------------------
 # Stage 3 — runtime
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim AS runtime
+FROM python:3.14.6-slim AS runtime
 
 # Align clocks with containers and the host; organisers publish times in AEST.
 ENV TZ=Australia/Sydney \
@@ -87,14 +87,8 @@ VOLUME ["/state", "/logs"]
 
 USER ctn
 
-# Health check: prefer the main loop's heartbeat file, fall back to the
-# environment pre-check while the heartbeat does not exist yet.
+# Health check requires a fresh service heartbeat without a recorded error.
 HEALTHCHECK --interval=60s --timeout=15s --start-period=20s --retries=3 \
   CMD ["bash", "scripts/healthcheck.sh"]
 
-# NOTE: the main loop (ctn/main.py) is not implemented yet — the Jev-API branch
-# currently carries only the decision layer. The default command therefore runs
-# the environment pre-check, which keeps the image startable and overridable
-# from compose. Once the main loop exists, change it to:
-#     CMD ["python", "-m", "ctn.main"]
-CMD ["python", "scripts/check_env.py", "--tests"]
+CMD ["python", "-m", "ctn.main"]

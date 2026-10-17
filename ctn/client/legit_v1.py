@@ -30,11 +30,6 @@ from typing import Any, Callable, Iterable, Mapping
 
 from .base import AccountSuspended, AuthError, LegitClient, PlatformError, Throttled
 
-# Ensure local clone `./pypi-capturethenarrative/src` is importable even if not pip-installed.
-_LOCAL_SDK_SRC = Path(__file__).resolve().parents[2] / "pypi-capturethenarrative" / "src"
-if _LOCAL_SDK_SRC.is_dir() and str(_LOCAL_SDK_SRC) not in sys.path:
-    sys.path.insert(0, str(_LOCAL_SDK_SRC))
-
 from capturethenarrative import (  # noqa: E402
     APIError,
     Account,
@@ -153,6 +148,7 @@ class OfficialLegitClient(LegitClient):
         self._on_token_refreshed = on_token_refreshed
         self.last_rate_limit: RateLimit | None = None
 
+        self.http_metered = False
         # Inner LegitSocial uses max_retries=0 so 429s immediately become Throttled
         # exceptions handled asynchronously by Actuator + ActionGate.
         self.social: LegitSocial = social or LegitSocial(
@@ -163,6 +159,14 @@ class OfficialLegitClient(LegitClient):
         )
         if social is not None and social.on_rate_limit is None:
             social.on_rate_limit = self._handle_rate_limit
+
+        self._pacer = None
+        if store is not None and social is None:
+            from .pacing import HttpPacer
+            from ..config import RateConfig, BudgetConfig
+            self._pacer = HttpPacer(store, RateConfig(), BudgetConfig())
+            self._pacer.attach(self.social)
+            self.http_metered = True
 
         self._passwords: dict[str, str] = {}
         self._tokens: dict[str, str] = {}
@@ -208,7 +212,14 @@ class OfficialLegitClient(LegitClient):
                     self.store.upsert_managed_account(uname, token=tok)
 
         for username, acct in self._accounts.items():
+            if self._pacer is not None:
+                acct.max_retries=0
+                self._pacer.attach(acct)
             self._cache_account_dict(acct.profile, fallback_username=username)
+
+    def configure_pacing(self, rate, budget):
+        if self.http_metered:
+            self._pacer.rate, self._pacer.budget = rate, budget
 
     def _handle_rate_limit(self, limit: RateLimit) -> None:
         self.last_rate_limit = limit
@@ -300,17 +311,17 @@ class OfficialLegitClient(LegitClient):
                         pass
             return 0
 
+        def _present(name):
+            alias='reply_count' if name=='replies' else name[:-1]+'_count'
+            for key in (name,alias):
+                value=raw.get(key) if raw.get(key) is not None else counters.get(key)
+                if type(value) is int and value>=0:return True
+                if type(value) is str and value.isascii() and value.isdecimal():return True
+            return False
+
         reply_to = raw.get("reply_to_post_id")
         root_post = raw.get("root_post_id")
-        parent_id = str(
-            root_post
-            if root_post is not None
-            else (
-                reply_to
-                if reply_to is not None
-                else (raw.get("parent_id") or default_parent_id or "")
-            )
-        ).strip()
+        parent_id = str(reply_to if reply_to is not None else (raw.get('parent_id') or default_parent_id or root_post or '')).strip()
 
         hashtags = extract_hashtags(body, raw.get("tags") or raw.get("hashtags"))
         if isinstance(raw.get("tags"), list):
@@ -343,6 +354,7 @@ class OfficialLegitClient(LegitClient):
             "hashtags": hashtags,
             "kind": str(raw.get("kind") or ("reply" if parent_id else "post")),
             "platform_level": platform_level,
+            "_metric_presence": [name for name in ('likes','reposts','replies','views') if _present(name)],
         }
         if parent_id:
             out["parent_id"] = parent_id
@@ -416,6 +428,9 @@ class OfficialLegitClient(LegitClient):
     def bind_account(self, username: str, account_obj: Account, *, password: str = "") -> Account:
         """Register an already-instantiated `capturethenarrative.Account` and persist session if `store` is attached."""
         username = username.strip()
+        if self._pacer is not None:
+            account_obj.max_retries=0
+            self._pacer.attach(account_obj)
         self._accounts[username] = account_obj
         if account_obj.token:
             self._tokens[username] = account_obj.token
@@ -591,7 +606,7 @@ class OfficialLegitClient(LegitClient):
 
     # ---- LegitClient Protocol: lifecycle --------------------------------- #
     async def close(self) -> None:
-        return None
+        if self._pacer is not None: self._pacer.close()
 
     # ---- LegitClient Protocol: reads ------------------------------------- #
     async def trending(self, *, limit: int = 50) -> list[dict[str, Any]]:
@@ -835,7 +850,7 @@ class OfficialLegitClient(LegitClient):
             lambda acct: acct.reply(pid, text, root_post_id=root_id, visibility=visibility),
         )
         return (
-            self.normalize_post(raw, default_parent_id=str(root_id or pid))
+            self.normalize_post(raw, default_parent_id=str(pid))
             if isinstance(raw, Mapping)
             else {"ok": True, "post_id": ""}
         )
@@ -899,14 +914,14 @@ class OfficialLegitClient(LegitClient):
         account: str,
         target: int | str,
         *,
-        reason: str = "inauthentic bot",
+        reason: str = "inauthentic",
         detail: str | None = None,
     ) -> dict[str, Any]:
         """Report an account directly (`/accounts/{id}/report`, independent 3/min bucket)."""
         aid = await self._resolve_account_id(target)
         raw = await self._call_as(
             account,
-            lambda acct: acct.report_account(aid, reason or "inauthentic bot", detail=detail),
+            lambda acct: acct.report_account(aid, reason or "inauthentic", detail=detail),
         )
         out: dict[str, Any] = {
             "ok": True,
