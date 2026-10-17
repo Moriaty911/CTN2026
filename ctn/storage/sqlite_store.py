@@ -1,23 +1,31 @@
 """Lightweight SQLite state store supporting multi-process WAL concurrency.
 
-Maintains three core tables:
-1. account_states: Per-account cooldown timestamps and post/reply counters.
+Maintains six core tables:
+1. account_states: Per-account cooldown timestamps, post/reply counters, and freeze/ban status.
 2. interaction_log: Complete audit and deduplication log across macro and micro engines.
 3. counters: Atomic integer counters for modulo sampling (e.g. allied reply throttling).
+4. observed_posts: Full-platform post history mirror with indexed norm_hash and raw_json document storage.
+5. bot_registry: Platform account intelligence database (verified_npc, own_bot, unknown, suspected_bot, confirmed_bot).
+6. report_log: Blue-team reporting ledger, daily per-team diminishing-return tracker, and 6-hour suspension circuit breaker.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
+import hashlib
+import json
 from pathlib import Path
 import re
 import sqlite3
 import threading
 import time
-from typing import Any
+from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 from ctn.persona.models import AccountState
 
 DEFAULT_DB_PATH = ".ctn_state.db"
+SYDNEY_TZ = ZoneInfo("Australia/Sydney")
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS account_states (
@@ -57,6 +65,89 @@ CREATE TABLE IF NOT EXISTS counters (
     name TEXT PRIMARY KEY,
     value INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS observed_posts (
+    post_id TEXT PRIMARY KEY,
+    author TEXT NOT NULL,
+    author_id INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL DEFAULT 0.0,
+    first_seen_at REAL NOT NULL,
+    last_seen_at REAL NOT NULL,
+    norm_hash TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL DEFAULT '',
+    likes INTEGER NOT NULL DEFAULT 0,
+    replies INTEGER NOT NULL DEFAULT 0,
+    reposts INTEGER NOT NULL DEFAULT 0,
+    is_reported INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    parent_id TEXT NOT NULL DEFAULT '',
+    replies_crawled INTEGER NOT NULL DEFAULT 0,
+    comment_cursor TEXT NOT NULL DEFAULT '',
+    comments_crawled_at REAL NOT NULL DEFAULT 0.0
+);
+
+CREATE INDEX IF NOT EXISTS idx_observed_posts_author
+    ON observed_posts(author, first_seen_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_observed_posts_norm_hash
+    ON observed_posts(norm_hash, post_id);
+
+CREATE INDEX IF NOT EXISTS idx_observed_posts_unreported
+    ON observed_posts(author, is_reported, first_seen_at DESC);
+
+CREATE TABLE IF NOT EXISTS bot_registry (
+    account_id TEXT PRIMARY KEY,
+    platform_account_id INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    suspicion_score REAL NOT NULL DEFAULT 0.0,
+    inferred_side TEXT NOT NULL DEFAULT 'unknown',
+    inferred_team TEXT NOT NULL DEFAULT '',
+    post_seen_count INTEGER NOT NULL DEFAULT 0,
+    question_post_count INTEGER NOT NULL DEFAULT 0,
+    fast_interval_count INTEGER NOT NULL DEFAULT 0,
+    reports_submitted INTEGER NOT NULL DEFAULT 0,
+    upheld_strikes INTEGER NOT NULL DEFAULT 0,
+    is_suspended INTEGER NOT NULL DEFAULT 0,
+    first_seen_at REAL NOT NULL DEFAULT 0.0,
+    last_seen_at REAL NOT NULL DEFAULT 0.0,
+    evidence_json TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS idx_bot_registry_status
+    ON bot_registry(status, suspicion_score DESC);
+
+CREATE INDEX IF NOT EXISTS idx_bot_registry_platform_id
+    ON bot_registry(platform_account_id);
+
+CREATE TABLE IF NOT EXISTS managed_accounts (
+    username TEXT PRIMARY KEY,
+    platform_account_id INTEGER NOT NULL DEFAULT 0,
+    password TEXT NOT NULL DEFAULT '',
+    display_name TEXT NOT NULL DEFAULT '',
+    token TEXT NOT NULL DEFAULT '',
+    expires_at TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    updated_at REAL NOT NULL DEFAULT 0.0
+);
+
+CREATE TABLE IF NOT EXISTS report_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id TEXT NOT NULL UNIQUE,
+    target_author TEXT NOT NULL,
+    target_team TEXT NOT NULL DEFAULT '',
+    target_side TEXT NOT NULL DEFAULT 'unknown',
+    reporter_account TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    sydney_day TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    outcome TEXT NOT NULL DEFAULT 'pending'
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_log_day_team
+    ON report_log(sydney_day, target_team, outcome);
+
+CREATE INDEX IF NOT EXISTS idx_report_log_day_author
+    ON report_log(sydney_day, target_author, outcome);
 """
 
 
@@ -68,8 +159,29 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", cleaned)
 
 
+def compute_post_norm_hash(text: str, *, min_core_chars: int = 15) -> str:
+    """Compute a 24-char SHA-256 fingerprint of core post text (stripping tags, mentions, URLs, and punctuation).
+
+    Returns '' if the stripped core text is shorter than `min_core_chars` to avoid false collisions on short phrases.
+    """
+    if not text:
+        return ""
+    stripped = re.sub(r"https?://\S+|#\S+|@\S+", " ", text.lower())
+    core = re.sub(r"[^a-z0-9\s]", " ", stripped)
+    core = re.sub(r"\s+", " ", core).strip()
+    if len(core) < min_core_chars:
+        return ""
+    return hashlib.sha256(core.encode("utf-8")).hexdigest()[:24]
+
+
+def current_sydney_day(ts: float | None = None) -> str:
+    """Return the YYYY-MM-DD calendar date in Australia/Sydney time (resets at Sydney midnight)."""
+    epoch = time.time() if ts is None else ts
+    return datetime.fromtimestamp(epoch, tz=SYDNEY_TZ).strftime("%Y-%m-%d")
+
+
 class StateStore:
-    """SQLite-backed store for account cooldowns, suspension status, interaction history, and rate gates."""
+    """SQLite-backed store for account cooldowns, post history mirror, bot intelligence, and reporting gates."""
 
     def __init__(self, db_path: str | Path = ":memory:") -> None:
         self.db_path = str(db_path)
@@ -81,6 +193,8 @@ class StateStore:
             if self.db_path != ":memory:":
                 self._conn.execute("PRAGMA journal_mode=WAL;")
                 self._conn.execute("PRAGMA synchronous=NORMAL;")
+                self._conn.execute("PRAGMA busy_timeout=5000;")
+                self._conn.execute("PRAGMA cache_size=-32000;")
             self._conn.executescript(_SCHEMA_SQL)
             self._ensure_columns()
             self._conn.commit()
@@ -98,6 +212,50 @@ class StateStore:
         if "is_banned" not in existing_cols:
             self._conn.execute(
                 "ALTER TABLE account_states ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0;"
+            )
+
+        observed_cols = {
+            str(row["name"])
+            for row in self._conn.execute("PRAGMA table_info(observed_posts);").fetchall()
+        }
+        for col, ddl in (
+            ("author_id", "INTEGER NOT NULL DEFAULT 0"),
+            ("parent_id", "TEXT NOT NULL DEFAULT ''"),
+            ("replies_crawled", "INTEGER NOT NULL DEFAULT 0"),
+            ("comment_cursor", "TEXT NOT NULL DEFAULT ''"),
+            ("comments_crawled_at", "REAL NOT NULL DEFAULT 0.0"),
+        ):
+            if col not in observed_cols:
+                self._conn.execute(f"ALTER TABLE observed_posts ADD COLUMN {col} {ddl};")
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_observed_posts_parent "
+            "ON observed_posts(parent_id, created_at)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_observed_posts_crawl_queue "
+            "ON observed_posts(parent_id, replies, replies_crawled)"
+        )
+
+        bot_cols = {
+            str(row["name"])
+            for row in self._conn.execute("PRAGMA table_info(bot_registry);").fetchall()
+        }
+        if "platform_account_id" not in bot_cols:
+            self._conn.execute(
+                "ALTER TABLE bot_registry ADD COLUMN platform_account_id INTEGER NOT NULL DEFAULT 0;"
+            )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bot_registry_platform_id "
+            "ON bot_registry(platform_account_id)"
+        )
+
+        managed_cols = {
+            str(row["name"])
+            for row in self._conn.execute("PRAGMA table_info(managed_accounts);").fetchall()
+        }
+        if "status" not in managed_cols:
+            self._conn.execute(
+                "ALTER TABLE managed_accounts ADD COLUMN status TEXT NOT NULL DEFAULT 'active';"
             )
 
     def close(self) -> None:
@@ -236,12 +394,224 @@ class StateStore:
             }
 
     def reset_accounts(self) -> None:
-        """Clear all account states, interaction logs, and counters."""
+        """Clear all account states, interaction logs, counters, observed posts, bot registry, managed accounts, and report logs."""
         with self._lock:
             self._conn.execute("DELETE FROM account_states;")
             self._conn.execute("DELETE FROM interaction_log;")
             self._conn.execute("DELETE FROM counters;")
+            self._conn.execute("DELETE FROM observed_posts;")
+            self._conn.execute("DELETE FROM bot_registry;")
+            self._conn.execute("DELETE FROM managed_accounts;")
+            self._conn.execute("DELETE FROM report_log;")
             self._conn.commit()
+
+    # ---- Managed Account Sessions (Token & ID Pool) ---------------------- #
+    def upsert_managed_account(
+        self,
+        username: str,
+        *,
+        platform_account_id: int | None = None,
+        password: str | None = None,
+        display_name: str | None = None,
+        token: str | None = None,
+        expires_at: str | None = None,
+        status: str | None = None,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        """Persist credentials and session token for one of our team's bot accounts.
+
+        Also ensures `username` is registered in `bot_registry` with `status='own_bot'`
+        and its integer `platform_account_id`.
+        """
+        uname = str(username).strip()
+        if not uname:
+            raise ValueError("upsert_managed_account requires a non-empty username")
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM managed_accounts WHERE username = ?", (uname,)
+            ).fetchone()
+            new_aid = (
+                int(platform_account_id)
+                if platform_account_id is not None and int(platform_account_id) > 0
+                else (int(cur["platform_account_id"]) if cur is not None else 0)
+            )
+            new_pw = (
+                str(password)
+                if password is not None
+                else (str(cur["password"]) if cur is not None else "")
+            )
+            new_dn = (
+                str(display_name)
+                if display_name is not None
+                else (str(cur["display_name"]) if cur is not None else "")
+            )
+            new_tok = (
+                str(token)
+                if token is not None
+                else (str(cur["token"]) if cur is not None else "")
+            )
+            new_exp = (
+                str(expires_at)
+                if expires_at is not None
+                else (str(cur["expires_at"]) if cur is not None else "")
+            )
+            new_status = (
+                str(status).strip()
+                if status is not None and str(status).strip()
+                else (str(cur["status"]) if cur is not None and cur["status"] else "active")
+            )
+            self._conn.execute(
+                """
+                INSERT INTO managed_accounts (
+                    username, platform_account_id, password, display_name,
+                    token, expires_at, status, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET
+                    platform_account_id = excluded.platform_account_id,
+                    password = excluded.password,
+                    display_name = excluded.display_name,
+                    token = excluded.token,
+                    expires_at = excluded.expires_at,
+                    status = excluded.status,
+                    updated_at = excluded.updated_at
+                """,
+                (uname, new_aid, new_pw, new_dn, new_tok, new_exp, new_status, ts),
+            )
+            self.register_verified_accounts(
+                [{"username": uname, "account_id": new_aid}], status="own_bot", now=ts
+            )
+            self._conn.commit()
+            row = self._conn.execute(
+                "SELECT * FROM managed_accounts WHERE username = ?", (uname,)
+            ).fetchone()
+            return dict(row)
+
+    def mark_managed_account_status(
+        self,
+        username: str,
+        status: str,
+        *,
+        now: float | None = None,
+    ) -> dict[str, Any] | None:
+        """Update lifecycle status ('active', 'suspended', 'deleted') for a managed bot account.
+
+        When an account is marked 'deleted' (after calling `acct.delete()`), its active token is
+        cleared and its slot under the 50-active-accounts cap is freed while preserving its row
+        so the 200-total-accounts lifetime counter stays accurate.
+        """
+        uname = str(username).strip()
+        clean_status = str(status).strip().lower()
+        if not uname or clean_status not in {"active", "suspended", "deleted"}:
+            raise ValueError("status must be 'active', 'suspended', or 'deleted'")
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM managed_accounts WHERE username = ?", (uname,)
+            ).fetchone()
+            if cur is None:
+                self.upsert_managed_account(uname, status=clean_status, now=ts)
+            else:
+                clear_tok = "" if clean_status == "deleted" else str(cur["token"])
+                self._conn.execute(
+                    """
+                    UPDATE managed_accounts
+                    SET status = ?, token = ?, updated_at = ?
+                    WHERE username = ?
+                    """,
+                    (clean_status, clear_tok, ts, uname),
+                )
+                self._conn.commit()
+            if clean_status in {"suspended", "deleted"}:
+                self.set_account_banned(uname, True)
+            row = self._conn.execute(
+                "SELECT * FROM managed_accounts WHERE username = ?", (uname,)
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+    def get_managed_account_counts(
+        self,
+        *,
+        max_active: int = 50,
+        max_total: int = 200,
+    ) -> dict[str, int]:
+        """Return team account pool usage against the 2026 competition limits (50 active, 200 total)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT status, COUNT(*) AS cnt FROM managed_accounts GROUP BY status"
+            ).fetchall()
+        by_status = {str(r["status"]): int(r["cnt"]) for r in rows}
+        active = by_status.get("active", 0)
+        suspended = by_status.get("suspended", 0)
+        deleted = by_status.get("deleted", 0)
+        total = sum(by_status.values())
+        # Both 'active' and 'suspended' (undeleted) accounts occupy an active slot on the server
+        # until `DELETE /accounts/{id}` (`acct.delete()`) is called.
+        undeleted = active + suspended
+        return {
+            "total": total,
+            "active": active,
+            "suspended": suspended,
+            "deleted": deleted,
+            "undeleted": undeleted,
+            "remaining_active_slots": max(0, max_active - undeleted),
+            "remaining_total_slots": max(0, max_total - total),
+        }
+
+    def get_managed_account(self, username: str) -> dict[str, Any] | None:
+        """Fetch saved credentials/session token for `username`, or None if absent."""
+        uname = str(username).strip()
+        if not uname:
+            return None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM managed_accounts WHERE username = ?", (uname,)
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+    def list_managed_accounts(self, *, status: str | None = None) -> list[dict[str, Any]]:
+        """Return persisted bot account sessions ordered by username (optionally filtered by status)."""
+        with self._lock:
+            if status is not None:
+                rows = self._conn.execute(
+                    "SELECT * FROM managed_accounts WHERE status = ? ORDER BY username ASC",
+                    (str(status).strip(),),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM managed_accounts ORDER BY username ASC"
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def resolve_platform_account_id(self, handle: str) -> int | None:
+        """Look up the integer Legit Social `account_id` for `handle` across SQLite tables."""
+        clean = str(handle).strip().lstrip("@")
+        if not clean:
+            return None
+        if clean.isdigit() and int(clean) > 0:
+            return int(clean)
+        with self._lock:
+            r1 = self._conn.execute(
+                "SELECT platform_account_id FROM bot_registry WHERE account_id = ? AND platform_account_id > 0",
+                (clean,),
+            ).fetchone()
+            if r1 is not None:
+                return int(r1["platform_account_id"])
+
+            r2 = self._conn.execute(
+                "SELECT platform_account_id FROM managed_accounts WHERE username = ? AND platform_account_id > 0",
+                (clean,),
+            ).fetchone()
+            if r2 is not None:
+                return int(r2["platform_account_id"])
+
+            r3 = self._conn.execute(
+                "SELECT author_id FROM observed_posts WHERE author = ? AND author_id > 0 LIMIT 1",
+                (clean,),
+            ).fetchone()
+            if r3 is not None:
+                return int(r3["author_id"])
+        return None
 
     # ---- Atomic Counters ------------------------------------------------- #
     def increment_counter(self, name: str, delta: int = 1) -> int:
@@ -269,6 +639,18 @@ class StateStore:
                 (name,),
             ).fetchone()
             return int(row["value"]) if row else 0
+
+    def set_counter(self, name: str, value: int) -> None:
+        """Set a named integer counter to an explicit value."""
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO counters (name, value) VALUES (?, ?)
+                ON CONFLICT(name) DO UPDATE SET value = excluded.value
+                """,
+                (name, int(value)),
+            )
+            self._conn.commit()
 
     # ---- Interaction Log & Deduplication --------------------------------- #
     def log_interaction(
@@ -384,3 +766,970 @@ class StateStore:
             return False, f"allied_modulo_throttled:{seen_count}%{step_n}"
 
         return True, f"allied_reply_approved:{seen_count}"
+
+    # ---- Stage 3: Full-Platform Post Mirror (observed_posts) ------------- #
+    @staticmethod
+    def _unpack_observed_row(row: sqlite3.Row) -> dict[str, Any]:
+        d = dict(row)
+        d["is_reported"] = bool(d.get("is_reported", 0))
+        try:
+            d["raw"] = json.loads(d.get("raw_json") or "{}")
+        except (ValueError, TypeError):
+            d["raw"] = {}
+        return d
+
+    def upsert_observed_post(
+        self,
+        post: dict[str, Any] | Any,
+        *,
+        now: float | None = None,
+    ) -> tuple[bool, dict[str, Any]]:
+        """Insert or update an observed platform post in SQLite (indexed columns + lossless raw_json).
+
+        Returns `(is_new, post_record_dict)`.
+        - If `post_id` was not previously in `observed_posts`, `is_new` is True.
+        - If `post_id` was already recorded, updates engagement counts (`likes`, `replies`, `reposts`),
+          `last_seen_at`, and `raw_json` in place, and returns `is_new=False`.
+        """
+        ts = time.time() if now is None else float(now)
+        if isinstance(post, dict):
+            post_id = str(post.get("post_id", "")).strip()
+            author = str(post.get("author") or post.get("username") or "").strip()
+            text = str(post.get("text") if post.get("text") is not None else (post.get("body") or ""))
+            created_at = float(post.get("created_at", 0.0) or 0.0)
+            likes = int(post.get("likes", post.get("like_count", 0)) or 0)
+            replies = int(post.get("replies", post.get("reply_count", 0)) or 0)
+            reposts = int(post.get("reposts", post.get("repost_count", 0)) or 0)
+            raw_dict = dict(post)
+        else:
+            post_id = str(getattr(post, "post_id", "")).strip()
+            author = str(getattr(post, "author", "")).strip()
+            text = str(getattr(post, "text", ""))
+            created_at = float(getattr(post, "created_at", 0.0) or 0.0)
+            likes = int(getattr(post, "likes", 0) or 0)
+            replies = int(getattr(post, "replies", 0) or 0)
+            reposts = int(getattr(post, "reposts", 0) or 0)
+            raw_attr = getattr(post, "raw", None)
+            raw_dict = dict(raw_attr) if isinstance(raw_attr, dict) and raw_attr else {
+                "post_id": post_id,
+                "author": author,
+                "text": text,
+                "created_at": created_at,
+                "likes": likes,
+                "replies": replies,
+                "reposts": reposts,
+                "hashtags": list(getattr(post, "hashtags", ()) or ()),
+            }
+
+        if not post_id:
+            raise ValueError("upsert_observed_post requires a non-empty post_id")
+
+        author_id = 0
+        raw_author_id = raw_dict.get("author_id")
+        if raw_author_id is not None:
+            try:
+                author_id = max(0, int(raw_author_id))
+            except (TypeError, ValueError):
+                author_id = 0
+        if not author and author_id > 0:
+            author = str(author_id)
+
+        norm_hash = compute_post_norm_hash(text)
+        raw_json = json.dumps(raw_dict, ensure_ascii=False, sort_keys=True)
+
+        # Official `capturethenarrative` (Legit Social v0.5.0) paginates `/posts/{id}/replies`
+        # using `Page.next_cursor` (passed back as `cursor=`). `comment_cursor` stores this
+        # opaque cursor string directly.
+        parent_id = ""
+        for key in (
+            "parent_id",
+            "root_post_id",
+            "reply_to_post_id",
+            "in_reply_to",
+            "reply_to_id",
+            "in_reply_to_post_id",
+        ):
+            candidate = raw_dict.get(key)
+            if candidate is not None and str(candidate).strip():
+                parent_id = str(candidate).strip()
+                break
+        if parent_id == post_id:
+            parent_id = ""
+
+        with self._lock:
+            existing = self._conn.execute(
+                "SELECT post_id, replies FROM observed_posts WHERE post_id = ?",
+                (post_id,),
+            ).fetchone()
+            is_new = existing is None
+            prev_replies = 0 if existing is None else int(existing["replies"])
+            if is_new:
+                self._conn.execute(
+                    """
+                    INSERT INTO observed_posts (
+                        post_id, author, author_id, created_at, first_seen_at, last_seen_at,
+                        norm_hash, text, likes, replies, reposts, is_reported, raw_json,
+                        parent_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                    """,
+                    (
+                        post_id,
+                        author,
+                        author_id,
+                        created_at,
+                        ts,
+                        ts,
+                        norm_hash,
+                        text,
+                        likes,
+                        replies,
+                        reposts,
+                        raw_json,
+                        parent_id,
+                    ),
+                )
+            else:
+                self._conn.execute(
+                    """
+                    UPDATE observed_posts SET
+                        author = CASE WHEN ? != '' THEN ? ELSE author END,
+                        author_id = CASE WHEN ? > 0 THEN ? ELSE author_id END,
+                        last_seen_at = ?,
+                        likes = ?,
+                        replies = ?,
+                        reposts = ?,
+                        raw_json = ?,
+                        parent_id = CASE WHEN ? != '' THEN ? ELSE parent_id END
+                    WHERE post_id = ?
+                    """,
+                    (
+                        author,
+                        author,
+                        author_id,
+                        author_id,
+                        ts,
+                        likes,
+                        replies,
+                        reposts,
+                        raw_json,
+                        parent_id,
+                        parent_id,
+                        post_id,
+                    ),
+                )
+            self._conn.commit()
+            row = self._conn.execute(
+                "SELECT * FROM observed_posts WHERE post_id = ?",
+                (post_id,),
+            ).fetchone()
+            record = self._unpack_observed_row(row)
+            # Layer-1 hint for the background comment crawler: how many replies appeared since
+            # the previous sighting, and how many are still not crawled in total.
+            record["replies_delta"] = max(0, replies - prev_replies) if not is_new else replies
+            record["unseen_replies"] = max(0, int(record["replies"]) - int(record["replies_crawled"]))
+            return is_new, record
+
+    # ---- Stage 3: Two-Layer Crawl Queue (comment pagination state) ------- #
+    def get_posts_needing_comment_crawl(
+        self,
+        *,
+        limit: int = 10,
+        min_unseen_replies: int = 1,
+        cooldown_s: float = 30.0,
+        now: float | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return top-level posts whose comment sections have uncrawled replies, hottest first.
+
+        Ordering: largest `unseen_replies` first, then oldest `comments_crawled_at` (starvation guard).
+        Posts crawled within `cooldown_s` are skipped.
+        """
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT *, (replies - replies_crawled) AS unseen_replies
+                FROM observed_posts
+                WHERE parent_id = ''
+                  AND (replies - replies_crawled) >= ?
+                  AND comments_crawled_at <= ?
+                ORDER BY unseen_replies DESC, comments_crawled_at ASC
+                LIMIT ?
+                """,
+                (max(1, min_unseen_replies), ts - max(0.0, cooldown_s), max(1, limit)),
+            ).fetchall()
+            out = []
+            for r in rows:
+                rec = self._unpack_observed_row(r)
+                rec["unseen_replies"] = int(r["unseen_replies"])
+                out.append(rec)
+            return out
+
+    def update_comment_crawl_state(
+        self,
+        post_id: str,
+        *,
+        replies_crawled: int | None = None,
+        add_crawled: int = 0,
+        comment_cursor: str | None = None,
+        now: float | None = None,
+    ) -> dict[str, Any] | None:
+        """Persist comment pagination progress for a top-level post after the worker fetches a page.
+
+        Pass `replies_crawled` to set an absolute count, or `add_crawled` to increment. `comment_cursor`
+        stores the opaque page token / page number / last comment id for resuming without re-reading.
+        """
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT replies_crawled, comment_cursor FROM observed_posts WHERE post_id = ?",
+                (post_id,),
+            ).fetchone()
+            if cur is None:
+                return None
+            new_count = (
+                max(0, int(replies_crawled))
+                if replies_crawled is not None
+                else int(cur["replies_crawled"]) + max(0, int(add_crawled))
+            )
+            new_cursor = str(cur["comment_cursor"]) if comment_cursor is None else str(comment_cursor)
+            self._conn.execute(
+                """
+                UPDATE observed_posts SET
+                    replies_crawled = ?, comment_cursor = ?, comments_crawled_at = ?
+                WHERE post_id = ?
+                """,
+                (new_count, new_cursor, ts, post_id),
+            )
+            self._conn.commit()
+            row = self._conn.execute(
+                "SELECT * FROM observed_posts WHERE post_id = ?", (post_id,)
+            ).fetchone()
+            return self._unpack_observed_row(row)
+
+    def get_post_replies(self, parent_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        """Return already-crawled comments under `parent_id`, oldest first."""
+        if not parent_id:
+            return []
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM observed_posts
+                WHERE parent_id = ?
+                ORDER BY created_at ASC, first_seen_at ASC LIMIT ?
+                """,
+                (parent_id, max(1, limit)),
+            ).fetchall()
+            return [self._unpack_observed_row(r) for r in rows]
+
+    def get_observed_post(self, post_id: str) -> dict[str, Any] | None:
+        """Fetch a single observed post by ID, or None if not found."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM observed_posts WHERE post_id = ?",
+                (post_id,),
+            ).fetchone()
+            return self._unpack_observed_row(row) if row is not None else None
+
+    def get_author_posts(
+        self,
+        author: str,
+        *,
+        limit: int = 20,
+        unreported_only: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Retrieve observed posts by a specific author ordered newest first (via B-Tree index)."""
+        if not author:
+            return []
+        with self._lock:
+            if unreported_only:
+                rows = self._conn.execute(
+                    """
+                    SELECT * FROM observed_posts
+                    WHERE author = ? AND is_reported = 0
+                    ORDER BY first_seen_at DESC LIMIT ?
+                    """,
+                    (author, max(1, limit)),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    """
+                    SELECT * FROM observed_posts
+                    WHERE author = ?
+                    ORDER BY first_seen_at DESC LIMIT ?
+                    """,
+                    (author, max(1, limit)),
+                ).fetchall()
+            return [self._unpack_observed_row(r) for r in rows]
+
+    def find_norm_hash_collisions(
+        self,
+        norm_hash: str,
+        *,
+        exclude_post_id: str = "",
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Find previously observed posts sharing the exact same normalized core fingerprint."""
+        if not norm_hash:
+            return []
+        with self._lock:
+            if exclude_post_id:
+                rows = self._conn.execute(
+                    """
+                    SELECT * FROM observed_posts
+                    WHERE norm_hash = ? AND post_id != ?
+                    ORDER BY first_seen_at DESC LIMIT ?
+                    """,
+                    (norm_hash, exclude_post_id, max(1, limit)),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    """
+                    SELECT * FROM observed_posts
+                    WHERE norm_hash = ?
+                    ORDER BY first_seen_at DESC LIMIT ?
+                    """,
+                    (norm_hash, max(1, limit)),
+                ).fetchall()
+            return [self._unpack_observed_row(r) for r in rows]
+
+    def get_confirmed_bot_posts(
+        self,
+        *,
+        exclude_author: str = "",
+        suspended_only: bool = False,
+        limit: int = 150,
+    ) -> list[dict[str, Any]]:
+        """Retrieve observed posts authored by already-confirmed or suspended/deleted enemy bots.
+
+        Prioritizes posts from permanently suspended (`is_suspended = 1`) bots first so newly
+        registered replacement ("reincarnated") accounts reusing a banned bot's script are caught
+        immediately on their first post.
+        """
+        with self._lock:
+            if suspended_only:
+                rows = self._conn.execute(
+                    """
+                    SELECT p.*,
+                           b.is_suspended AS author_is_suspended,
+                           b.inferred_team AS author_inferred_team,
+                           b.inferred_side AS author_inferred_side
+                    FROM observed_posts p
+                    INNER JOIN bot_registry b ON p.author = b.account_id
+                    WHERE b.is_suspended = 1 AND p.author != ?
+                    ORDER BY p.first_seen_at DESC LIMIT ?
+                    """,
+                    (exclude_author, max(1, limit)),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    """
+                    SELECT p.*,
+                           b.is_suspended AS author_is_suspended,
+                           b.inferred_team AS author_inferred_team,
+                           b.inferred_side AS author_inferred_side
+                    FROM observed_posts p
+                    INNER JOIN bot_registry b ON p.author = b.account_id
+                    WHERE (b.status = 'confirmed_bot' OR b.is_suspended = 1)
+                      AND p.author != ?
+                    ORDER BY b.is_suspended DESC, p.first_seen_at DESC LIMIT ?
+                    """,
+                    (exclude_author, max(1, limit)),
+                ).fetchall()
+            out: list[dict[str, Any]] = []
+            for r in rows:
+                rec = self._unpack_observed_row(r)
+                rec["author_is_suspended"] = bool(r["author_is_suspended"])
+                rec["author_inferred_team"] = str(r["author_inferred_team"] or "")
+                rec["author_inferred_side"] = str(r["author_inferred_side"] or "unknown")
+                out.append(rec)
+            return out
+
+    def get_unconfirmed_candidate_posts(
+        self,
+        *,
+        exclude_author: str = "",
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Retrieve recent observed posts by accounts that are not yet confirmed bots or protected.
+
+        Used during reporting sweeps to retroactively scan for sibling/reincarnated accounts whose
+        phrasing closely matches a confirmed or suspended bot's posts.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT p.*
+                FROM observed_posts p
+                LEFT JOIN bot_registry b ON p.author = b.account_id
+                WHERE COALESCE(b.status, 'unknown') IN ('unknown', 'suspected_bot')
+                  AND p.author != ''
+                  AND p.author != ?
+                ORDER BY p.first_seen_at DESC LIMIT ?
+                """,
+                (exclude_author, max(1, limit)),
+            ).fetchall()
+            return [self._unpack_observed_row(r) for r in rows]
+
+    # ---- Stage 3: Bot Intelligence Registry (bot_registry) --------------- #
+    @staticmethod
+    def _unpack_bot_row(row: sqlite3.Row) -> dict[str, Any]:
+        d = dict(row)
+        d["is_suspended"] = bool(d.get("is_suspended", 0))
+        try:
+            d["evidence"] = json.loads(d.get("evidence_json") or "[]")
+        except (ValueError, TypeError):
+            d["evidence"] = []
+        return d
+
+    def register_verified_accounts(
+        self,
+        account_ids: Iterable[str | dict[str, Any]],
+        *,
+        status: str = "verified_npc",
+        now: float | None = None,
+    ) -> None:
+        """Register protected accounts ('verified_npc' or 'own_bot') so they are never flagged or reported.
+
+        Each item in `account_ids` may be a username string or a dict containing
+        `username`/`handle`/`account_id` and an optional integer `account_id`/`platform_account_id`.
+        """
+        if status not in ("verified_npc", "own_bot"):
+            raise ValueError("status must be 'verified_npc' or 'own_bot'")
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            for acc in account_ids:
+                platform_id = 0
+                if isinstance(acc, dict):
+                    acc_id = str(
+                        acc.get("username") or acc.get("handle") or acc.get("account_id") or ""
+                    ).strip()
+                    raw_pid = acc.get("platform_account_id")
+                    if raw_pid is None:
+                        raw_pid = acc.get("account_id") if isinstance(acc.get("account_id"), int) else None
+                    if raw_pid is not None:
+                        try:
+                            platform_id = max(0, int(raw_pid))
+                        except (TypeError, ValueError):
+                            platform_id = 0
+                else:
+                    acc_id = str(acc).strip()
+                if not acc_id:
+                    continue
+                self._conn.execute(
+                    """
+                    INSERT INTO bot_registry (
+                        account_id, platform_account_id, status, suspicion_score,
+                        first_seen_at, last_seen_at, evidence_json
+                    ) VALUES (?, ?, ?, 0.0, ?, ?, '["protected_whitelist"]')
+                    ON CONFLICT(account_id) DO UPDATE SET
+                        platform_account_id = CASE
+                            WHEN excluded.platform_account_id > 0 THEN excluded.platform_account_id
+                            ELSE bot_registry.platform_account_id
+                        END,
+                        status = excluded.status,
+                        suspicion_score = 0.0,
+                        evidence_json = '["protected_whitelist"]'
+                    """,
+                    (acc_id, platform_id, status, ts, ts),
+                )
+            self._conn.commit()
+
+    def get_bot_profile(self, account_id: str) -> dict[str, Any]:
+        """Fetch an account's intelligence profile from bot_registry (returns default unknown profile if absent)."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM bot_registry WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+            if row is None:
+                return {
+                    "account_id": account_id,
+                    "platform_account_id": 0,
+                    "status": "unknown",
+                    "suspicion_score": 0.0,
+                    "inferred_side": "unknown",
+                    "inferred_team": "",
+                    "post_seen_count": 0,
+                    "question_post_count": 0,
+                    "fast_interval_count": 0,
+                    "reports_submitted": 0,
+                    "upheld_strikes": 0,
+                    "is_suspended": False,
+                    "first_seen_at": 0.0,
+                    "last_seen_at": 0.0,
+                    "evidence_json": "[]",
+                    "evidence": [],
+                }
+            return self._unpack_bot_row(row)
+
+    def record_author_observation(
+        self,
+        account_id: str,
+        *,
+        platform_account_id: int | None = None,
+        is_question: bool = False,
+        inferred_side: str = "",
+        inferred_team: str = "",
+        suspicion_delta: float = 0.0,
+        evidence_tag: str = "",
+        force_status: str = "",
+        promote_threshold: float = 90.0,
+        suspect_threshold: float = 50.0,
+        min_bot_interval_s: float = 15.0,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        """Update an author's behavioral metrics and suspicion score in bot_registry.
+
+        Protected accounts ('verified_npc' and 'own_bot') are never downgraded or assigned suspicion.
+        Automatically promotes 'unknown' -> 'suspected_bot' -> 'confirmed_bot' when thresholds are met.
+        """
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            prof = self.get_bot_profile(account_id)
+            cur_status = prof["status"]
+            pid = (
+                max(0, int(platform_account_id))
+                if platform_account_id is not None and int(platform_account_id) > 0
+                else int(prof.get("platform_account_id") or 0)
+            )
+            if cur_status in ("verified_npc", "own_bot"):
+                if pid > 0 and int(prof.get("platform_account_id") or 0) != pid:
+                    self._conn.execute(
+                        "UPDATE bot_registry SET platform_account_id = ? WHERE account_id = ?",
+                        (pid, account_id),
+                    )
+                    self._conn.commit()
+                    return self.get_bot_profile(account_id)
+                return prof
+
+            prev_last = float(prof["last_seen_at"] or 0.0)
+            first_seen = (
+                min(float(prof["first_seen_at"]), ts)
+                if prof["first_seen_at"] > 0
+                else ts
+            )
+            post_count = int(prof["post_seen_count"]) + 1
+            q_count = int(prof["question_post_count"]) + (1 if is_question else 0)
+            fast_count = int(prof["fast_interval_count"])
+            if prev_last > 0 and abs(ts - prev_last) <= min_bot_interval_s:
+                fast_count += 1
+
+            evidence: list[str] = list(prof["evidence"])
+            if evidence_tag and evidence_tag not in evidence:
+                evidence.append(evidence_tag)
+
+            score = max(0.0, float(prof["suspicion_score"]) + float(suspicion_delta))
+
+            # Behavioral auto-heuristics:
+            # 1. Rapid-fire bursts (>= 2 sub-15s intervals)
+            if fast_count >= 2 and "rapid_fire_posting" not in evidence:
+                evidence.append("rapid_fire_posting")
+                score += 35.0
+            # 2. Pure question-machine pattern (>= 3 posts seen, 100% ending in '?')
+            if post_count >= 3 and q_count == post_count and "all_questions_p08_pattern" not in evidence:
+                evidence.append("all_questions_p08_pattern")
+                score += 45.0
+
+            new_side = inferred_side if inferred_side in ("yes", "no") else prof["inferred_side"]
+            new_team = inferred_team if inferred_team else prof["inferred_team"]
+
+            new_status = cur_status
+            if force_status in ("confirmed_bot", "suspected_bot", "verified_npc", "own_bot"):
+                new_status = force_status
+                if new_status == "confirmed_bot" and score < promote_threshold:
+                    score = max(score, promote_threshold)
+            else:
+                if score >= promote_threshold or cur_status == "confirmed_bot":
+                    new_status = "confirmed_bot"
+                elif score >= suspect_threshold or cur_status == "suspected_bot":
+                    new_status = "suspected_bot"
+
+            ev_json = json.dumps(evidence, ensure_ascii=False)
+            self._conn.execute(
+                """
+                INSERT INTO bot_registry (
+                    account_id, platform_account_id, status, suspicion_score,
+                    inferred_side, inferred_team, post_seen_count, question_post_count,
+                    fast_interval_count, reports_submitted, upheld_strikes, is_suspended,
+                    first_seen_at, last_seen_at, evidence_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_id) DO UPDATE SET
+                    platform_account_id = CASE
+                        WHEN excluded.platform_account_id > 0 THEN excluded.platform_account_id
+                        ELSE bot_registry.platform_account_id
+                    END,
+                    status = excluded.status,
+                    suspicion_score = excluded.suspicion_score,
+                    inferred_side = excluded.inferred_side,
+                    inferred_team = excluded.inferred_team,
+                    post_seen_count = excluded.post_seen_count,
+                    question_post_count = excluded.question_post_count,
+                    fast_interval_count = excluded.fast_interval_count,
+                    first_seen_at = excluded.first_seen_at,
+                    last_seen_at = excluded.last_seen_at,
+                    evidence_json = excluded.evidence_json
+                """,
+                (
+                    account_id,
+                    pid,
+                    new_status,
+                    round(score, 2),
+                    new_side,
+                    new_team,
+                    post_count,
+                    q_count,
+                    fast_count,
+                    int(prof["reports_submitted"]),
+                    int(prof["upheld_strikes"]),
+                    int(prof["is_suspended"]),
+                    first_seen,
+                    ts,
+                    ev_json,
+                ),
+            )
+            self._conn.commit()
+            return self.get_bot_profile(account_id)
+
+    def add_bot_evidence(
+        self,
+        account_id: str,
+        *,
+        platform_account_id: int | None = None,
+        suspicion_delta: float = 0.0,
+        evidence_tags: Iterable[str] = (),
+        inferred_side: str = "",
+        inferred_team: str = "",
+        force_status: str = "",
+        promote_threshold: float = 90.0,
+        suspect_threshold: float = 50.0,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        """Add suspicion score and evidence tags to an account in `bot_registry` without incrementing `post_seen_count`."""
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            prof = self.get_bot_profile(account_id)
+            cur_status = prof["status"]
+            pid = (
+                max(0, int(platform_account_id))
+                if platform_account_id is not None and int(platform_account_id) > 0
+                else int(prof.get("platform_account_id") or 0)
+            )
+            if cur_status in ("verified_npc", "own_bot"):
+                return prof
+
+            evidence: list[str] = list(prof["evidence"])
+            for tag in evidence_tags:
+                t = str(tag).strip()
+                if t and t not in evidence:
+                    evidence.append(t)
+
+            score = max(0.0, float(prof["suspicion_score"]) + float(suspicion_delta))
+            new_side = inferred_side if inferred_side in ("yes", "no") else prof["inferred_side"]
+            new_team = inferred_team if inferred_team else prof["inferred_team"]
+
+            new_status = cur_status
+            if force_status in ("confirmed_bot", "suspected_bot", "verified_npc", "own_bot"):
+                new_status = force_status
+                if new_status == "confirmed_bot" and score < promote_threshold:
+                    score = max(score, promote_threshold)
+            else:
+                if score >= promote_threshold or cur_status == "confirmed_bot":
+                    new_status = "confirmed_bot"
+                elif score >= suspect_threshold or cur_status == "suspected_bot":
+                    new_status = "suspected_bot"
+
+            first_seen = float(prof["first_seen_at"]) if float(prof["first_seen_at"]) > 0 else ts
+            last_seen = max(float(prof["last_seen_at"] or 0.0), ts)
+            ev_json = json.dumps(evidence, ensure_ascii=False)
+            self._conn.execute(
+                """
+                INSERT INTO bot_registry (
+                    account_id, platform_account_id, status, suspicion_score,
+                    inferred_side, inferred_team, post_seen_count, question_post_count,
+                    fast_interval_count, reports_submitted, upheld_strikes, is_suspended,
+                    first_seen_at, last_seen_at, evidence_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_id) DO UPDATE SET
+                    platform_account_id = CASE
+                        WHEN excluded.platform_account_id > 0 THEN excluded.platform_account_id
+                        ELSE bot_registry.platform_account_id
+                    END,
+                    status = excluded.status,
+                    suspicion_score = excluded.suspicion_score,
+                    inferred_side = excluded.inferred_side,
+                    inferred_team = excluded.inferred_team,
+                    first_seen_at = excluded.first_seen_at,
+                    last_seen_at = excluded.last_seen_at,
+                    evidence_json = excluded.evidence_json
+                """,
+                (
+                    account_id,
+                    pid,
+                    new_status,
+                    round(score, 2),
+                    new_side,
+                    new_team,
+                    int(prof["post_seen_count"]),
+                    int(prof["question_post_count"]),
+                    int(prof["fast_interval_count"]),
+                    int(prof["reports_submitted"]),
+                    int(prof["upheld_strikes"]),
+                    int(prof["is_suspended"]),
+                    first_seen,
+                    last_seen,
+                    ev_json,
+                ),
+            )
+            self._conn.commit()
+            return self.get_bot_profile(account_id)
+
+    def list_bots_by_status(self, status: str) -> list[dict[str, Any]]:
+        """List all accounts in bot_registry matching `status`, ordered by suspicion_score descending."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM bot_registry WHERE status = ? ORDER BY suspicion_score DESC",
+                (status,),
+            ).fetchall()
+            return [self._unpack_bot_row(r) for r in rows]
+
+    # ---- Stage 3: Blue-Team Reporting & Circuit Breaker (report_log) ----- #
+    def set_report_suspension(
+        self,
+        duration_s: float = 21600.0,
+        *,
+        now: float | None = None,
+    ) -> float:
+        """Activate the 6-hour (21,600s) reporting circuit breaker after an incorrect citizen report."""
+        ts = time.time() if now is None else float(now)
+        until_ts = ts + max(0.0, duration_s)
+        self.set_counter("report_suspended_until_ms", int(until_ts * 1000))
+        return until_ts
+
+    def clear_report_suspension(self) -> None:
+        """Clear the reporting suspension circuit breaker."""
+        self.set_counter("report_suspended_until_ms", 0)
+
+    def is_reporting_suspended(self, *, now: float | None = None) -> tuple[bool, float]:
+        """Return `(is_suspended, remaining_seconds)` for the 6-hour false-report penalty window."""
+        ts = time.time() if now is None else float(now)
+        until_ms = self.get_counter("report_suspended_until_ms")
+        if until_ms <= 0:
+            return False, 0.0
+        until_s = until_ms / 1000.0
+        rem = until_s - ts
+        if rem > 0:
+            return True, round(rem, 1)
+        return False, 0.0
+
+    def count_daily_reports_against(
+        self,
+        *,
+        target_team: str = "",
+        target_author: str = "",
+        sydney_day: str | None = None,
+        now: float | None = None,
+    ) -> int:
+        """Count non-rejected reports filed today (Sydney time) against a specific competitor team or author."""
+        day_str = sydney_day or current_sydney_day(now)
+        with self._lock:
+            if target_team:
+                row = self._conn.execute(
+                    """
+                    SELECT COUNT(*) AS cnt FROM report_log
+                    WHERE sydney_day = ? AND target_team = ? AND outcome != 'rejected'
+                    """,
+                    (day_str, target_team),
+                ).fetchone()
+            elif target_author:
+                row = self._conn.execute(
+                    """
+                    SELECT COUNT(*) AS cnt FROM report_log
+                    WHERE sydney_day = ? AND target_author = ? AND outcome != 'rejected'
+                    """,
+                    (day_str, target_author),
+                ).fetchone()
+            else:
+                return 0
+            return int(row["cnt"]) if row else 0
+
+    def can_report_post(
+        self,
+        post_id: str,
+        target_author: str,
+        *,
+        target_team: str = "",
+        max_daily_per_team: int = 10,
+        max_strikes_per_account: int = 3,
+        sydney_day: str | None = None,
+        now: float | None = None,
+    ) -> tuple[bool, str]:
+        """Check all Blue-Team safety and ROI guards before submitting an inauthentic post report:
+
+        1. 6-hour false-report suspension circuit breaker.
+        2. Protected whitelist ('verified_npc' or 'own_bot').
+        3. Duplicate report guard on the same `post_id`.
+        4. 3-strike account suspension cap (an account is permanently suspended after 3 upheld reports).
+        5. Daily diminishing-return quota per target team (1st-5th full rate, 6th-10th half rate, >10 only 10%).
+        """
+        if not post_id or not target_author:
+            return False, "missing_post_or_author"
+
+        suspended, rem_s = self.is_reporting_suspended(now=now)
+        if suspended:
+            return False, f"reporting_suspended:{rem_s}s"
+
+        prof = self.get_bot_profile(target_author)
+        if prof["status"] in ("verified_npc", "own_bot"):
+            return False, f"protected_account:{prof['status']}"
+
+        with self._lock:
+            dup = self._conn.execute(
+                "SELECT 1 FROM report_log WHERE post_id = ? LIMIT 1",
+                (post_id,),
+            ).fetchone()
+            if dup is not None:
+                return False, "post_already_reported"
+
+        if prof["is_suspended"] or int(prof["upheld_strikes"]) >= max_strikes_per_account:
+            return False, f"account_already_3_strike_suspended:{prof['upheld_strikes']}"
+
+        if int(prof["reports_submitted"]) >= max_strikes_per_account:
+            return False, f"account_report_cap_reached:{prof['reports_submitted']}/{max_strikes_per_account}"
+
+        effective_team = target_team or str(prof.get("inferred_team") or "")
+        if effective_team and max_daily_per_team > 0:
+            daily_cnt = self.count_daily_reports_against(
+                target_team=effective_team, sydney_day=sydney_day, now=now,
+            )
+            if daily_cnt >= max_daily_per_team:
+                return False, f"daily_team_quota_reached:{daily_cnt}/{max_daily_per_team}"
+
+        return True, "eligible_to_report"
+
+    def log_report(
+        self,
+        post_id: str,
+        target_author: str,
+        *,
+        target_team: str = "",
+        target_side: str = "unknown",
+        reporter_account: str = "",
+        reason: str = "",
+        outcome: str = "pending",
+        sydney_day: str | None = None,
+        now: float | None = None,
+    ) -> bool:
+        """Record a submitted report in `report_log`, mark `observed_posts.is_reported = 1`, and update `bot_registry`."""
+        ts = time.time() if now is None else float(now)
+        day_str = sydney_day or current_sydney_day(ts)
+        with self._lock:
+            prof = self.get_bot_profile(target_author)
+            effective_team = target_team or str(prof.get("inferred_team") or "")
+            effective_side = (
+                target_side
+                if target_side in ("yes", "no")
+                else str(prof.get("inferred_side") or "unknown")
+            )
+            cur = self._conn.execute(
+                """
+                INSERT OR IGNORE INTO report_log (
+                    post_id, target_author, target_team, target_side,
+                    reporter_account, reason, sydney_day, created_at, outcome
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    post_id,
+                    target_author,
+                    effective_team,
+                    effective_side,
+                    reporter_account,
+                    reason,
+                    day_str,
+                    ts,
+                    outcome,
+                ),
+            )
+            if cur.rowcount == 0:
+                return False
+
+            self._conn.execute(
+                "UPDATE observed_posts SET is_reported = 1 WHERE post_id = ?",
+                (post_id,),
+            )
+
+            # Ensure author exists in bot_registry and increment reports_submitted
+            if prof["status"] == "unknown":
+                self.record_author_observation(
+                    target_author,
+                    inferred_side=effective_side,
+                    inferred_team=effective_team,
+                    force_status="confirmed_bot",
+                    evidence_tag=reason or "reported_as_bot",
+                    now=ts,
+                )
+            self._conn.execute(
+                """
+                UPDATE bot_registry SET
+                    reports_submitted = reports_submitted + 1,
+                    upheld_strikes = upheld_strikes + ?,
+                    is_suspended = CASE WHEN (upheld_strikes + ?) >= 3 THEN 1 ELSE is_suspended END
+                WHERE account_id = ?
+                """,
+                (
+                    1 if outcome == "upheld" else 0,
+                    1 if outcome == "upheld" else 0,
+                    target_author,
+                ),
+            )
+            self._conn.commit()
+            return True
+
+    def update_report_outcome(
+        self,
+        post_id: str,
+        outcome: str,
+        *,
+        now: float | None = None,
+    ) -> dict[str, Any] | None:
+        """Update moderator ruling ('upheld' or 'rejected') for a previously filed report.
+
+        - If 'upheld': promotes author to 'confirmed_bot', increments `upheld_strikes`, and sets `is_suspended = 1` at 3 strikes.
+        - If 'rejected': activates the 6-hour reporting suspension circuit breaker and whitelists the author as 'verified_npc'.
+        """
+        if outcome not in ("upheld", "rejected", "pending"):
+            raise ValueError("outcome must be 'upheld', 'rejected', or 'pending'")
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM report_log WHERE post_id = ?",
+                (post_id,),
+            ).fetchone()
+            if row is None:
+                return None
+
+            prev_outcome = str(row["outcome"])
+            target_author = str(row["target_author"])
+            self._conn.execute(
+                "UPDATE report_log SET outcome = ? WHERE post_id = ?",
+                (outcome, post_id),
+            )
+
+            if outcome == "upheld" and prev_outcome != "upheld":
+                self._conn.execute(
+                    """
+                    UPDATE bot_registry SET
+                        status = 'confirmed_bot',
+                        upheld_strikes = upheld_strikes + 1,
+                        is_suspended = CASE WHEN (upheld_strikes + 1) >= 3 THEN 1 ELSE is_suspended END
+                    WHERE account_id = ?
+                    """,
+                    (target_author,),
+                )
+            elif outcome == "rejected":
+                # False positive on a genuine citizen -> 6-hour suspension + protect author as verified_npc
+                self.set_report_suspension(21600.0, now=ts)
+                self.register_verified_accounts([target_author], status="verified_npc", now=ts)
+
+            self._conn.commit()
+            return self.get_bot_profile(target_author)
+

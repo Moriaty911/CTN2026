@@ -58,6 +58,90 @@ class TestMacroStateCollector(unittest.TestCase):
         self.assertEqual(len(snapshot["newspapers"]["kingstonia_herald"]), 1)
         self.assertEqual(len(snapshot["accounts"]), 4)
 
+    def test_collector_with_official_news_sites_crawler(self):
+        from capturethenarrative import NewsSites
+        from ctn.pipeline.news_crawler import NewsSitesCrawler
+
+        class FakeNewsSites(NewsSites):
+            def __init__(self):
+                super().__init__("https://sites.legitreal.com", max_retries=0)
+                self.paths_called: list[str] = []
+
+            def _doc(self, path: str) -> dict:
+                self.paths_called.append(path)
+                if path == "/index.json":
+                    return {
+                        "sites": [
+                            {"id": 1, "name": "The Kingstonia Herald", "sub_url": "kingstonia-herald"},
+                            {"id": 2, "name": "The Daily Kingstonia", "sub_url": "daily-kingstonia"},
+                        ]
+                    }
+                if path == "/kingstonia-herald.json":
+                    return {
+                        "site": {"name": "The Kingstonia Herald", "sub_url": "kingstonia-herald"},
+                        "categories": [],
+                        "articles": [
+                            {
+                                "slug": "hospital-capacity-report",
+                                "headline": "Crown Harbour Hospitals Prepare for Dolphin Flu",
+                                "summary": "Medical officials urge early precautions across transit hubs.",
+                                "byline": {"username": "sarah_chen", "name": "Sarah Chen"},
+                                "published_at": "2026-10-17T02:30:00Z",
+                            }
+                        ],
+                    }
+                if path == "/daily-kingstonia.json":
+                    return {
+                        "site": {"name": "The Daily Kingstonia", "sub_url": "daily-kingstonia"},
+                        "categories": [],
+                        "articles": [
+                            {
+                                "slug": "small-business-referendum",
+                                "headline": "Harbour Merchants Weigh In on Referendum",
+                                "summary": "Shop owners debate economic tradeoffs ahead of the vote.",
+                                "byline": "marcus_vance",
+                                "published_at": "2026-10-17T01:15:00Z",
+                            }
+                        ],
+                    }
+                if path == "/kingstonia-herald/articles/hospital-capacity-report.json":
+                    return {
+                        "article": {
+                            "slug": "hospital-capacity-report",
+                            "headline": "Crown Harbour Hospitals Prepare for Dolphin Flu",
+                            "summary": "Medical officials urge early precautions across transit hubs.",
+                            "body": "Full markdown article body from The Kingstonia Herald.",
+                            "byline": {"username": "sarah_chen"},
+                            "published_at": "2026-10-17T02:30:00Z",
+                        }
+                    }
+                return {}
+
+        fake_news = FakeNewsSites()
+        news_crawler = NewsSitesCrawler(news_sites=fake_news)
+
+        actuator = MagicMock()
+        actuator.trending = AsyncMock(return_value=[{"hashtag": "#H2D2"}])
+        # Only 1 search call should be made (for "journalist"), because newspapers come from NewsSitesCrawler!
+        actuator.search = AsyncMock(return_value=[
+            {"post_id": "vip_1", "author": "sarah_chen", "text": "Breaking report in the Herald today."}
+        ])
+
+        router = PersonaRouter(default_side="yes")
+        collector = MacroStateCollector(actuator, router, side="yes", news_crawler=news_crawler)
+        snapshot = collector.collect_sync()
+
+        self.assertEqual(actuator.search.call_count, 1)
+        herald = snapshot["newspapers"]["kingstonia_herald"]
+        daily = snapshot["newspapers"]["daily_kingstonia"]
+        self.assertEqual(len(herald), 1)
+        self.assertEqual(herald[0]["author"], "sarah_chen")
+        self.assertIn("Crown Harbour Hospitals Prepare for Dolphin Flu", herald[0]["text"])
+        self.assertEqual(herald[0]["slug"], "hospital-capacity-report")
+        self.assertEqual(len(daily), 1)
+        self.assertEqual(daily[0]["author"], "marcus_vance")
+
+
 
 class TestStrategicPublisher(unittest.TestCase):
     def setUp(self):

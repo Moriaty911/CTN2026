@@ -10,6 +10,7 @@ from typing import Any
 from ctn.actuator import Actuator
 from ctn.jev.postflight import check_incoming_post_language
 from ctn.persona import PersonaRouter
+from ctn.pipeline.news_crawler import NewsSitesCrawler
 
 
 class MacroStateCollector:
@@ -21,10 +22,17 @@ class MacroStateCollector:
         router: PersonaRouter | None = None,
         *,
         side: str = "yes",
+        news_crawler: NewsSitesCrawler | None = None,
     ) -> None:
         self.actuator = actuator
         self.side = side.lower()
         self.router = router if router is not None else PersonaRouter(default_side=self.side)
+        if news_crawler is not None:
+            self.news_crawler: NewsSitesCrawler | None = news_crawler
+        elif getattr(actuator, "_client", None).__class__.__name__ == "OfficialLegitClient":
+            self.news_crawler = NewsSitesCrawler()
+        else:
+            self.news_crawler = None
 
     async def collect(self) -> dict[str, Any]:
         """Query platform endpoints and account state machine to build a macro snapshot."""
@@ -58,11 +66,7 @@ class MacroStateCollector:
                         "reposts": item.get("reposts", 0),
                     })
 
-        # 2. Search newspapers and VIP NPC coverage
-        daily_k_posts = await self.actuator.search("Daily Kingstonia", limit=5)
-        herald_posts = await self.actuator.search("Kingstonia Herald", limit=5)
-        vip_posts_raw = await self.actuator.search("journalist", limit=5)
-
+        # 2. Fetch newspapers (prefer official sites.legitreal.com NewsSitesCrawler when attached)
         def clean_post_list(raw_list: Any) -> list[dict[str, Any]]:
             cleaned = []
             if isinstance(raw_list, list):
@@ -73,14 +77,34 @@ class MacroStateCollector:
                             lang_ok, _ = check_incoming_post_language(text_val)
                             if not lang_ok:
                                 continue
-                        cleaned.append({
+                        entry: dict[str, Any] = {
                             "post_id": p.get("post_id", ""),
                             "author": p.get("author", ""),
                             "text": text_val,
                             "likes": p.get("likes", 0),
                             "replies": p.get("replies", 0),
-                        })
+                        }
+                        for extra_key in ("headline", "summary", "slug", "url", "published_at", "body"):
+                            if p.get(extra_key):
+                                entry[extra_key] = p[extra_key]
+                        cleaned.append(entry)
             return cleaned
+
+        newspapers_dict: dict[str, list[dict[str, Any]]]
+        if self.news_crawler is not None:
+            raw_news = await self.news_crawler.fetch_newspapers_snapshot(limit_per_site=5)
+            newspapers_dict = {
+                k: clean_post_list(v) for k, v in raw_news.items()
+            }
+        else:
+            daily_k_posts = await self.actuator.search("Daily Kingstonia", limit=5)
+            herald_posts = await self.actuator.search("Kingstonia Herald", limit=5)
+            newspapers_dict = {
+                "daily_kingstonia": clean_post_list(daily_k_posts),
+                "kingstonia_herald": clean_post_list(herald_posts),
+            }
+
+        vip_posts_raw = await self.actuator.search("journalist", limit=5)
 
         # 3. Account states and SQLite metrics from PersonaRouter
         accounts_info = []
@@ -109,10 +133,7 @@ class MacroStateCollector:
             "assigned_side": self.side,
             "trending_hashtags": trending_tags[:10],
             "trending_posts": trending_posts[:5],
-            "newspapers": {
-                "daily_kingstonia": clean_post_list(daily_k_posts),
-                "kingstonia_herald": clean_post_list(herald_posts),
-            },
+            "newspapers": newspapers_dict,
             "vip_npc_posts": clean_post_list(vip_posts_raw),
             "accounts": accounts_info,
             "allied_reply_stats": {

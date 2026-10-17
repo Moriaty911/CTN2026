@@ -76,6 +76,7 @@ class ActionKind(str, Enum):
     POST = "post"
     FOLLOW = "follow"
     UNFOLLOW = "unfollow"
+    REPORT = "report"
 
 
 class GuardVerdict(str, Enum):

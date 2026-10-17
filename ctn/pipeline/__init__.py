@@ -9,19 +9,38 @@ All platform calls go through `ctn.actuator.Actuator`, never the client directly
 """
 
 from .brain import BrainVerdict, JevLlmBrain
+from .crawl import (
+    CommentCrawler,
+    CommentReport,
+    FrontlineCrawler,
+    FrontlineReport,
+    audit_suspected_account,
+    run_periodic,
+)
 from .decide import alignment, decide, relevance
-from .loop import BotLoop, CycleReport
+from .loop import BotLoop, CommentStepReport, CycleReport
+from .news_crawler import NewsSitesCrawler
 from .perceive import DEFAULT_KEYWORDS, Observation, perceive
 
 __all__ = [
     "BrainVerdict",
     "JevLlmBrain",
+    "CommentCrawler",
+    "CommentReport",
+    "CommentStepReport",
+    "FrontlineCrawler",
+    "FrontlineReport",
+    "NewsSitesCrawler",
     "DEFAULT_KEYWORDS",
     "BotLoop",
     "CycleReport",
     "Observation",
     "alignment",
+    "audit_suspected_account",
     "decide",
     "perceive",
     "relevance",
+    "run_periodic",
 ]
+
+

@@ -76,10 +76,36 @@ class Actuator:
     async def get_post(self, post_id: str) -> dict[str, Any]:
         return await self._read("get_post", lambda: self._client.get_post(post_id), {})
 
-    async def get_comments(self, post_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
-        return await self._read(
-            "get_comments", lambda: self._client.get_comments(post_id, limit=limit), []
-        )
+    async def get_comments(
+        self, post_id: str, *, limit: int = 50, cursor: str | None = None
+    ) -> list[dict[str, Any]]:
+        async def _call() -> list[dict[str, Any]]:
+            if cursor:
+                try:
+                    return await self._client.get_comments(post_id, limit=limit, cursor=cursor)
+                except TypeError:
+                    pass
+            return await self._client.get_comments(post_id, limit=limit)
+
+        return await self._read("get_comments", _call, [])
+
+    async def get_account_posts(
+        self, target: str, *, limit: int = 50, cursor: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Fetch recent posts authored by `target` (`/accounts/{id}/posts`, 300/min bucket)."""
+        getter = getattr(self._client, "get_account_posts", None)
+        if getter is None:
+            return []
+
+        async def _call() -> list[dict[str, Any]]:
+            if cursor:
+                try:
+                    return await getter(target, limit=limit, cursor=cursor)
+                except TypeError:
+                    pass
+            return await getter(target, limit=limit)
+
+        return await self._read("get_account_posts", _call, [])
 
     async def get_feed(self, account: str, *, limit: int = 50) -> list[dict[str, Any]]:
         return await self._read(
@@ -135,6 +161,28 @@ class Actuator:
             ActionKind.UNFOLLOW, account, target,
             lambda: self._client.unfollow(account, target), decision_id,
         )
+
+    async def report(
+        self, account: str, post_id: str, *, reason: str = "", decision_id: str = ""
+    ) -> ActionResult:
+        return await self._write(
+            ActionKind.REPORT, account, post_id,
+            lambda: self._client.report(account, post_id, reason=reason), decision_id,
+        )
+
+    async def delete_account(self, account: str) -> dict[str, Any]:
+        """Delete a suspended or retired bot account (`DELETE /accounts/{id}`) to free its active slot."""
+        deleter = getattr(self._client, "delete_account", None)
+        if deleter is None or self.dry_run:
+            self.suspended.add(account)
+            return {"ok": True, "account": account, "status": "deleted", "dry_run": self.dry_run}
+        try:
+            res = await self._attempt(ActionGate.WRITE, account, lambda: deleter(account))
+            self.suspended.add(account)
+            return res if isinstance(res, dict) else {"ok": True, "account": account, "status": "deleted"}
+        except PlatformError as exc:
+            self._warn(f"delete_account {account} failed: {exc}", status=exc.status)
+            return {"ok": False, "account": account, "detail": str(exc)}
 
     # The team's vocabulary.
     comment = reply

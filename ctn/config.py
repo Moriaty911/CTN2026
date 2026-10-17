@@ -95,12 +95,14 @@ class PlatformConfig:
 class FleetConfig:
     """Account fleet.
 
-    2025 allowed 41 accounts per team (1 human-operated + 40 bots). The 2026
-    number is unconfirmed, so it is config rather than a hard-coded assumption.
-    Accounts are consumables: assume some get suspended mid-run.
+    2026 allows up to 200 accounts per team in total (`max_total_accounts`) and
+    at most 50 active accounts at once (`bot_accounts`). Deleting a suspended
+    account frees an active slot (50) while permanently counting against the
+    total allowance (200).
     """
 
-    bot_accounts: int = 40
+    bot_accounts: int = 50
+    max_total_accounts: int = 200
     primary_accounts: int = 1
     # A suspended account is parked for this long before we probe it again.
     suspend_cooldown_s: float = 3600.0
@@ -373,7 +375,8 @@ class Settings:
                 request_timeout_s=_env_float("CTN_PLATFORM_TIMEOUT_S", 20.0),
             ),
             fleet=FleetConfig(
-                bot_accounts=_env_int("CTN_BOT_ACCOUNTS", 40),
+                bot_accounts=_env_int("CTN_BOT_ACCOUNTS", 50),
+                max_total_accounts=_env_int("CTN_MAX_TOTAL_ACCOUNTS", 200),
                 primary_accounts=_env_int("CTN_PRIMARY_ACCOUNTS", 1),
             ),
             rate=RateConfig(
