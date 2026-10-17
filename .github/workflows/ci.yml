@@ -29,17 +29,23 @@ jobs:
     # A runner image change underneath a Docker build is not something to
     # discover mid-competition, so this stays on a fixed image.
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
-      # The verify stage runs the version guard and all 319 tests as part of
+      # The verify stage runs the version guard and the full offline suite as part of
       # the image build, so a failing suite fails this step.
       - name: Build verify stage (3.14 + version guard + offline tests)
         run: docker build --target verify -t ctn-verify .
 
-      # The runtime image is what actually deploys; confirm it also builds and
-      # that its default command starts cleanly.
-      - name: Build runtime stage and start it
-        run: |
-          docker build --target runtime -t ctn-runtime .
-          docker run --rm ctn-runtime
+      - name: Build runtime stage
+        run: docker build --target runtime -t ctn-runtime .
+
+      # The default command is a continuous service. CI uses its bounded mock
+      # mode without credentials, external networking, or host state volumes.
+      - name: Run one offline service cycle
+        timeout-minutes: 2
+        run: >-
+          docker run --rm --network none
+          -e CTN_MODE=mock -e CTN_DRY_RUN=true -e CTN_SIDE=yes
+          ctn-runtime python -m ctn.main --mock --side yes --once
