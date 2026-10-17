@@ -207,7 +207,7 @@ class TestStrategicPublisher(unittest.TestCase):
 
     def test_publish_blocked_by_account_cooldown(self):
         # Put account in cooldown
-        now = time.monotonic()
+        now = time.time()
         self.router.mark_used("bot_worker_yes", now=now)
 
         result = self.publisher.publish_sync(
@@ -301,20 +301,47 @@ class TestStrategicPublisher(unittest.TestCase):
 class TestMacroCli(unittest.TestCase):
     def test_cli_status(self):
         with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
-            code = main(["--state-file", tmp.name, "status"])
+            code = main(["--mock", "--state-file", tmp.name, "status"])
             self.assertEqual(code, 0)
 
     def test_cli_warmup_and_persistence(self):
         with tempfile.NamedTemporaryFile(suffix=".json") as tmp:
             tmp_path = Path(tmp.name)
             # Run warmup command
-            code = main(["--state-file", str(tmp_path), "warmup", "--account", "bot_worker_yes", "--dry-run"])
+            code = main(["--mock", "--state-file", str(tmp_path), "warmup", "--account", "bot_worker_yes", "--dry-run"])
             self.assertEqual(code, 0)
 
             # Verify state was saved to file
             router = _load_router("yes", tmp_path)
             state = router.get_state("bot_worker_yes")
             self.assertEqual(state.post_count, 1)
+
+    def test_setup_environment_switches_between_official_and_mock_client(self):
+        from unittest.mock import patch
+        from ctn.client.legit_v1 import OfficialLegitClient
+        from ctn.macro.cli import _setup_environment
+        from ctn.storage import StateStore
+
+        store = StateStore(":memory:")
+        self.addCleanup(store.close)
+
+        # When CTN_PLATFORM_API_KEY is configured, _setup_environment wires OfficialLegitClient
+        with patch.dict(
+            "os.environ",
+            {
+                "CTN_PLATFORM_URL": "https://social.legitreal.com/api",
+                "CTN_PLATFORM_API_KEY": "team_secret_key_2026",
+            },
+        ):
+            actuator_live, _ = _setup_environment(dry_run=True, store=store)
+            self.assertIsInstance(actuator_live._client, OfficialLegitClient)
+            self.assertEqual(actuator_live._client.team_key, "team_secret_key_2026")
+            self.assertTrue(actuator_live._client.auto_register)
+            self.assertIs(actuator_live._client.store, store)
+
+            # With force_mock=True, falls back to MockLegitClient
+            actuator_mock, _ = _setup_environment(dry_run=True, store=store, force_mock=True)
+            self.assertIsInstance(actuator_mock._client, MockLegitClient)
 
 
 if __name__ == "__main__":

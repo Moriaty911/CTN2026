@@ -36,7 +36,7 @@ class MacroStateCollector:
 
     async def collect(self) -> dict[str, Any]:
         """Query platform endpoints and account state machine to build a macro snapshot."""
-        now_monotonic = time.monotonic()
+        now_ts = time.time()
         now_iso = datetime.now(timezone.utc).isoformat()
 
         # 1. Fetch trending items
@@ -112,8 +112,8 @@ class MacroStateCollector:
         for p in candidates:
             state = self.router.get_state(p.account_id)
             metrics = self.router.store.get_account_metrics(p.account_id)
-            in_cd = state.is_in_cooldown(now_monotonic, p.cooldown_s)
-            rem_cd = state.remaining_cooldown(now_monotonic, p.cooldown_s)
+            in_cd = state.is_in_cooldown(now_ts, p.cooldown_s)
+            rem_cd = state.remaining_cooldown(now_ts, p.cooldown_s)
             accounts_info.append({
                 "account_id": p.account_id,
                 "name": p.name,

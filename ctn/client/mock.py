@@ -297,24 +297,39 @@ class MockLegitClient:
         post.reposts += 1
         return {"ok": True, "post_id": post_id}
 
-    async def reply(self, account: str, post_id: str, text: str) -> dict[str, Any]:
+    async def reply(
+        self,
+        account: str,
+        post_id: str,
+        text: str,
+        *,
+        root_post_id: int | str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         self._check_account(account)
         await self._simulate(write=True)
         parent = self.posts.get(post_id)
         if parent is not None:
             parent.replies += 1
+        root_id = str(root_post_id).strip() if root_post_id is not None else ""
         reply = MockPost(
             post_id=uuid.uuid4().hex[:12],
             author=account,
             text=text,
             created_at=time.time(),
             hashtags=[w for w in text.split() if w.startswith("#")],
-            parent_id=post_id,
+            parent_id=root_id or post_id,
         )
         self.posts[reply.post_id] = reply
         self.comments.setdefault(post_id, []).append(reply)
+        if root_id and root_id != post_id:
+            self.comments.setdefault(root_id, []).append(reply)
         await self._record_write(reply)
-        return self._as_dict(reply)
+        out = self._as_dict(reply)
+        if root_id:
+            out["root_post_id"] = root_id
+            out["reply_to_post_id"] = post_id
+        return out
 
     async def like(self, account: str, post_id: str) -> dict[str, Any]:
         self._check_account(account)

@@ -88,9 +88,9 @@ class PersonaRouter:
 
     def get_state(self, account_id: str) -> AccountState:
         """Return or create the runtime state for an account, synchronized with SQLite."""
-        if account_id not in self._states:
-            self._states[account_id] = self.store.get_account_state(account_id)
-        return self._states[account_id]
+        state = self.store.get_account_state(account_id)
+        self._states[account_id] = state
+        return state
 
     def mark_used(
         self,
@@ -100,7 +100,7 @@ class PersonaRouter:
         target_stance: str = "",
     ) -> None:
         """Record that an account just published a post or reply and persist to SQLite."""
-        current_time = time.monotonic() if now is None else now
+        current_time = time.time() if now is None else now
         state = self.get_state(account_id)
         state.mark_used(current_time)
         self.store.save_account_state(state, target_stance=target_stance)
@@ -178,6 +178,8 @@ class PersonaRouter:
             scores["sharp_debater"] += 0.6
         if emotion_val >= 2.0:
             scores["sharp_debater"] += 0.3
+        if prompt_type == "P03":
+            scores["sharp_debater"] += 0.2
         if any(w in text_lower for w in _SHARP_KEYWORDS):
             scores["sharp_debater"] += 0.4
 
@@ -186,12 +188,16 @@ class PersonaRouter:
             scores["medical_expert"] += 0.6
         if fact_check_val >= 0.5:
             scores["medical_expert"] += 0.3
+        if prompt_type in ("P02", "P07"):
+            scores["medical_expert"] += 0.2
         if any(w in text_lower for w in _MEDICAL_KEYWORDS):
             scores["medical_expert"] += 0.3
 
         # 3. Policy analyst heuristics
         if prompt_type in ("P04", "P05", "P08"):
             scores["policy_analyst"] += 0.3
+        elif prompt_type in ("P02", "P03"):
+            scores["policy_analyst"] += 0.2
         if topic in ("public_access", "economic_effects", "voting_process"):
             scores["policy_analyst"] += 0.4
         if claim_kind == "policy_proposal":
@@ -202,6 +208,8 @@ class PersonaRouter:
         # 4. Grassroots worker heuristics
         if func in ("experience", "call_to_action"):
             scores["grassroots_worker"] += 0.5
+        if prompt_type == "P07":
+            scores["grassroots_worker"] += 0.25
         if topic in ("personal_experience", "personal_choice"):
             scores["grassroots_worker"] += 0.4
         if any(w in text_lower for w in _GRASSROOTS_KEYWORDS):
@@ -220,7 +228,7 @@ class PersonaRouter:
         complementary: bool | None = None,
     ) -> RoutingDecision:
         """Match target post to best available persona, handling disabled accounts, cooldown, fallbacks, and allied complementarity."""
-        current_time = time.monotonic() if now is None else now
+        current_time = time.time() if now is None else now
         target_side = (side or self.default_side).lower()
 
         # Retrieve candidate personas assigned to the side

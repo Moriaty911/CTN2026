@@ -11,6 +11,7 @@ Maintains six core tables:
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 import hashlib
 import json
@@ -19,7 +20,7 @@ import re
 import sqlite3
 import threading
 import time
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 from zoneinfo import ZoneInfo
 
 from ctn.persona.models import AccountState
@@ -89,6 +90,12 @@ CREATE TABLE IF NOT EXISTS observed_posts (
 CREATE INDEX IF NOT EXISTS idx_observed_posts_author
     ON observed_posts(author, first_seen_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_observed_posts_author_created
+    ON observed_posts(author, created_at ASC);
+
+CREATE INDEX IF NOT EXISTS idx_observed_posts_first_seen
+    ON observed_posts(first_seen_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_observed_posts_norm_hash
     ON observed_posts(norm_hash, post_id);
 
@@ -115,6 +122,9 @@ CREATE TABLE IF NOT EXISTS bot_registry (
 
 CREATE INDEX IF NOT EXISTS idx_bot_registry_status
     ON bot_registry(status, suspicion_score DESC);
+
+CREATE INDEX IF NOT EXISTS idx_bot_registry_suspended
+    ON bot_registry(is_suspended, status);
 
 CREATE INDEX IF NOT EXISTS idx_bot_registry_platform_id
     ON bot_registry(platform_account_id);
@@ -187,17 +197,44 @@ class StateStore:
         self.db_path = str(db_path)
         self._lock = threading.RLock()
         self._closed = False
+        self._batch_depth = 0
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=10.0)
         self._conn.row_factory = sqlite3.Row
         with self._lock:
+            self._conn.execute("PRAGMA temp_store=MEMORY;")
             if self.db_path != ":memory:":
                 self._conn.execute("PRAGMA journal_mode=WAL;")
                 self._conn.execute("PRAGMA synchronous=NORMAL;")
                 self._conn.execute("PRAGMA busy_timeout=5000;")
                 self._conn.execute("PRAGMA cache_size=-32000;")
+                self._conn.execute("PRAGMA mmap_size=67108864;")
             self._conn.executescript(_SCHEMA_SQL)
             self._ensure_columns()
             self._conn.commit()
+
+    def _commit(self) -> None:
+        """Commit immediately unless inside an active `batch_transaction()` block."""
+        if self._batch_depth <= 0:
+            self._conn.commit()
+
+    @contextlib.contextmanager
+    def batch_transaction(self) -> Iterator[None]:
+        """Group multiple SQLite mutations into a single atomic commit on outermost exit."""
+        with self._lock:
+            self._batch_depth += 1
+            try:
+                yield
+            except Exception:
+                self._batch_depth -= 1
+                if self._batch_depth <= 0:
+                    self._batch_depth = 0
+                    self._conn.rollback()
+                raise
+            else:
+                self._batch_depth -= 1
+                if self._batch_depth <= 0:
+                    self._batch_depth = 0
+                    self._conn.commit()
 
     def _ensure_columns(self) -> None:
         """Ensure newly added columns exist on older SQLite database files."""
@@ -235,6 +272,14 @@ class StateStore:
             "CREATE INDEX IF NOT EXISTS idx_observed_posts_crawl_queue "
             "ON observed_posts(parent_id, replies, replies_crawled)"
         )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_observed_posts_author_created "
+            "ON observed_posts(author, created_at ASC)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_observed_posts_first_seen "
+            "ON observed_posts(first_seen_at DESC)"
+        )
 
         bot_cols = {
             str(row["name"])
@@ -247,6 +292,10 @@ class StateStore:
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_bot_registry_platform_id "
             "ON bot_registry(platform_account_id)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bot_registry_suspended "
+            "ON bot_registry(is_suspended, status)"
         )
 
         managed_cols = {
@@ -858,7 +907,7 @@ class StateStore:
 
         with self._lock:
             existing = self._conn.execute(
-                "SELECT post_id, replies FROM observed_posts WHERE post_id = ?",
+                "SELECT * FROM observed_posts WHERE post_id = ?",
                 (post_id,),
             ).fetchone()
             is_new = existing is None
@@ -888,41 +937,76 @@ class StateStore:
                         parent_id,
                     ),
                 )
+                record: dict[str, Any] = {
+                    "post_id": post_id,
+                    "author": author,
+                    "author_id": author_id,
+                    "created_at": created_at,
+                    "first_seen_at": ts,
+                    "last_seen_at": ts,
+                    "norm_hash": norm_hash,
+                    "text": text,
+                    "likes": likes,
+                    "replies": replies,
+                    "reposts": reposts,
+                    "is_reported": False,
+                    "raw_json": raw_json,
+                    "parent_id": parent_id,
+                    "replies_crawled": 0,
+                    "comment_cursor": "",
+                    "comments_crawled_at": 0.0,
+                    "raw": raw_dict,
+                }
             else:
+                eff_author = author if author != "" else str(existing["author"])
+                eff_author_id = author_id if author_id > 0 else int(existing["author_id"])
+                eff_parent_id = parent_id if parent_id != "" else str(existing["parent_id"])
                 self._conn.execute(
                     """
                     UPDATE observed_posts SET
-                        author = CASE WHEN ? != '' THEN ? ELSE author END,
-                        author_id = CASE WHEN ? > 0 THEN ? ELSE author_id END,
+                        author = ?,
+                        author_id = ?,
                         last_seen_at = ?,
                         likes = ?,
                         replies = ?,
                         reposts = ?,
                         raw_json = ?,
-                        parent_id = CASE WHEN ? != '' THEN ? ELSE parent_id END
+                        parent_id = ?
                     WHERE post_id = ?
                     """,
                     (
-                        author,
-                        author,
-                        author_id,
-                        author_id,
+                        eff_author,
+                        eff_author_id,
                         ts,
                         likes,
                         replies,
                         reposts,
                         raw_json,
-                        parent_id,
-                        parent_id,
+                        eff_parent_id,
                         post_id,
                     ),
                 )
-            self._conn.commit()
-            row = self._conn.execute(
-                "SELECT * FROM observed_posts WHERE post_id = ?",
-                (post_id,),
-            ).fetchone()
-            record = self._unpack_observed_row(row)
+                record = {
+                    "post_id": post_id,
+                    "author": eff_author,
+                    "author_id": eff_author_id,
+                    "created_at": float(existing["created_at"]),
+                    "first_seen_at": float(existing["first_seen_at"]),
+                    "last_seen_at": ts,
+                    "norm_hash": str(existing["norm_hash"]),
+                    "text": str(existing["text"]),
+                    "likes": likes,
+                    "replies": replies,
+                    "reposts": reposts,
+                    "is_reported": bool(existing["is_reported"]),
+                    "raw_json": raw_json,
+                    "parent_id": eff_parent_id,
+                    "replies_crawled": int(existing["replies_crawled"]),
+                    "comment_cursor": str(existing["comment_cursor"]),
+                    "comments_crawled_at": float(existing["comments_crawled_at"]),
+                    "raw": raw_dict,
+                }
+            self._commit()
             # Layer-1 hint for the background comment crawler: how many replies appeared since
             # the previous sighting, and how many are still not crawled in total.
             record["replies_delta"] = max(0, replies - prev_replies) if not is_new else replies
@@ -1000,7 +1084,7 @@ class StateStore:
                 """,
                 (new_count, new_cursor, ts, post_id),
             )
-            self._conn.commit()
+            self._commit()
             row = self._conn.execute(
                 "SELECT * FROM observed_posts WHERE post_id = ?", (post_id,)
             ).fetchone()
@@ -1232,7 +1316,7 @@ class StateStore:
                     """,
                     (acc_id, platform_id, status, ts, ts),
                 )
-            self._conn.commit()
+            self._commit()
 
     def get_bot_profile(self, account_id: str) -> dict[str, Any]:
         """Fetch an account's intelligence profile from bot_registry (returns default unknown profile if absent)."""
@@ -1276,6 +1360,7 @@ class StateStore:
         promote_threshold: float = 90.0,
         suspect_threshold: float = 50.0,
         min_bot_interval_s: float = 15.0,
+        has_valid_timestamp: bool = True,
         now: float | None = None,
     ) -> dict[str, Any]:
         """Update an author's behavioral metrics and suspicion score in bot_registry.
@@ -1298,8 +1383,8 @@ class StateStore:
                         "UPDATE bot_registry SET platform_account_id = ? WHERE account_id = ?",
                         (pid, account_id),
                     )
-                    self._conn.commit()
-                    return self.get_bot_profile(account_id)
+                    self._commit()
+                    prof["platform_account_id"] = pid
                 return prof
 
             prev_last = float(prof["last_seen_at"] or 0.0)
@@ -1308,11 +1393,28 @@ class StateStore:
                 if prof["first_seen_at"] > 0
                 else ts
             )
+            last_seen = max(prev_last, ts) if prev_last > 0 else ts
             post_count = int(prof["post_seen_count"]) + 1
             q_count = int(prof["question_post_count"]) + (1 if is_question else 0)
             fast_count = int(prof["fast_interval_count"])
-            if prev_last > 0 and abs(ts - prev_last) <= min_bot_interval_s:
+            if has_valid_timestamp and prev_last > 0 and abs(ts - prev_last) <= min_bot_interval_s:
                 fast_count += 1
+
+            # Also evaluate sorted creation timestamps from `observed_posts` so reverse-chronological
+            # or out-of-order feed/audit ingestion never misses sub-15s rapid-fire intervals.
+            rows_ts = self._conn.execute(
+                "SELECT created_at FROM observed_posts WHERE author = ? AND created_at > 0 ORDER BY created_at ASC",
+                (account_id,),
+            ).fetchall()
+            if len(rows_ts) >= 2:
+                times = [float(r["created_at"]) for r in rows_ts]
+                obs_fast = sum(
+                    1
+                    for i in range(1, len(times))
+                    if (times[i] - times[i - 1]) <= min_bot_interval_s
+                )
+                if obs_fast > fast_count:
+                    fast_count = obs_fast
 
             evidence: list[str] = list(prof["evidence"])
             if evidence_tag and evidence_tag not in evidence:
@@ -1344,6 +1446,7 @@ class StateStore:
                 elif score >= suspect_threshold or cur_status == "suspected_bot":
                     new_status = "suspected_bot"
 
+            rounded_score = round(score, 2)
             ev_json = json.dumps(evidence, ensure_ascii=False)
             self._conn.execute(
                 """
@@ -1373,7 +1476,7 @@ class StateStore:
                     account_id,
                     pid,
                     new_status,
-                    round(score, 2),
+                    rounded_score,
                     new_side,
                     new_team,
                     post_count,
@@ -1383,12 +1486,29 @@ class StateStore:
                     int(prof["upheld_strikes"]),
                     int(prof["is_suspended"]),
                     first_seen,
-                    ts,
+                    last_seen,
                     ev_json,
                 ),
             )
-            self._conn.commit()
-            return self.get_bot_profile(account_id)
+            self._commit()
+            return {
+                "account_id": account_id,
+                "platform_account_id": pid,
+                "status": new_status,
+                "suspicion_score": rounded_score,
+                "inferred_side": new_side,
+                "inferred_team": new_team,
+                "post_seen_count": post_count,
+                "question_post_count": q_count,
+                "fast_interval_count": fast_count,
+                "reports_submitted": int(prof["reports_submitted"]),
+                "upheld_strikes": int(prof["upheld_strikes"]),
+                "is_suspended": bool(prof["is_suspended"]),
+                "first_seen_at": first_seen,
+                "last_seen_at": last_seen,
+                "evidence_json": ev_json,
+                "evidence": evidence,
+            }
 
     def add_bot_evidence(
         self,
@@ -1440,6 +1560,7 @@ class StateStore:
 
             first_seen = float(prof["first_seen_at"]) if float(prof["first_seen_at"]) > 0 else ts
             last_seen = max(float(prof["last_seen_at"] or 0.0), ts)
+            rounded_score = round(score, 2)
             ev_json = json.dumps(evidence, ensure_ascii=False)
             self._conn.execute(
                 """
@@ -1466,7 +1587,7 @@ class StateStore:
                     account_id,
                     pid,
                     new_status,
-                    round(score, 2),
+                    rounded_score,
                     new_side,
                     new_team,
                     int(prof["post_seen_count"]),
@@ -1480,8 +1601,25 @@ class StateStore:
                     ev_json,
                 ),
             )
-            self._conn.commit()
-            return self.get_bot_profile(account_id)
+            self._commit()
+            return {
+                "account_id": account_id,
+                "platform_account_id": pid,
+                "status": new_status,
+                "suspicion_score": rounded_score,
+                "inferred_side": new_side,
+                "inferred_team": new_team,
+                "post_seen_count": int(prof["post_seen_count"]),
+                "question_post_count": int(prof["question_post_count"]),
+                "fast_interval_count": int(prof["fast_interval_count"]),
+                "reports_submitted": int(prof["reports_submitted"]),
+                "upheld_strikes": int(prof["upheld_strikes"]),
+                "is_suspended": bool(prof["is_suspended"]),
+                "first_seen_at": first_seen,
+                "last_seen_at": last_seen,
+                "evidence_json": ev_json,
+                "evidence": evidence,
+            }
 
     def list_bots_by_status(self, status: str) -> list[dict[str, Any]]:
         """List all accounts in bot_registry matching `status`, ordered by suspicion_score descending."""

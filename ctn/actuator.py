@@ -137,11 +137,26 @@ class Actuator:
         )
 
     async def reply(
-        self, account: str, post_id: str, text: str, *, decision_id: str = ""
+        self,
+        account: str,
+        post_id: str,
+        text: str,
+        *,
+        root_post_id: int | str | None = None,
+        decision_id: str = "",
     ) -> ActionResult:
+        async def _call() -> dict[str, Any]:
+            if root_post_id is not None and str(root_post_id).strip():
+                try:
+                    return await self._client.reply(
+                        account, post_id, text, root_post_id=root_post_id
+                    )
+                except TypeError:
+                    pass
+            return await self._client.reply(account, post_id, text)
+
         return await self._write(
-            ActionKind.REPLY, account, post_id,
-            lambda: self._client.reply(account, post_id, text), decision_id,
+            ActionKind.REPLY, account, post_id, _call, decision_id,
         )
 
     async def post(self, account: str, text: str, *, decision_id: str = "", **kwargs: Any) -> ActionResult:

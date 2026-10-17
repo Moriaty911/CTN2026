@@ -5,7 +5,7 @@ import unittest
 from ctn.actuator import Actuator
 from ctn.client.mock import MockLegitClient
 from ctn.config import BudgetConfig, RateConfig
-from ctn.models import Side
+from ctn.models import Post, Side
 from ctn.moderation import BlueTeamReporter, BotDetector
 from ctn.pipeline.crawl import CommentCrawler, FrontlineCrawler
 from ctn.pipeline.loop import BotLoop
@@ -399,6 +399,135 @@ class BlueTeamReporterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             det_reborn.inferred_team,
             self.store.get_bot_profile("exposed_bot_b")["inferred_team"],
+        )
+
+    async def test_reverse_chronological_rapid_fire_and_timeless_post_guard(self):
+        # 1. Reverse-chronological ingestion (as returned by GET /posts?sort=recent):
+        #    t=1030, t=1022, t=1010, t=1000 (intervals 10s, 12s, 8s <= 15s)
+        for idx, ts in enumerate((1030.0, 1022.0, 1010.0, 1000.0)):
+            p = Post(
+                post_id=f"rev_rf_{idx}",
+                author="reverse_burst_bot",
+                text=f"Unique statement {idx} on harbour freight schedules and dock safety.",
+                created_at=ts,
+            )
+            self.detector.inspect_post(p, record_observation=True, now=2000.0)
+
+        prof = self.store.get_bot_profile("reverse_burst_bot")
+        self.assertEqual(prof["status"], "confirmed_bot")
+        self.assertEqual(prof["fast_interval_count"], 3)
+        self.assertAlmostEqual(prof["first_seen_at"], 1000.0)
+        self.assertAlmostEqual(prof["last_seen_at"], 1030.0)
+        self.assertIn("rapid_fire_posting", prof["evidence"])
+        self.assertIn("a2_sustained_rapid_fire_3x", prof["evidence"])
+
+        # 2. Timeless posts (created_at=0.0) ingested in the same crawl batch must NOT
+        #    falsely increment fast_interval_count.
+        from ctn.pipeline.crawl import _ingest
+
+        for idx in range(3):
+            timeless = Post(
+                post_id=f"timeless_{idx}",
+                author="ordinary_citizen_timeless",
+                text=f"Ordinary note {idx} about local park maintenance in Kingstonia.",
+                created_at=0.0,
+            )
+            _ingest(self.store, timeless, now=3000.0, detector=self.detector)
+
+        prof_tl = self.store.get_bot_profile("ordinary_citizen_timeless")
+        self.assertEqual(prof_tl["fast_interval_count"], 0)
+        self.assertEqual(prof_tl["status"], "unknown")
+
+    async def test_multi_thread_booster_ring_promotes_to_confirmed_bot_without_flagging_parent_author(self):
+        # Three parent threads authored by an ordinary citizen (not in verified_npc list)
+        for tid in ("parent_t1", "parent_t2", "parent_t3"):
+            self.store.upsert_observed_post(
+                Post(
+                    post_id=tid,
+                    author="innocent_citizen_op",
+                    text=f"Discussion thread {tid} about ferry timetables.",
+                    created_at=100.0,
+                ),
+                now=100.0,
+            )
+
+        # Two coordinated boosters reply within 5s of each other across all 3 threads
+        for idx, (tid, base_ts) in enumerate(
+            (("parent_t1", 200.0), ("parent_t2", 300.0), ("parent_t3", 400.0))
+        ):
+            c1 = {
+                "post_id": f"ring_a_{idx}",
+                "author": "ring_bot_a",
+                "text": f"Distinct comment A{idx} supporting the harbour expansion.",
+                "created_at": base_ts,
+                "parent_id": tid,
+            }
+            c2 = {
+                "post_id": f"ring_b_{idx}",
+                "author": "ring_bot_b",
+                "text": f"Completely different phrasing B{idx} backing the dock plan.",
+                "created_at": base_ts + 4.0,
+                "parent_id": tid,
+            }
+            self.detector.inspect_post(c1, record_observation=True, now=base_ts)
+            det_b = self.detector.inspect_post(c2, record_observation=True, now=base_ts + 4.0)
+            if idx == 1:
+                # After 2 threads: suspected_bot (60.0)
+                self.assertEqual(det_b.status, "suspected_bot")
+            elif idx == 2:
+                # After 3 threads: confirmed_bot (100.0) via s4_coordinated_booster_ring
+                self.assertEqual(det_b.status, "confirmed_bot")
+                self.assertIn("s4_coordinated_booster_ring", det_b.triggered_tags)
+
+        self.assertEqual(self.store.get_bot_profile("ring_bot_a")["status"], "confirmed_bot")
+        self.assertEqual(self.store.get_bot_profile("ring_bot_b")["status"], "confirmed_bot")
+        # Innocent parent post author must never be penalized
+        op_prof = self.store.get_bot_profile("innocent_citizen_op")
+        self.assertEqual(op_prof["status"], "unknown")
+        self.assertEqual(op_prof["suspicion_score"], 0.0)
+
+    async def test_cross_team_dynamic_tier0_before_tier1_prioritization(self):
+        day = "2026-10-17"
+        # Pre-seed 3 reports against team_alpha on `day` so team_alpha starts at daily_cnt=3 (Tier 0)
+        for i in range(3):
+            self.store.log_report(
+                f"prior_alpha_{i}",
+                "alpha_bot_0",
+                target_team="team_alpha",
+                target_side="no",
+                outcome="upheld",
+                sydney_day=day,
+                now=1000.0 + i,
+            )
+
+        # Register 2 active bots in team_alpha (higher suspicion score 99 & 98) and 1 bot in team_beta (score 92)
+        for handle, team, score in (
+            ("alpha_bot_1", "team_alpha", 99.0),
+            ("alpha_bot_2", "team_alpha", 98.0),
+            ("beta_bot_1", "team_beta", 92.0),
+        ):
+            self.store.record_author_observation(
+                handle,
+                inferred_side="no",
+                inferred_team=team,
+                suspicion_delta=score,
+                evidence_tag="s1_ai_or_injection_leak",
+                force_status="confirmed_bot",
+                now=2000.0,
+            )
+            for p_idx in range(3):
+                p = await self.client.post(handle, f"Post {p_idx} from {handle} on the referendum.")
+                self.store.upsert_observed_post(p, now=2000.0 + p_idx)
+
+        # Cap step budget at 6 reports (2 full bots x 3 strikes):
+        # 1st bot reported should be alpha_bot_1 (starts in Tier 0 with score 99, brings team_alpha from 3 -> 6 = Tier 1).
+        # 2nd bot reported MUST be beta_bot_1 (still in Tier 0 = 100% reward), NOT alpha_bot_2 (now in Tier 1 = 50% reward)!
+        self.reporter.max_reports_per_step = 6
+        batch = await self.reporter.sweep_and_report(sydney_day=day, now=3000.0)
+        reported_order = [a.target_author for a in batch.attempts if a.ok]
+        self.assertEqual(
+            reported_order,
+            ["alpha_bot_1", "alpha_bot_1", "alpha_bot_1", "beta_bot_1", "beta_bot_1", "beta_bot_1"],
         )
 
 

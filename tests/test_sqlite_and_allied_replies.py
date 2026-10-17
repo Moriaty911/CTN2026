@@ -601,6 +601,41 @@ class Stage3SQLiteHistoryAndReportingTests(unittest.TestCase):
         self.assertFalse(can_after_reject)
         self.assertTrue(reject_reason.startswith("reporting_suspended:"))
 
+    def test_batch_transaction_reentrancy_and_covering_indexes(self):
+        # 1. Nested batch_transaction commits atomically on outermost exit
+        with self.store.batch_transaction():
+            self.store.upsert_observed_post(
+                {"post_id": "bt_1", "author": "bt_user", "text": "Batch post one", "created_at": 100.0},
+                now=100.0,
+            )
+            with self.store.batch_transaction():
+                self.store.record_author_observation("bt_user", now=100.0)
+                self.store.add_bot_evidence("bt_user", suspicion_delta=20.0, evidence_tags=["tag_a"], now=100.0)
+
+        self.assertIsNotNone(self.store.get_observed_post("bt_1"))
+        prof = self.store.get_bot_profile("bt_user")
+        self.assertEqual(prof["post_seen_count"], 1)
+        self.assertEqual(prof["suspicion_score"], 20.0)
+
+        # 2. Unhandled exception inside batch_transaction rolls back uncommitted writes in that batch
+        with self.assertRaises(RuntimeError):
+            with self.store.batch_transaction():
+                self.store.upsert_observed_post(
+                    {"post_id": "bt_rollback", "author": "bt_user", "text": "Should roll back", "created_at": 200.0},
+                    now=200.0,
+                )
+                raise RuntimeError("simulated batch failure")
+
+        self.assertIsNone(self.store.get_observed_post("bt_rollback"))
+
+        # 3. Verify covering index `idx_observed_posts_author_created` exists and is used by SQLite query planner
+        plan_rows = self.store._conn.execute(
+            "EXPLAIN QUERY PLAN SELECT created_at FROM observed_posts WHERE author = ? AND created_at > 0 ORDER BY created_at ASC",
+            ("bt_user",),
+        ).fetchall()
+        plan_detail = " ".join(str(r["detail"]) for r in plan_rows)
+        self.assertIn("idx_observed_posts_author_created", plan_detail)
+
 
 if __name__ == "__main__":
     unittest.main()

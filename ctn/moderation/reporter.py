@@ -171,7 +171,9 @@ class BlueTeamReporter:
         remote_posts = await self.actuator.get_account_posts(author, limit=fetch_limit)
         for rp in remote_posts:
             if isinstance(rp, dict) and rp.get("post_id"):
-                self.store.upsert_observed_post(rp, now=now)
+                rp_author = str(rp.get("author") or rp.get("username") or author).strip()
+                if rp_author == author:
+                    self.store.upsert_observed_post(rp, now=now)
         return self.store.get_author_posts(
             author, limit=needed_strikes, unreported_only=True
         )
@@ -224,21 +226,20 @@ class BlueTeamReporter:
                     by_handle[sib] = self.store.get_bot_profile(sib)
 
         # Filter to accounts that still need strikes to reach permanent 3-strike suspension
-        active_candidates = [
+        remaining_candidates = [
             p
             for p in by_handle.values()
             if not p.get("is_suspended")
             and int(p.get("upheld_strikes") or 0) < self.max_strikes_per_account
             and int(p.get("reports_submitted") or 0) < self.max_strikes_per_account
         ]
-        active_candidates.sort(
-            key=lambda p: self._candidate_priority(p, sydney_day=day_str, now=ts)
-        )
 
         reports_sent = 0
-        for prof in active_candidates:
-            if reports_sent >= step_budget:
-                break
+        while remaining_candidates and reports_sent < step_budget:
+            remaining_candidates.sort(
+                key=lambda p: self._candidate_priority(p, sydney_day=day_str, now=ts)
+            )
+            prof = remaining_candidates.pop(0)
 
             author = str(prof["account_id"])
             team = str(prof.get("inferred_team") or "")

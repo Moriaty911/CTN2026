@@ -94,7 +94,14 @@ class LegitClient(Protocol):
 
     async def repost(self, account: str, post_id: str) -> dict[str, Any]: ...
 
-    async def reply(self, account: str, post_id: str, text: str) -> dict[str, Any]: ...
+    async def reply(
+        self,
+        account: str,
+        post_id: str,
+        text: str,
+        *,
+        root_post_id: int | str | None = None,
+    ) -> dict[str, Any]: ...
 
     async def like(self, account: str, post_id: str) -> dict[str, Any]: ...
 

@@ -37,12 +37,24 @@ _ENGLISH_WORD_PATTERN = re.compile(r"[a-zA-Z]{2,}")
 # Unified dictionary of Micro reply purposes and Macro proactive decision-tree branches
 PURPOSE_RULES: dict[str, str] = {
     # Micro reactive reply purposes
+    "P02": (
+        "Purpose P02 (Direct Answer & Bridge): Answer the focal question directly and civilly from our "
+        "referendum perspective while retaining relevant qualifications."
+    ),
+    "P03": (
+        "Purpose P03 (Substantive Argument & Framing): Address the central claim or media framing fairly "
+        "and respond with a grounded, civil reason supporting our perspective."
+    ),
+    "P07": (
+        "Purpose P07 (Empathy & Concern Response): Acknowledge the expressed concern with genuine empathy "
+        "and calmly address the substantive issue from our perspective."
+    ),
     "P08": (
         "Purpose P08 (Focused Clarification): Ask one concise, civil clarifying question about the "
         "specific policy detail, condition, or evidence without conceding to opposing claims."
     ),
-    # Macro proactive original post branches
-    "P01": "Proactive original post clearly supporting our referendum stance in a natural voice.",
+    # Macro proactive original post / allied support branches
+    "P01": "Proactive original post or allied reply clearly supporting our referendum stance in a natural voice.",
     "branch_A": (
         "Branch A (Majority Momentum): Expand our lead around a top trending tag and an eye-catching "
         "supportive hashtag using concrete examples, questions, and colloquial persona voice."

@@ -13,22 +13,24 @@ the loop calls `athink`, which runs it in a worker thread. A draft is only a
 draft: `execution_authorized` stays False inside the JEV/LLM modules, and it is
 the loop's pre-publish check plus the Actuator's gate that decide what is sent.
 
-Limitation (stage 1): the only purpose we can brief without a trusted evidence
-store is P08 (ask one focused clarifying question). When JEV itself selects a
-different purpose for a neutral/mixed post we do not have the materials for it
-yet, so the post is skipped with an explicit reason instead of faking evidence.
-The RAG/talking-point store is what will unlock P01/P02/P03/P07.
+Supported reply purposes:
+- P01 (support): Allied cross-persona reinforcement (gated by 3-level SQLite valve).
+- P02 (answer): Direct, civil answer to neutral/mixed/opposing focal questions.
+- P03 (argument): Fair representation and counter/bridge for substantive claims or media framing.
+- P07 (concern): Empathetic acknowledgment and calm reassurance for personal concerns.
+- P08 (clarify): Single focused clarifying question for ambiguous or venting posts.
 """
 
 from __future__ import annotations
 
 import asyncio
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
 
 from ..jev import (
+    ActionPolicy,
     JevPostflightChecker,
     JevWorkflow,
     MaterialBrief,
@@ -39,9 +41,63 @@ from ..jev import (
 from ..llm import DraftOptions, ReplyGenerator
 from ..models import ActionKind, Decision, JevAnswers, Post, Side, Tier
 from ..persona import PersonaRouter
+from ..persona.router import _extract_jev_answers, _get_val
 
 # Generic gap used for the P08 clarification brief. It deliberately assumes no facts.
 DEFAULT_INFORMATION_GAP = "Which specific policy detail, condition or evidence does the author mean?"
+
+SUPPORTED_REPLY_PURPOSES: tuple[str, ...] = ("P01", "P02", "P03", "P07", "P08")
+
+_PURPOSE_SUPPORT_USE: dict[str, str] = {
+    "P01": "addition",
+    "P02": "answer_basis",
+    "P03": "argument_basis",
+    "P07": "response_basis",
+}
+
+DEFAULT_PLATFORM_LEVELS: tuple[tuple[str, str], ...] = (
+    ("standard", "standard"),
+    ("citizen", "standard"),
+    ("unverified", "standard"),
+    ("test-standard", "standard"),
+    ("high", "high"),
+    ("verified", "high"),
+    ("vip", "high"),
+    ("doctor", "high"),
+    ("official", "high"),
+    ("newspaper", "high"),
+    ("test-high", "high"),
+)
+
+_HIGH_LEVEL_SYNONYMS: frozenset[str] = frozenset(
+    {"high", "verified", "vip", "doctor", "official", "newspaper", "test-high"}
+)
+
+_VIP_HANDLES: frozenset[str] = frozenset({"daily_kingstonia", "kingstonia_herald"})
+_VIP_PREFIXES: tuple[str, ...] = (
+    "mayor_",
+    "dr_",
+    "prof_",
+    "senator_",
+    "minister_",
+    "official_",
+    "council_",
+)
+
+_CONCERN_MARKERS: tuple[str, ...] = (
+    "worried",
+    "worry",
+    "concerned",
+    "concern",
+    "afraid",
+    "scared",
+    "anxious",
+    "nervous",
+    "side effect",
+    "my kids",
+    "my family",
+    "livelihood",
+)
 
 
 @dataclass
@@ -70,6 +126,7 @@ class JevLlmBrain:
         if side not in (Side.YES, Side.NO):
             raise ValueError("JevLlmBrain needs an assigned side (yes/no)")
         self.workflow = workflow
+        self._ensure_action_policy_levels()
         self.generator = generator
         self.side = side
         self.router = router if router is not None else PersonaRouter(default_side=side.value)
@@ -79,6 +136,45 @@ class JevLlmBrain:
         self.allied_reply_every_n = allied_reply_every_n
         self.allied_reply_hourly_cap = allied_reply_hourly_cap
 
+    def _ensure_action_policy_levels(self) -> None:
+        """Ensure ActionPolicy has platform_levels mappings so opposing [1, 3] posts are never dropped as unknown."""
+        policy = getattr(self.workflow, "action_policy", None)
+        if type(policy) is not ActionPolicy:
+            return
+        existing = dict(policy.platform_levels)
+        merged = list(policy.platform_levels)
+        for label, classification in DEFAULT_PLATFORM_LEVELS:
+            if label not in existing:
+                merged.append((label, classification))
+        if len(merged) != len(policy.platform_levels):
+            self.workflow.action_policy = replace(policy, platform_levels=tuple(merged))
+
+    def _infer_platform_level(self, post: Post) -> str:
+        """Resolve a mapped platform_level label for the post author."""
+        raw = post.raw if isinstance(post.raw, dict) else {}
+        explicit = str(raw.get("platform_level") or raw.get("author_level") or "").strip()
+        if explicit:
+            candidate = explicit
+        else:
+            author_obj = raw.get("author")
+            is_verified = bool(raw.get("verified")) or (
+                isinstance(author_obj, dict) and bool(author_obj.get("verified"))
+            )
+            handle_low = (post.author or "").strip().lower()
+            is_vip = handle_low in _VIP_HANDLES or handle_low.startswith(_VIP_PREFIXES)
+            candidate = "verified" if (is_verified or is_vip) else "standard"
+
+        policy = getattr(self.workflow, "action_policy", None)
+        if type(policy) is ActionPolicy and policy.platform_levels:
+            level_map = dict(policy.platform_levels)
+            if candidate in level_map:
+                return candidate
+            target_grade = "high" if candidate.lower() in _HIGH_LEVEL_SYNONYMS else "standard"
+            for label, grade in policy.platform_levels:
+                if grade == target_grade:
+                    return label
+        return candidate
+
     # ---- input mapping --------------------------------------------------- #
     def payload_for(self, post: Post) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -86,14 +182,54 @@ class JevLlmBrain:
             "post": {"post_id": post.post_id, "text": post.text},
             "source": {"kind": "platform", "observed_at": datetime.now(timezone.utc).isoformat()},
             "task_context": {"assigned_side": self.side.value},
+            "author": {"platform_level": self._infer_platform_level(post)},
         }
-        level = post.raw.get("platform_level") or post.raw.get("author_level")
-        if level:
-            payload["author"] = {"platform_level": str(level)}
         return payload
 
     # ---- decision -------------------------------------------------------- #
-    def think(self, post: Post) -> BrainVerdict:
+    @staticmethod
+    def _extract_root_post_id(post: Post) -> str:
+        raw = post.raw if isinstance(post.raw, dict) else {}
+        root_val = raw.get("root_post_id") or raw.get("parent_id") or ""
+        return str(root_val).strip()
+
+    @staticmethod
+    def _select_opposing_purpose(data: dict[str, Any], post_text: str) -> str:
+        """Select the most effective reply purpose (P02/P03/P07/P08) for an opposing post."""
+        answers = _extract_jev_answers(data)
+        func = str(_get_val(answers.get("expression_function")) or "").lower()
+        claim_kind = str(_get_val(answers.get("claim_kind")) or "").lower()
+        text_low = post_text.lower()
+
+        if func == "venting":
+            return "P08"
+        if func == "concern" or any(marker in text_low for marker in _CONCERN_MARKERS):
+            return "P07"
+        if func == "question":
+            return "P02"
+        if func == "argument" and claim_kind in ("policy_proposal", "factual") and "?" not in post_text:
+            return "P03"
+        return "P08"
+
+    def _build_material_brief(self, active_purpose: str, post: Post, package: Any) -> MaterialBrief:
+        """Construct a checked MaterialBrief for P01, P02, P03, P07, or P08."""
+        text = post.text
+        focus_span = TextSpan(("content", "post", "text"), 0, len(text), text)
+        if active_purpose in _PURPOSE_SUPPORT_USE:
+            use_kind = _PURPOSE_SUPPORT_USE[active_purpose]
+            support_span = focus_span
+            try:
+                full_data = package.to_dict(include_materials=True)
+                vb_items = ((full_data.get("materials") or {}).get("verified_background") or {}).get("items") or []
+                if vb_items and isinstance(vb_items[0], dict) and vb_items[0].get("text"):
+                    ref_text = str(vb_items[0]["text"])
+                    support_span = TextSpan(("verified_background", "items", 0, "text"), 0, len(ref_text), ref_text)
+            except Exception:
+                support_span = focus_span
+            return MaterialBrief(active_purpose, focus_span, support=(MaterialUse(support_span, use_kind),))
+        return MaterialBrief("P08", focus_span, information_gap=self.information_gap)
+
+    def think(self, post: Post, *, commit_state: bool = True) -> BrainVerdict:
         # Tier-1 Input Language Gate: Drop heavy/pure non-Latin bait before spending JEV calls
         lang_ok, lang_reason = check_incoming_post_language(post.text)
         if not lang_ok:
@@ -108,31 +244,37 @@ class JevLlmBrain:
         data = package.to_dict()
         action = data["action_decision"]
         rel_stance = data["flow"].get("relative_stance")
-        detail = {
+        root_post_id = self._extract_root_post_id(post)
+        detail: dict[str, Any] = {
             "language_gate": lang_reason,
             "flow_status": data["flow"]["status"],
             "action_status": action["status"],
             "action": action.get("action"),
             "relative_stance": rel_stance,
+            "target_author": post.author,
+            "root_post_id": root_post_id,
             "new_attempt_count": data.get("new_attempt_count"),
         }
         if action["status"] != "decided":
             return BrainVerdict(reason=f"jev:{action['status']}", detail=detail)
         if action["action"] == "like":
-            self.router.store.log_interaction(
-                engine="micro",
-                account_id="bot_default",
-                action="like",
-                target_post_id=post.post_id,
-                target_author=post.author,
-                target_stance=str(rel_stance or ""),
-            )
+            detail["purpose"] = ""
+            detail["state_committed"] = bool(commit_state)
+            if commit_state:
+                self.router.store.log_interaction(
+                    engine="micro",
+                    account_id="bot_default",
+                    action="like",
+                    target_post_id=post.post_id,
+                    target_author=post.author,
+                    target_stance=str(rel_stance or ""),
+                )
             return BrainVerdict(ActionKind.LIKE, reason="jev:like", detail=detail)
         if action["action"] != "reply":
             return BrainVerdict(reason=f"jev:{action['action']}", detail=detail)
 
         selected = (data.get("response_decision") or {}).get("prompt_type")
-        if selected not in (None, "P08", "P01"):
+        if selected is not None and selected not in SUPPORTED_REPLY_PURPOSES:
             return BrainVerdict(reason=f"needs_materials:{selected}", prompt_type=selected, detail=detail)
 
         # Allied (same-camp) reply strategy: P01 cross-persona support gated by 3-level SQLite valve
@@ -149,23 +291,28 @@ class JevLlmBrain:
             detail["allied_reply_gate"] = gate_reason
             if not can_reply_allied:
                 # Downgrade throttled allied replies to a cost-free LIKE
-                self.router.store.log_interaction(
-                    engine="micro",
-                    account_id="bot_default",
-                    action="like",
-                    target_post_id=post.post_id,
-                    target_author=post.author,
-                    target_stance="aligned",
-                    purpose="like_downgrade",
-                )
+                detail["purpose"] = "like_downgrade"
+                detail["state_committed"] = bool(commit_state)
+                if commit_state:
+                    self.router.store.log_interaction(
+                        engine="micro",
+                        account_id="bot_default",
+                        action="like",
+                        target_post_id=post.post_id,
+                        target_author=post.author,
+                        target_stance="aligned",
+                        purpose="like_downgrade",
+                    )
                 return BrainVerdict(
                     ActionKind.LIKE,
                     reason=f"jev:like({gate_reason})",
                     detail=detail,
                 )
             active_purpose = selected or "P01"
+        elif selected is not None:
+            active_purpose = selected
         else:
-            active_purpose = selected or "P08"
+            active_purpose = self._select_opposing_purpose(data, post.text)
 
         # Select persona and account via PersonaRouter (uses cross-persona complementarity for P01)
         try:
@@ -195,12 +342,7 @@ class JevLlmBrain:
                 detail=detail,
             )
 
-        text = post.text
-        span = TextSpan(("content", "post", "text"), 0, len(text), text)
-        if active_purpose == "P01":
-            brief = MaterialBrief("P01", span, support=(MaterialUse(span, "addition"),))
-        else:
-            brief = MaterialBrief("P08", span, information_gap=self.information_gap)
+        brief = self._build_material_brief(active_purpose, post, package)
 
         # Attempt 1: generate candidate draft using selected persona
         draft = self.generator.generate(package, brief, options=self.options, persona=routing.persona)
@@ -208,7 +350,7 @@ class JevLlmBrain:
         if draft.status != "draft" or not draft.reply:
             return BrainVerdict(reason=f"llm:{draft.status}:{draft.reason}", prompt_type=draft.prompt_type, detail=detail)
 
-        # Postflight gate check 1 (strict_alignment=True for P01 allied support, False for P08 clarification)
+        # Postflight gate check 1 (strict_alignment=True for P01 allied support, False for P02/P03/P07/P08)
         strict_mode = (active_purpose == "P01")
         pv1 = self.postflight.check(
             post_id=post.post_id,
@@ -222,18 +364,22 @@ class JevLlmBrain:
         detail["postflight"] = pv1.to_dict()
 
         if pv1.can_send:
-            self.router.mark_used(routing.account_id, target_stance=str(rel_stance or ""))
-            self.router.store.log_interaction(
-                engine="micro",
-                account_id=routing.account_id,
-                action="reply",
-                target_post_id=post.post_id,
-                target_author=post.author,
-                target_stance=str(rel_stance or ""),
-                purpose=draft.prompt_type or active_purpose,
-                text=draft.reply,
-            )
-            return BrainVerdict(ActionKind.REPLY, draft.reply, "approved", draft.prompt_type or active_purpose, detail)
+            final_purpose = draft.prompt_type or active_purpose
+            detail["purpose"] = final_purpose
+            detail["state_committed"] = bool(commit_state)
+            if commit_state:
+                self.router.mark_used(routing.account_id, target_stance=str(rel_stance or ""))
+                self.router.store.log_interaction(
+                    engine="micro",
+                    account_id=routing.account_id,
+                    action="reply",
+                    target_post_id=post.post_id,
+                    target_author=post.author,
+                    target_stance=str(rel_stance or ""),
+                    purpose=final_purpose,
+                    text=draft.reply,
+                )
+            return BrainVerdict(ActionKind.REPLY, draft.reply, "approved", final_purpose, detail)
 
         # Option B: One targeted retry if postflight rejected attempt 1
         detail["postflight_attempt_1_rejected"] = pv1.reason
@@ -257,39 +403,101 @@ class JevLlmBrain:
         detail["postflight_retry"] = pv2.to_dict()
 
         if pv2.can_send:
-            self.router.mark_used(routing.account_id, target_stance=str(rel_stance or ""))
-            self.router.store.log_interaction(
-                engine="micro",
-                account_id=routing.account_id,
-                action="reply",
-                target_post_id=post.post_id,
-                target_author=post.author,
-                target_stance=str(rel_stance or ""),
-                purpose=draft_retry.prompt_type or active_purpose,
-                text=draft_retry.reply,
-            )
-            return BrainVerdict(ActionKind.REPLY, draft_retry.reply, "approved_on_retry", draft_retry.prompt_type or active_purpose, detail)
+            final_purpose = draft_retry.prompt_type or active_purpose
+            detail["purpose"] = final_purpose
+            detail["state_committed"] = bool(commit_state)
+            if commit_state:
+                self.router.mark_used(routing.account_id, target_stance=str(rel_stance or ""))
+                self.router.store.log_interaction(
+                    engine="micro",
+                    account_id=routing.account_id,
+                    action="reply",
+                    target_post_id=post.post_id,
+                    target_author=post.author,
+                    target_stance=str(rel_stance or ""),
+                    purpose=final_purpose,
+                    text=draft_retry.reply,
+                )
+            return BrainVerdict(ActionKind.REPLY, draft_retry.reply, "approved_on_retry", final_purpose, detail)
 
         # Abort reply after failed retry to protect account safety and write quota
         return BrainVerdict(ActionKind.NONE, reason=f"postflight_rejected:{pv2.reason}", prompt_type=draft.prompt_type, detail=detail)
 
-    async def athink(self, post: Post) -> BrainVerdict:
-        return await asyncio.to_thread(self.think, post)
+    async def athink(self, post: Post, *, commit_state: bool = True) -> BrainVerdict:
+        return await asyncio.to_thread(self.think, post, commit_state=commit_state)
+
+    def commit_decision(self, decision: Decision, *, account: str | None = None) -> None:
+        """Commit cooldown and interaction_log only after an action has been executed."""
+        raw = decision.scores.raw if isinstance(decision.scores.raw, dict) else {}
+        if raw.get("state_committed"):
+            return
+        selected_account = str(raw.get("selected_account") or "")
+        effective_account = str(account or decision.account or selected_account or "bot_default")
+        target_author = str(raw.get("target_author") or "")
+        target_stance = str(raw.get("relative_stance") or "")
+        purpose = str(raw.get("purpose") or "")
+
+        if decision.action is ActionKind.REPLY:
+            persona_account = (
+                effective_account
+                if self.router.registry.get(effective_account) is not None
+                else (selected_account or effective_account)
+            )
+            self.router.mark_used(persona_account, target_stance=target_stance)
+            self.router.store.log_interaction(
+                engine="micro",
+                account_id=effective_account,
+                action="reply",
+                target_post_id=decision.post_id,
+                target_author=target_author,
+                target_stance=target_stance,
+                purpose=purpose,
+                text=decision.text,
+            )
+            raw["state_committed"] = True
+        elif decision.action is ActionKind.LIKE:
+            self.router.store.log_interaction(
+                engine="micro",
+                account_id=effective_account,
+                action="like",
+                target_post_id=decision.post_id,
+                target_author=target_author,
+                target_stance=target_stance,
+                purpose=purpose,
+            )
+            raw["state_committed"] = True
 
     # ---- loop integration ------------------------------------------------ #
-    async def decide(self, post: Post, *, account: str = "") -> Decision:
+    async def decide(
+        self,
+        post: Post,
+        *,
+        account: str = "",
+        commit_state: bool = False,
+    ) -> Decision:
         """Same return type as `pipeline.decide.decide`, so the loop can swap them."""
         try:
-            verdict = await self.athink(post)
+            verdict = await self.athink(post, commit_state=commit_state)
             error = ""
         except Exception as exc:  # one bad post must never kill a cycle
             verdict = BrainVerdict(reason="brain_error")
             error = type(exc).__name__
         account_to_use = account or verdict.detail.get("selected_account", "bot_default")
+        root_post_id = str(verdict.detail.get("root_post_id") or self._extract_root_post_id(post))
         tier = {ActionKind.LIKE: Tier.AMPLIFY, ActionKind.REPLY: Tier.PUBLISH}.get(verdict.action, Tier.OBSERVE)
         return Decision(
-            decision_id=uuid.uuid4().hex[:12], post_id=post.post_id, tier=tier, account=account_to_use,
-            scores=JevAnswers(answers={"relevance": 1.0 if verdict.action is not ActionKind.NONE else 0.0},
-                              raw={"source": "jev+llm", **verdict.detail}, ok=not error, error=error),
-            rationale=verdict.reason, action=verdict.action, text=verdict.text,
+            decision_id=uuid.uuid4().hex[:12],
+            post_id=post.post_id,
+            tier=tier,
+            account=account_to_use,
+            scores=JevAnswers(
+                answers={"relevance": 1.0 if verdict.action is not ActionKind.NONE else 0.0},
+                raw={"source": "jev+llm", **verdict.detail},
+                ok=not error,
+                error=error,
+            ),
+            rationale=verdict.reason,
+            action=verdict.action,
+            text=verdict.text,
+            root_post_id=root_post_id,
         )

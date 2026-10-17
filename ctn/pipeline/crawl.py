@@ -70,6 +70,7 @@ def _ingest(
             is_question=_is_question(post.text),
             suspicion_delta=delta,
             evidence_tag=tag,
+            has_valid_timestamp=(post.created_at > 0),
             now=post.created_at if post.created_at > 0 else now,
         )
     detection = (
@@ -114,15 +115,16 @@ async def audit_suspected_account(
     )
     rows = await actuator.get_account_posts(clean_author, limit=limit)
     detections: list[DetectionResult] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        post = post_from_dict(row)
-        if post is None:
-            continue
-        is_new, _, det = _ingest(store, post, now=ts, detector=detector)
-        if is_new and det is not None:
-            detections.append(det)
+    with store.batch_transaction():
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            post = post_from_dict(row)
+            if post is None:
+                continue
+            is_new, _, det = _ingest(store, post, now=ts, detector=detector)
+            if is_new and det is not None:
+                detections.append(det)
     return detections
 
 
@@ -237,20 +239,21 @@ class FrontlineCrawler:
             rows = await self.actuator.search(report.source.split(":", 1)[1], limit=self.feed_limit)
 
         suspect_authors: list[str] = []
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            post = post_from_dict(row)
-            if post is None:
-                continue
-            report.fetched += 1
-            is_new, _, det = _ingest(self.store, post, now=ts, detector=self.detector)
-            if is_new:
-                report.new_posts.append(post)
-                if det is not None:
-                    report.detections.append(det)
-                    if det.is_suspected_bot and post.author and post.author not in suspect_authors:
-                        suspect_authors.append(post.author)
+        with self.store.batch_transaction():
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                post = post_from_dict(row)
+                if post is None:
+                    continue
+                report.fetched += 1
+                is_new, _, det = _ingest(self.store, post, now=ts, detector=self.detector)
+                if is_new:
+                    report.new_posts.append(post)
+                    if det is not None:
+                        report.detections.append(det)
+                        if det.is_suspected_bot and post.author and post.author not in suspect_authors:
+                            suspect_authors.append(post.author)
 
         if self.audit_suspects and self.detector is not None and suspect_authors:
             for suspect in suspect_authors:
@@ -365,23 +368,24 @@ class CommentCrawler:
         )
         hit_existing = False
         suspect_authors: list[str] = []
-        for post in parsed:
-            is_new, _, det = _ingest(
-                self.store,
-                post,
-                now=ts,
-                extra_delta=COORDINATED_BURST_DELTA if post.author in burst else 0.0,
-                extra_tag="coordinated_reply_burst" if post.author in burst else "",
-                detector=self.detector,
-            )
-            if is_new:
-                report.new_comments.append(post)
-                if det is not None:
-                    report.detections.append(det)
-                    if det.is_suspected_bot and post.author and post.author not in suspect_authors:
-                        suspect_authors.append(post.author)
-            else:
-                hit_existing = True
+        with self.store.batch_transaction():
+            for post in parsed:
+                is_new, _, det = _ingest(
+                    self.store,
+                    post,
+                    now=ts,
+                    extra_delta=COORDINATED_BURST_DELTA if post.author in burst else 0.0,
+                    extra_tag="coordinated_reply_burst" if post.author in burst else "",
+                    detector=self.detector,
+                )
+                if is_new:
+                    report.new_comments.append(post)
+                    if det is not None:
+                        report.detections.append(det)
+                        if det.is_suspected_bot and post.author and post.author not in suspect_authors:
+                            suspect_authors.append(post.author)
+                else:
+                    hit_existing = True
 
         if self.audit_suspects and self.detector is not None and suspect_authors:
             for suspect in suspect_authors:

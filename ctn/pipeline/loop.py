@@ -145,7 +145,16 @@ class BotLoop:
             max_retries=settings.platform.max_retries,
         )
         if accounts is None:
-            accounts = [f"bot_{i:03d}" for i in range(1, settings.fleet.bot_accounts + 1)]
+            brain_arg = kwargs.get("brain")
+            if brain_arg is not None and hasattr(brain_arg, "router"):
+                persona_accts = [
+                    p.account_id
+                    for p in brain_arg.router.registry.list_by_side(settings.side.value)
+                ]
+                if persona_accts:
+                    accounts = persona_accts
+            if not accounts:
+                accounts = [f"bot_{i:03d}" for i in range(1, settings.fleet.bot_accounts + 1)]
         return cls(actuator, side=settings.side, accounts=accounts, telemetry=telemetry, **kwargs)
 
     # ---- shared REACT + ACT pipeline for candidate posts ----------------- #
@@ -166,12 +175,16 @@ class BotLoop:
             batch = [p for p in candidates if p.post_id not in self._judged][
                 : self.max_evaluations_per_cycle
             ]
-            report.decisions = list(await asyncio.gather(*(self.brain.decide(p) for p in batch)))
-            # A clean "no action" verdict is final. Errors are retried next cycle.
+            report.decisions = list(
+                await asyncio.gather(*(self.brain.decide(p, commit_state=False) for p in batch))
+            )
+            # A clean "no action" verdict is final. Errors and temporary cooldowns are retried next cycle.
             self._judged.update(
                 d.post_id
                 for d in report.decisions
-                if d.action is ActionKind.NONE and d.scores.ok
+                if d.action is ActionKind.NONE
+                and d.scores.ok
+                and not d.rationale.startswith("account_cooldown:")
             )
             actionable = [d for d in report.decisions if d.action is not ActionKind.NONE]
             # Replies are the scarce write; likes are cheap. Keep JEV's order otherwise.
@@ -185,8 +198,15 @@ class BotLoop:
             actionable.sort(key=lambda d: d.scores.score("relevance"), reverse=True)
 
         # ACT
-        for decision in actionable[: self.max_actions_per_cycle]:
-            account = self._next_account()
+        executed_count = 0
+        for decision in actionable:
+            if executed_count >= self.max_actions_per_cycle:
+                break
+            account, skip_reason = self._resolve_execution_account(decision)
+            if skip_reason:
+                decision.rationale += f" | {skip_reason}"
+                self._log_decision(decision)
+                continue
             if account is None:
                 break
             decision.account = account
@@ -200,7 +220,10 @@ class BotLoop:
             self._log_decision(decision)
             result = await self._execute(decision)
             report.results.append(result)
+            executed_count += 1
             if result.ok:
+                if self.brain is not None:
+                    self.brain.commit_decision(decision, account=decision.account)
                 self._remember(decision, result)
 
     # ---- Stage 1/2 multi-query cycle (kept for backward compatibility) --- #
@@ -333,7 +356,14 @@ class BotLoop:
         if d.action is ActionKind.REPOST:
             return await a.repost(d.account, d.post_id, decision_id=d.decision_id)
         if d.action is ActionKind.REPLY:
-            return await a.reply(d.account, d.post_id, d.text, decision_id=d.decision_id)
+            root_id = d.root_post_id or str(d.scores.raw.get("root_post_id") or "")
+            return await a.reply(
+                d.account,
+                d.post_id,
+                d.text,
+                root_post_id=root_id or None,
+                decision_id=d.decision_id,
+            )
         if d.action is ActionKind.POST:
             return await a.post(d.account, d.text, decision_id=d.decision_id)
         if d.action is ActionKind.FOLLOW:
@@ -343,6 +373,23 @@ class BotLoop:
         if d.action is ActionKind.REPORT:
             return await a.report(d.account, d.post_id, reason=d.rationale, decision_id=d.decision_id)
         raise ValueError(f"no executor for {d.action!r}")
+
+    def _resolve_execution_account(self, d: Decision) -> tuple[str | None, str]:
+        """Honor the persona account routed by JevLlmBrain when valid; otherwise round-robin."""
+        routed = (d.account or "").strip()
+        if routed and routed != "bot_default" and routed in self._own:
+            if routed in self.actuator.suspended:
+                return None, f"routed_account_suspended:{routed}"
+            if self.brain is not None and d.action is ActionKind.REPLY:
+                import time as _time
+                persona = self.brain.router.registry.get(routed)
+                state = self.brain.router.get_state(routed)
+                if state.is_disabled():
+                    return None, f"routed_account_disabled:{routed}"
+                if persona is not None and state.is_in_cooldown(_time.time(), persona.cooldown_s):
+                    return None, f"routed_account_cooldown:{routed}"
+            return routed, ""
+        return self._next_account(), ""
 
     def _next_account(self) -> str | None:
         """Round-robin over accounts that are not suspended."""

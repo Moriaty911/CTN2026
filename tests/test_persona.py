@@ -319,9 +319,9 @@ class TestBrainPersonaIntegration(unittest.TestCase):
         postflight = MagicMock()
         router = PersonaRouter(default_side="yes")
 
-        # Put all accounts into cooldown using current monotonic time
+        # Put all accounts into cooldown using current wall-clock time
         import time
-        now = time.monotonic()
+        now = time.time()
         for p in router.registry.list_by_side("yes"):
             router.mark_used(p.account_id, now=now)
 
@@ -341,6 +341,150 @@ class TestBrainPersonaIntegration(unittest.TestCase):
         self.assertTrue(verdict.reason.startswith("account_cooldown:"))
         # Generator was never called
         generator.generate.assert_not_called()
+
+    def test_cross_instance_cooldown_sync_via_sqlite_wall_clock(self):
+        import tempfile
+        from pathlib import Path
+        from ctn.storage import StateStore
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "shared_state.db"
+            store_a = StateStore(db_path)
+            store_b = StateStore(db_path)
+            router_a = PersonaRouter(default_side="yes", store=store_a)
+            router_b = PersonaRouter(default_side="yes", store=store_b)
+
+            # Warm up router_b's in-memory cache first
+            initial_state_b = router_b.get_state("bot_policy_yes")
+            self.assertEqual(initial_state_b.post_count, 0)
+
+            # router_a (e.g. macro CLI process) marks bot_policy_yes used with default clock (time.time())
+            router_a.mark_used("bot_policy_yes")
+
+            # router_b (e.g. micro daemon process) routes a policy post with default clock (time.time())
+            jev_data = {"response_decision": {"prompt_type": "P08"}}
+            decision = router_b.route(jev_data, "Which policy version applies?", side="yes")
+            self.assertNotEqual(decision.account_id, "bot_policy_yes")
+            self.assertTrue(decision.fallback_used)
+
+            store_a.close()
+            store_b.close()
+
+    def test_botloop_preserves_routed_persona_and_commits_only_executed_actions(self):
+        import asyncio
+        from ctn.actuator import Actuator
+        from ctn.client.mock import MockLegitClient
+        from ctn.config import BudgetConfig, RateConfig
+        from ctn.pipeline.loop import BotLoop, CycleReport
+        from ctn.ratelimit import build_gate, build_ledger
+
+        workflow = MagicMock()
+
+        def eval_side_effect(payload):
+            text = payload["post"]["text"].lower()
+            topic = "vaccine_evidence" if "clinical" in text else "public_access"
+            pkg = MagicMock()
+            pkg.to_dict.return_value = {
+                "flow": {
+                    "status": "ready",
+                    "relative_stance": "neutral",
+                    "deep": {
+                        "assessment": {
+                            "output": {
+                                "answers": {
+                                    "topic": {"value": topic},
+                                    "expression_function": {"value": "question"},
+                                }
+                            }
+                        }
+                    },
+                },
+                "action_decision": {"status": "decided", "action": "reply"},
+                "response_decision": {"prompt_type": "P08"},
+            }
+            return pkg
+
+        workflow.evaluate.side_effect = eval_side_effect
+
+        generator = MagicMock()
+        generator.generate.side_effect = [
+            ReplyDraftResult(
+                status="draft",
+                reason="generated",
+                reply="Which clinical study data supports that hospital claim?",
+                prompt_type="P08",
+            ),
+            ReplyDraftResult(
+                status="draft",
+                reason="generated",
+                reply="Which council ordinance clause applies to park access?",
+                prompt_type="P08",
+            ),
+        ]
+
+        postflight = MagicMock()
+        pf_verdict = MagicMock()
+        pf_verdict.can_send = True
+        pf_verdict.reason = "authorized"
+        pf_verdict.to_dict.return_value = {"can_send": True}
+        postflight.check.return_value = pf_verdict
+
+        router = PersonaRouter(default_side="yes")
+        brain = JevLlmBrain(
+            workflow=workflow,
+            generator=generator,
+            side=Side.YES,
+            router=router,
+            postflight=postflight,
+        )
+
+        mock_client = MockLegitClient(failure_rate=0.0)
+        actuator = Actuator(
+            mock_client,
+            build_gate(RateConfig(read_rps=100, write_rps=100, per_account_read_rps=100, per_account_write_rps=100)),
+            build_ledger(BudgetConfig()),
+            dry_run=False,
+        )
+        accounts = [p.account_id for p in router.registry.list_by_side("yes")]
+        loop = BotLoop(
+            actuator,
+            side=Side.YES,
+            accounts=accounts,
+            brain=brain,
+            max_actions_per_cycle=1,  # Only 1 action allowed to execute per cycle
+            store=router.store,
+        )
+
+        # Two candidate posts: 1st routes to bot_medic_yes (nested comment under root_999), 2nd routes to bot_policy_yes
+        posts = [
+            Post(
+                post_id="comment_101",
+                author="citizen_a",
+                text="What clinical trial data supports this vaccine?",
+                raw={"root_post_id": "root_999", "parent_id": "root_999"},
+            ),
+            Post(
+                post_id="post_102",
+                author="citizen_b",
+                text="Which municipal council ordinance rule applies?",
+            ),
+        ]
+        report = CycleReport(cycle=1)
+        asyncio.run(loop._react_and_execute(posts, report))
+
+        # 1. Only 1 action was executed, and its account MUST be bot_medic_yes (not round-robin bot_debater_yes!)
+        self.assertEqual(len(report.results), 1)
+        self.assertTrue(report.results[0].ok)
+        self.assertEqual(report.results[0].account, "bot_medic_yes")
+        self.assertEqual(report.results[0].response.get("root_post_id"), "root_999")
+
+        # 2. bot_medic_yes has post_count == 1 and is logged in SQLite interaction_log
+        self.assertEqual(router.get_state("bot_medic_yes").post_count, 1)
+        self.assertTrue(router.store.has_replied_to_post("comment_101"))
+
+        # 3. bot_policy_yes (the 2nd decision, truncated by max_actions_per_cycle=1) was NOT marked used or logged!
+        self.assertEqual(router.get_state("bot_policy_yes").post_count, 0)
+        self.assertFalse(router.store.has_replied_to_post("post_102"))
 
 
 if __name__ == "__main__":

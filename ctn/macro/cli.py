@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 import time
 from typing import Any
 
 from ctn.actuator import Actuator
+from ctn.client.base import LegitClient
+from ctn.client.legit_v1 import OfficialLegitClient
 from ctn.client.mock import MockLegitClient, MockPost
-from ctn.config import BudgetConfig, JevConfig, RateConfig
+from ctn.config import BudgetConfig, JevConfig, PlatformConfig, RateConfig, _load_dotenv
 from ctn.jev import JevClient, JevPostflightChecker
 from ctn.persona import PersonaRouter, get_warmup_seed
 from ctn.ratelimit import build_gate, build_ledger
@@ -51,13 +54,7 @@ def _save_router(router: PersonaRouter, state_path: Path) -> None:
         router.dump_states()
 
 
-def _setup_environment(dry_run: bool = False) -> tuple[Actuator, JevPostflightChecker]:
-    """Set up Actuator and JevPostflightChecker with available credentials or offline fallbacks."""
-    jev_cfg = JevConfig.load()
-    jev_client = JevClient(jev_cfg)
-    postflight = JevPostflightChecker(jev_client)
-
-    # Setup platform client (Mock platform initialized with Kingstonia baseline items)
+def _build_mock_platform() -> MockLegitClient:
     mock_platform = MockLegitClient(failure_rate=0.0)
     t = time.time()
     mock_platform.posts["news_001"] = MockPost(
@@ -87,10 +84,39 @@ def _setup_environment(dry_run: bool = False) -> tuple[Actuator, JevPostflightCh
         reposts=19,
         hashtags=["#KingstoniaVotes", "#PublicTransit"],
     )
+    return mock_platform
+
+
+def _setup_environment(
+    dry_run: bool = False,
+    *,
+    store: StateStore | None = None,
+    force_mock: bool = False,
+) -> tuple[Actuator, JevPostflightChecker]:
+    """Set up Actuator and JevPostflightChecker using OfficialLegitClient when configured, or MockLegitClient offline."""
+    jev_cfg = JevConfig.load()
+    jev_client = JevClient(jev_cfg)
+    postflight = JevPostflightChecker(jev_client)
+
+    platform_cfg = PlatformConfig.load()
+    use_live = not force_mock and bool(platform_cfg.api_key or platform_cfg.base_url)
+
+    platform_client: LegitClient
+    if use_live:
+        platform_client = OfficialLegitClient(
+            url=platform_cfg.base_url or None,
+            team_key=platform_cfg.api_key,
+            default_password=platform_cfg.bot_password,
+            timeout=platform_cfg.request_timeout_s,
+            auto_register=bool(platform_cfg.api_key),
+            store=store,
+        )
+    else:
+        platform_client = _build_mock_platform()
 
     rate_cfg = RateConfig(read_rps=10.0, write_rps=10.0)
     actuator = Actuator(
-        mock_platform,
+        platform_client,
         build_gate(rate_cfg),
         build_ledger(BudgetConfig()),
         dry_run=dry_run,
@@ -102,7 +128,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     """Collect and print current macro state."""
     state_path = Path(args.state_file)
     router = _load_router(args.side, state_path)
-    actuator, _ = _setup_environment(dry_run=True)
+    actuator, _ = _setup_environment(
+        dry_run=True, store=router.store, force_mock=getattr(args, "mock", False)
+    )
 
     collector = MacroStateCollector(actuator, router, side=args.side)
     snapshot = collector.collect_sync()
@@ -114,7 +142,9 @@ def cmd_publish(args: argparse.Namespace) -> int:
     """Execute a strategic proactive post with JEV safety audit."""
     state_path = Path(args.state_file)
     router = _load_router(args.side, state_path)
-    actuator, postflight = _setup_environment(dry_run=args.dry_run)
+    actuator, postflight = _setup_environment(
+        dry_run=args.dry_run, store=router.store, force_mock=getattr(args, "mock", False)
+    )
 
     publisher = StrategicPublisher(actuator, postflight, router, side=args.side)
     tags = [t.strip() for t in args.tag.split(",") if t.strip()] if args.tag else None
@@ -143,7 +173,9 @@ def cmd_warmup(args: argparse.Namespace) -> int:
     """Publish a pre-vetted Kingstonia native seed post for account warming."""
     state_path = Path(args.state_file)
     router = _load_router(args.side, state_path)
-    actuator, postflight = _setup_environment(dry_run=args.dry_run)
+    actuator, postflight = _setup_environment(
+        dry_run=args.dry_run, store=router.store, force_mock=getattr(args, "mock", False)
+    )
 
     publisher = StrategicPublisher(actuator, postflight, router, side=args.side)
     seed_text = get_warmup_seed(args.account, index=args.index)
@@ -163,9 +195,19 @@ def cmd_warmup(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _load_dotenv(Path(".env"))
+    env_side = os.environ.get("CTN_SIDE", "").strip().lower()
+    default_side = env_side if env_side in ("yes", "no") else "yes"
+
     parser = argparse.ArgumentParser(description="CTN 2026 Macro Campaign Publisher CLI")
-    parser.add_argument("--side", choices=["yes", "no"], default="yes", help="Assigned team side (default: yes)")
+    parser.add_argument(
+        "--side",
+        choices=["yes", "no"],
+        default=default_side,
+        help="Assigned team side (defaults to CTN_SIDE or 'yes')",
+    )
     parser.add_argument("--state-file", default=DEFAULT_STATE_FILE, help="Path to state file")
+    parser.add_argument("--mock", action="store_true", help="Force offline MockLegitClient")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Subcommand: status

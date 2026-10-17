@@ -69,7 +69,7 @@ class StrategicPublisher:
         bypass_jev: bool = False,
     ) -> dict[str, Any]:
         """Publish a proactive post after cooldown and unified Layer-1 + Layer-2 verification."""
-        now = time.monotonic()
+        now = time.time()
         persona = self.router.registry.get(account_id)
         if persona is None:
             return {

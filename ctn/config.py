@@ -81,14 +81,29 @@ def _env_side(name: str) -> Side:
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class PlatformConfig:
-    """Legit Social. The concrete shapes are unknown until the official client
-    template is released, so the adapter -- not this config -- absorbs the churn."""
+    """Legit Social platform configuration."""
 
     base_url: str = ""
     api_key: str = ""
     team_id: str = ""
+    bot_password: str = ""
     request_timeout_s: float = 20.0
     max_retries: int = 3
+
+    @classmethod
+    def load(cls, env_file: str | Path = ".env") -> "PlatformConfig":
+        _load_dotenv(Path(env_file))
+        return cls(
+            base_url=_env_str("CTN_PLATFORM_URL") or _env_str("CTN_API_URL"),
+            api_key=(
+                _env_str("CTN_PLATFORM_API_KEY")
+                or _env_str("CTN_TEAM_KEY")
+                or _env_str("CTN_TEAM_CODE")
+            ),
+            team_id=_env_str("CTN_TEAM_ID"),
+            bot_password=_env_str("CTN_BOT_PASSWORD") or _env_str("CTN_PLATFORM_PASSWORD"),
+            request_timeout_s=_env_float("CTN_PLATFORM_TIMEOUT_S", 20.0),
+        )
 
 
 @dataclass(frozen=True)
@@ -368,12 +383,7 @@ class Settings:
         log_dir.mkdir(parents=True, exist_ok=True)
 
         settings = cls(
-            platform=PlatformConfig(
-                base_url=_env_str("CTN_PLATFORM_URL"),
-                api_key=_env_str("CTN_PLATFORM_API_KEY"),
-                team_id=_env_str("CTN_TEAM_ID"),
-                request_timeout_s=_env_float("CTN_PLATFORM_TIMEOUT_S", 20.0),
-            ),
+            platform=PlatformConfig.load(env_file),
             fleet=FleetConfig(
                 bot_accounts=_env_int("CTN_BOT_ACCOUNTS", 50),
                 max_total_accounts=_env_int("CTN_MAX_TOTAL_ACCOUNTS", 200),

@@ -130,6 +130,20 @@ class BotDetector:
         self.suspect_threshold = suspect_threshold
         self.shingle_jaccard_threshold = shingle_jaccard_threshold
         self.booster_window_s = booster_window_s
+        self._shingle_cache: dict[str, set[tuple[str, ...]]] = {}
+
+    def _shingles_for(self, post_id: str, text: str) -> set[tuple[str, ...]]:
+        """Return cached 3-word shingles for `post_id` (bounded at 2048 entries)."""
+        if not post_id:
+            return word_shingles(text, k=3)
+        cached = self._shingle_cache.get(post_id)
+        if cached is not None:
+            return cached
+        if len(self._shingle_cache) >= 2048:
+            self._shingle_cache.clear()
+        sh = word_shingles(text, k=3)
+        self._shingle_cache[post_id] = sh
+        return sh
 
     def inspect_post(
         self,
@@ -173,6 +187,7 @@ class BotDetector:
             )
 
         obs_ts = created_at if created_at > 0 else ts
+        has_valid_ts = created_at > 0 or now is not None
         if record_observation:
             _, stored_post = self.store.upsert_observed_post(post, now=ts)
             prof = self.store.record_author_observation(
@@ -182,6 +197,7 @@ class BotDetector:
                 inferred_side=infer_post_side(text),
                 promote_threshold=self.promote_threshold,
                 suspect_threshold=self.suspect_threshold,
+                has_valid_timestamp=has_valid_ts,
                 now=obs_ts,
             )
         else:
@@ -258,7 +274,7 @@ class BotDetector:
                 force_status = "confirmed_bot"
 
         # ---- Tier-S3 & Tier-A1: Reincarnated Bot Phrasing & Near-Duplicate Template ------ #
-        shingles = word_shingles(text, k=3)
+        shingles = self._shingles_for(post_id, text)
         if shingles:
             # S3: Compare against phrasing of already-confirmed or suspended/deleted bots.
             # When a rival team deletes a 3-striked bot and spawns a replacement account using
@@ -267,7 +283,9 @@ class BotDetector:
                 exclude_author=author, limit=150
             )
             for cp in confirmed_corpus:
-                cp_shingles = word_shingles(str(cp.get("text") or ""), k=3)
+                cp_shingles = self._shingles_for(
+                    str(cp.get("post_id") or ""), str(cp.get("text") or "")
+                )
                 if shingle_jaccard(shingles, cp_shingles) >= self.shingle_jaccard_threshold:
                     cp_author = str(cp.get("author") or "").strip()
                     is_dead = bool(cp.get("author_is_suspended"))
@@ -296,11 +314,12 @@ class BotDetector:
             if "a1_near_duplicate_template" not in prof["evidence"]:
                 history = self.store.get_author_posts(author, limit=10)
                 for prev in history:
-                    if str(prev.get("post_id")) == post_id:
+                    prev_pid = str(prev.get("post_id") or "")
+                    if prev_pid == post_id:
                         continue
                     if norm_hash and str(prev.get("norm_hash") or "") == norm_hash:
                         continue
-                    prev_shingles = word_shingles(str(prev.get("text") or ""), k=3)
+                    prev_shingles = self._shingles_for(prev_pid, str(prev.get("text") or ""))
                     if shingle_jaccard(shingles, prev_shingles) >= self.shingle_jaccard_threshold:
                         triggered_tags.append("a1_near_duplicate_template")
                         total_delta += 55.0
@@ -320,7 +339,8 @@ class BotDetector:
 
         # ---- Tier-A4: Multi-Thread Coordinated Booster Co-occurrence --------------------- #
         if parent_id:
-            co_peers = self._find_repeated_booster_peers(author, parent_id, obs_ts)
+            peer_thread_counts = self._find_booster_peer_thread_counts(author, parent_id, obs_ts)
+            co_peers = list(peer_thread_counts.keys())
             if co_peers:
                 pair_key = ":".join(sorted([author, *co_peers]))
                 cluster_team = f"cluster_boost_{hashlib.sha256(pair_key.encode()).hexdigest()[:6]}"
@@ -328,17 +348,35 @@ class BotDetector:
                 if "a4_multi_thread_booster" not in prof["evidence"]:
                     triggered_tags.append("a4_multi_thread_booster")
                     total_delta += 60.0
-                for peer in co_peers:
+                is_confirmed_ring = len(co_peers) >= 2 or max(peer_thread_counts.values()) >= 3
+                if is_confirmed_ring:
+                    if "s4_coordinated_booster_ring" not in prof["evidence"]:
+                        triggered_tags.append("s4_coordinated_booster_ring")
+                        total_delta += 40.0
+                    force_status = "confirmed_bot"
+                for peer, shared_threads in peer_thread_counts.items():
                     if peer not in colliding_authors:
                         colliding_authors.append(peer)
                     peer_prof = self.store.get_bot_profile(peer)
+                    peer_tags: list[str] = []
+                    peer_delta = 0.0
+                    peer_force = ""
                     if "a4_multi_thread_booster" not in peer_prof["evidence"]:
+                        peer_tags.append("a4_multi_thread_booster")
+                        peer_delta += 60.0
+                    if len(co_peers) >= 2 or shared_threads >= 3:
+                        if "s4_coordinated_booster_ring" not in peer_prof["evidence"]:
+                            peer_tags.append("s4_coordinated_booster_ring")
+                            peer_delta += 40.0
+                        peer_force = "confirmed_bot"
+                    if peer_tags or peer_delta > 0 or peer_force:
                         self._apply_bonus(
                             peer,
-                            delta=60.0,
-                            tag="a4_multi_thread_booster",
+                            delta=peer_delta,
+                            tags=peer_tags,
                             inferred_team=cluster_team,
                             inferred_side=side_hint,
+                            force_status=peer_force,
                             now=obs_ts,
                         )
 
@@ -392,7 +430,7 @@ class BotDetector:
         target_signatures: list[tuple[str, set[tuple[str, ...]]]] = []
         for tp in target_posts:
             nh = str(tp.get("norm_hash") or "")
-            sh = word_shingles(str(tp.get("text") or ""), k=3)
+            sh = self._shingles_for(str(tp.get("post_id") or ""), str(tp.get("text") or ""))
             if nh or sh:
                 target_signatures.append((nh, sh))
         if not target_signatures:
@@ -423,7 +461,9 @@ class BotDetector:
             if not cand_author or cand_author in promoted:
                 continue
             cand_nh = str(cand.get("norm_hash") or "")
-            cand_sh = word_shingles(str(cand.get("text") or ""), k=3)
+            cand_sh = self._shingles_for(
+                str(cand.get("post_id") or ""), str(cand.get("text") or "")
+            )
             matched = False
             for t_nh, t_sh in target_signatures:
                 if cand_nh and t_nh and cand_nh == t_nh:
@@ -445,6 +485,64 @@ class BotDetector:
                 promoted.append(cand_author)
         return promoted
 
+    def _find_booster_peer_thread_counts(
+        self,
+        author: str,
+        current_parent_id: str,
+        current_ts: float,
+    ) -> dict[str, int]:
+        """Return `{peer_handle: shared_parent_thread_count}` for peers that replied within
+        `booster_window_s` of `author` in `current_parent_id` AND at least one other parent thread.
+        """
+        parent_rec = self.store.get_observed_post(current_parent_id)
+        current_parent_author = str(parent_rec.get("author") or "").strip() if parent_rec else ""
+        if author == current_parent_author:
+            return {}
+
+        siblings = self.store.get_post_replies(current_parent_id, limit=100)
+        current_peers: set[str] = set()
+        for s in siblings:
+            s_author = str(s.get("author") or "").strip()
+            if not s_author or s_author == author or s_author == current_parent_author:
+                continue
+            s_ts = float(s.get("created_at") or s.get("first_seen_at") or 0.0)
+            if s_ts > 0 and abs(current_ts - s_ts) <= self.booster_window_s:
+                s_prof = self.store.get_bot_profile(s_author)
+                if s_prof["status"] not in ("verified_npc", "own_bot"):
+                    current_peers.add(s_author)
+
+        if not current_peers:
+            return {}
+
+        # Check author's earlier comments in other parent threads
+        author_posts = self.store.get_author_posts(author, limit=25)
+        peer_other_threads: dict[str, set[str]] = {}
+        for ap in author_posts:
+            other_parent = str(ap.get("parent_id") or "")
+            if not other_parent or other_parent == current_parent_id:
+                continue
+            other_parent_rec = self.store.get_observed_post(other_parent)
+            other_parent_author = (
+                str(other_parent_rec.get("author") or "").strip() if other_parent_rec else ""
+            )
+            if author == other_parent_author:
+                continue
+            ap_ts = float(ap.get("created_at") or ap.get("first_seen_at") or 0.0)
+            other_siblings = self.store.get_post_replies(other_parent, limit=100)
+            for osib in other_siblings:
+                peer = str(osib.get("author") or "").strip()
+                if peer not in current_peers or peer == other_parent_author:
+                    continue
+                os_ts = float(osib.get("created_at") or osib.get("first_seen_at") or 0.0)
+                if ap_ts > 0 and os_ts > 0 and abs(ap_ts - os_ts) <= self.booster_window_s:
+                    peer_other_threads.setdefault(peer, set()).add(other_parent)
+
+        return {
+            peer: 1 + len(threads)
+            for peer, threads in peer_other_threads.items()
+            if threads
+        }
+
     def _find_repeated_booster_peers(
         self,
         author: str,
@@ -454,38 +552,9 @@ class BotDetector:
         """Return peer handles that replied within `booster_window_s` of `author` in both
         `current_parent_id` AND at least one other parent thread.
         """
-        siblings = self.store.get_post_replies(current_parent_id, limit=100)
-        current_peers: set[str] = set()
-        for s in siblings:
-            s_author = str(s.get("author") or "").strip()
-            if not s_author or s_author == author:
-                continue
-            s_ts = float(s.get("created_at") or s.get("first_seen_at") or 0.0)
-            if s_ts > 0 and abs(current_ts - s_ts) <= self.booster_window_s:
-                s_prof = self.store.get_bot_profile(s_author)
-                if s_prof["status"] not in ("verified_npc", "own_bot"):
-                    current_peers.add(s_author)
-
-        if not current_peers:
-            return []
-
-        # Check author's earlier comments in other parent threads
-        author_posts = self.store.get_author_posts(author, limit=25)
-        repeated_peers: list[str] = []
-        for ap in author_posts:
-            other_parent = str(ap.get("parent_id") or "")
-            if not other_parent or other_parent == current_parent_id:
-                continue
-            ap_ts = float(ap.get("created_at") or ap.get("first_seen_at") or 0.0)
-            other_siblings = self.store.get_post_replies(other_parent, limit=100)
-            for osib in other_siblings:
-                peer = str(osib.get("author") or "").strip()
-                if peer not in current_peers or peer in repeated_peers:
-                    continue
-                os_ts = float(osib.get("created_at") or osib.get("first_seen_at") or 0.0)
-                if ap_ts > 0 and os_ts > 0 and abs(ap_ts - os_ts) <= self.booster_window_s:
-                    repeated_peers.append(peer)
-        return repeated_peers
+        return list(
+            self._find_booster_peer_thread_counts(author, current_parent_id, current_ts).keys()
+        )
 
     def _apply_bonus(
         self,

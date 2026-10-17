@@ -82,10 +82,14 @@ def decide(
         raw={"source": "heuristic"},
     )
 
+    raw = post.raw if isinstance(post.raw, dict) else {}
+    root_post_id = str(raw.get("root_post_id") or raw.get("parent_id") or "").strip()
+
     def make(tier: Tier, action: ActionKind, why: str, text: str = "") -> Decision:
         return Decision(
             decision_id=uuid.uuid4().hex[:12], post_id=post.post_id, tier=tier,
             account=account, scores=scores, rationale=why, action=action, text=text,
+            root_post_id=root_post_id,
         )
 
     lang_ok, lang_reason = check_incoming_post_language(post.text)

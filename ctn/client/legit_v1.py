@@ -130,6 +130,7 @@ class OfficialLegitClient(LegitClient):
         url: str | None = None,
         *,
         team_key: str = "",
+        default_password: str = "",
         timeout: float = 20.0,
         credentials: Mapping[str, str] | None = None,
         tokens: Mapping[str, str] | None = None,
@@ -143,6 +144,7 @@ class OfficialLegitClient(LegitClient):
     ) -> None:
         self.api_url = (url or DEFAULT_LEGIT_SOCIAL_URL).rstrip("/")
         self.team_key = team_key.strip()
+        self.default_password = default_password.strip()
         self.timeout = timeout
         self.store = store
         self.feed_mode = feed_mode if feed_mode in {"latest", "trending", "home"} else "latest"
@@ -315,6 +317,17 @@ class OfficialLegitClient(LegitClient):
             for t in raw["tags"]:
                 self._cache_tag_dict(t)
 
+        is_verified = (
+            (isinstance(author_obj, Mapping) and bool(author_obj.get("verified")))
+            or bool(raw.get("verified"))
+            or (bool(username) and username in self._verified_usernames)
+        )
+        platform_level = str(
+            raw.get("platform_level")
+            or raw.get("author_level")
+            or ("verified" if is_verified else "standard")
+        ).strip()
+
         out: dict[str, Any] = {
             **dict(raw),
             "post_id": post_id,
@@ -329,6 +342,7 @@ class OfficialLegitClient(LegitClient):
             "views": _count("views", "view_count"),
             "hashtags": hashtags,
             "kind": str(raw.get("kind") or ("reply" if parent_id else "post")),
+            "platform_level": platform_level,
         }
         if parent_id:
             out["parent_id"] = parent_id
@@ -369,7 +383,10 @@ class OfficialLegitClient(LegitClient):
                         self.store.mark_managed_account_status(account, "suspended")
                     return AccountSuspended(exc.message, account=account or "")
                 return PlatformError(exc.message, retryable=False, status=403)
-            retryable = exc.status in {408, 429, 500, 502, 503, 504}
+            body_retryable = isinstance(exc.body, Mapping) and bool(exc.body.get("retryable"))
+            retryable = body_retryable or (
+                exc.status in {408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524}
+            )
             if exc.status == 429:
                 return Throttled(exc.message)
             return PlatformError(exc.message, retryable=retryable, status=exc.status)
@@ -456,17 +473,37 @@ class OfficialLegitClient(LegitClient):
         if existing is not None:
             return existing
 
+        # Synchronize from SQLite in case another process (e.g. ctn.macro) registered/refreshed the token
+        if (
+            username not in self._tokens
+            and self.store is not None
+            and hasattr(self.store, "get_managed_account")
+        ):
+            row = self.store.get_managed_account(username)
+            if isinstance(row, Mapping) and str(row.get("status") or "active") != "deleted":
+                if row.get("token"):
+                    self._tokens[username] = str(row["token"])
+                if row.get("password"):
+                    self._passwords[username] = str(row["password"])
+
+        password = (
+            self._passwords.get(username)
+            or self.default_password
+            or (f"ctn2026_{username}_{self.team_key[:12]}" if self.auto_register and self.team_key else "")
+        )
+        if password:
+            self._passwords[username] = password
+
         saved_token = self._tokens.get(username)
         if saved_token:
             try:
                 acct = await asyncio.to_thread(self.social.account_from_token, saved_token)
-                return self.bind_account(username, acct)
+                return self.bind_account(username, acct, password=password)
             except APIError as exc:
-                if exc.status != 401 or username not in self._passwords:
+                if exc.status != 401 or not password:
                     raise self._translate_error(exc, account=username) from None
 
-        if username in self._passwords:
-            password = self._passwords[username]
+        if password:
             try:
                 acct = await asyncio.to_thread(self.social.login, username, password)
                 self.bind_account(username, acct, password=password)

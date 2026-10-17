@@ -123,6 +123,61 @@ class BrainTests(unittest.TestCase):
         self.assertEqual(decision.action, ActionKind.NONE)
         self.assertFalse(decision.scores.ok)
 
+    def test_neutral_and_mixed_posts_unlock_p02_p03_p07_replies(self):
+        from tests.test_jev_response import responder
+
+        for stance in ("neutral", "mixed"):
+            for purpose in ("P02", "P03", "P07"):
+                with self.subTest(stance=stance, purpose=purpose):
+                    workflow, _ = responder(side=stance, action="reply", purpose=purpose)
+                    llm, llm_calls = llm_client()
+                    self.addCleanup(llm.close)
+                    brain = make_brain(workflow, llm)
+                    verdict = brain.think(
+                        Post(
+                            f"p_{stance}_{purpose}",
+                            "citizen_undecided",
+                            "I am worried about bus safety—how does the H2D2 rule work for commuters?",
+                        )
+                    )
+                    self.assertEqual(verdict.action, ActionKind.REPLY, verdict.reason)
+                    self.assertEqual(verdict.prompt_type, purpose)
+                    self.assertEqual(verdict.text, REPLY)
+                    self.assertEqual(len(llm_calls), 1)
+
+    def test_opposing_standard_post_without_raw_platform_level_is_replied_not_dropped(self):
+        cases = [
+            ("question", "policy_proposal", "Why mandate H2D2 on public buses?", "P02"),
+            ("argument", "policy_proposal", "A citywide transit mandate hurts small shops.", "P03"),
+            ("experience", "personal", "I am worried about vaccine side effects for my kids.", "P07"),
+            ("venting", "value", "This whole mandate is a total scam!!", "P08"),
+        ]
+        for idx, (func, claim_kind, text, expected_purpose) in enumerate(cases):
+            with self.subTest(func=func, expected_purpose=expected_purpose):
+                def handler(body, data, f=func, ck=claim_kind):
+                    if "policy_stance" in data["answers"]:
+                        choose(data, "policy_stance", "no")
+                    if "reply_value" in data["answers"]:
+                        set_score(data, "reply_value", 2.0)  # [1, 3] standard range
+                        set_score(data, "response_specificity", 3.0)
+                    if "expression_function" in data["answers"]:
+                        choose(data, "expression_function", f)
+                    if "claim_kind" in data["answers"]:
+                        choose(data, "claim_kind", ck)
+
+                transport = FakeTransport(handler)
+                client = JevClient(JevConfig(api_key="synthetic-opposing-jev-key", max_retries=0), transport=transport)
+                # Use default ActionPolicy() with empty platform_levels=() to verify JevLlmBrain auto-populates levels
+                workflow = JevWorkflow(client)
+                llm, llm_calls = llm_client()
+                self.addCleanup(llm.close)
+                brain = make_brain(workflow, llm)
+                # Post has empty raw={} (no explicit platform_level)
+                verdict = brain.think(Post(f"opp_{idx}", "citizen_opp", text))
+                self.assertEqual(verdict.action, ActionKind.REPLY, verdict.reason)
+                self.assertEqual(verdict.prompt_type, expected_purpose)
+                self.assertEqual(len(llm_calls), 1)
+
 
 class EndToEndTests(unittest.TestCase):
     def run_cycles(self, n=3, *, dry_run=False, specificity=4):

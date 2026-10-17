@@ -188,6 +188,7 @@ class Decision:
     rationale: str = ""
     action: ActionKind = ActionKind.NONE
     text: str = ""                     # reply / post body, when the action has one
+    root_post_id: str = ""             # root thread post id when replying to a nested comment
     created_at: float = field(default_factory=time.time)
     # Filled in later, when the in-universe poll next moves.
     observed_poll_delta: float | None = None

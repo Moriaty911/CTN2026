@@ -112,7 +112,7 @@ class DualEngineIntegrationTests(unittest.TestCase):
     def test_shared_account_cooldown_from_macro_to_micro(self):
         """When macro publishes from an account, micro respects cooldown and uses fallback."""
         # Step 1: Macro publishes proactive post with bot_worker_yes at current time
-        t0 = time.monotonic()
+        t0 = time.time()
         macro_res = self.macro_publisher.publish_sync(
             "bot_worker_yes",
             "Early morning transit shift started in Crown Harbour. #PublicTransit",

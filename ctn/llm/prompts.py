@@ -3,6 +3,7 @@
 import json
 
 from ctn.persona.models import Persona
+from ctn.rag import get_campaign_guidance
 from .models import DraftOptions, LlmValidationError
 
 
@@ -50,6 +51,7 @@ def build_messages(
               "\n" + language + f" Aim for 2–5 short sentences, no more than {max_chars} Unicode characters. "
               "For a clarification, a single focused question is enough.")
     if persona is not None:
+        guidance = get_campaign_guidance(persona.assigned_side, purpose)
         system += (
             f"\nPersona Profile: You are posting as '{persona.name}'. "
             f"Background: {persona.bio} "
@@ -57,6 +59,8 @@ def build_messages(
             "Strictly embody this persona's voice and perspective while remaining completely natural. "
             "Do not explicitly state your bio or introduce yourself by job title unless naturally relevant."
         )
+        if guidance:
+            system += f"\n{guidance}"
     if retry_feedback:
         system += (f"\nIMPORTANT CORRECTION: A previous draft was rejected by evaluation due to '{retry_feedback}'. "
                    "Strictly resolve this issue in the new reply: ensure strict alignment with our assigned stance, "
