@@ -71,7 +71,7 @@ class TransactionsTests(unittest.TestCase):
                 conn.execute("INSERT INTO account_states VALUES('a',123,4)")
             with patch.object(StateStore,'migrate_runtime',side_effect=RuntimeError('migration fault')):
                 with self.assertRaises(RuntimeError): StateStore(path)
-            backup=Path(str(path)+'.before-v5.bak')
+            backup=Path(str(path)+'.before-v6.bak')
             with closing(sqlite3.connect(backup)) as conn, conn:
                 self.assertEqual(conn.execute('SELECT post_count FROM account_states').fetchone()[0],4)
                 self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],0)
@@ -79,7 +79,7 @@ class TransactionsTests(unittest.TestCase):
             backup.rename(Path(td)/'recovery.db')
             store=StateStore(path);self.addCleanup(store.close)
             self.assertEqual(store.get_account_state('a').post_count,4)
-            self.assertEqual(store._conn.execute('PRAGMA user_version').fetchone()[0],5)
+            self.assertEqual(store._conn.execute('PRAGMA user_version').fetchone()[0],6)
             self.assertEqual(path.stat().st_mode&0o777,0o600)
 
     def test_two_process_increments_and_claims(self):
@@ -125,7 +125,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
         result2=await self.a.post('a','Synthetic original message')
         self.assertEqual(result2.detail,'action_unknown')
         self.assertEqual(self.platform.write_count,1)
-        self.assertEqual(await reconcile_unknown_posts(self.a,self.store),1)
+        self.assertEqual(await reconcile_unknown_posts(self.a,self.store,now=time.time()+61),1)
         self.assertEqual(self.store.get_account_state('a').post_count,1)
         self.assertGreater(self.store.get_account_state('a').original_locked_until,time.time())
 
@@ -401,7 +401,9 @@ class ContextAndMigrationTests(unittest.TestCase):
         store.set_account_policy('bot_medic_yes',mode='dormant')
         store.set_account_policy('bot_policy_yes',mode='dormant')
         data={'action_decision':{'required_account_level':'high'}}
-        with self.assertRaises(ValueError):router.route(data,'Which clinical study?',side='yes')
+        fallback=router.route(data,'Which clinical study?',side='yes')
+        self.assertNotIn(fallback.account_id,('bot_medic_yes','bot_policy_yes'))
+        self.assertTrue(fallback.reason.startswith('high_fallback'))
         store.set_account_policy('bot_medic_yes',mode='active',capability_tier='high')
         self.assertEqual(router.route(data,'Which clinical study?',side='yes').account_id,'bot_medic_yes')
 

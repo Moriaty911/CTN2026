@@ -121,6 +121,6 @@ if __name__ == '__main__':
     args=parser.parse_args()
     with tempfile.TemporaryDirectory() as td:
         result = {'python': sys.version.split()[0], 'sqlite': sqlite3.sqlite_version,
-                  'system': platform.platform(), 'storage': 'temporary local file; WAL/NORMAL; warm cache',
+                  'system': platform.platform(), 'storage': 'temporary local file; WAL/FULL; warm cache',
                   'benchmarks': [run_bench(n, Path(td)) for n in args.rows]}
         print(json.dumps(result, ensure_ascii=False, indent=2))

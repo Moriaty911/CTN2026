@@ -1,0 +1,29 @@
+{
+  "storage": "temporary local file WAL/FULL",
+  "results": [
+    {
+      "active_batches": 0,
+      "ingest30_p50_ms": 2.527,
+      "ingest30_max_ms": 2.971,
+      "sql_statements_last_repeat": 722
+    },
+    {
+      "active_batches": 50,
+      "ingest30_p50_ms": 2.496,
+      "ingest30_max_ms": 2.667,
+      "sql_statements_last_repeat": 722
+    },
+    {
+      "active_batches": 200,
+      "ingest30_p50_ms": 2.592,
+      "ingest30_max_ms": 3.012,
+      "sql_statements_last_repeat": 722
+    },
+    {
+      "active_batches": 500,
+      "ingest30_p50_ms": 2.648,
+      "ingest30_max_ms": 2.758,
+      "sql_statements_last_repeat": 722
+    }
+  ]
+}

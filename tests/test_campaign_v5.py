@@ -187,13 +187,13 @@ class SharedPublicationTests(unittest.TestCase):
                 store._conn.execute('PRAGMA user_version=4')
             store.close()
             with closing(StateStore(path)) as migrated:
-                self.assertEqual(migrated._conn.execute('PRAGMA user_version').fetchone()[0],5)
+                self.assertEqual(migrated._conn.execute('PRAGMA user_version').fetchone()[0],6)
                 self.assertEqual(migrated.persona_bindings()['yes_001'],'fresh_yes_001')
                 self.assertEqual(migrated.list_actions()[0]['status'],'succeeded')
                 self.assertEqual(migrated._conn.execute('SELECT id FROM reply_batches').fetchone()[0],batch)
                 self.assertEqual(migrated._conn.execute('SELECT COUNT(*) FROM publication_texts').fetchone()[0],1)
                 self.assertEqual(migrated._conn.execute('PRAGMA integrity_check').fetchone()[0],'ok')
-            with closing(sqlite3.connect(str(path)+'.before-v5.bak')) as backup:
+            with closing(sqlite3.connect(str(path)+'.before-v6.bak')) as backup:
                 self.assertEqual(backup.execute('PRAGMA user_version').fetchone()[0],4)
                 self.assertEqual(backup.execute('SELECT status FROM action_intents').fetchone()[0],'succeeded')
 
@@ -231,7 +231,7 @@ class SharedPublicationTests(unittest.TestCase):
         warm,_=store.claim_action('post','a',text='Morning ferry coffee on the island.',metadata={'purpose':'warmup'})
         strategic,_=store.claim_action('post','b',text='I support proof for shared public spaces.',metadata={'purpose':'P01'})
         self.assertTrue(warm);self.assertTrue(strategic)
-        self.assertIsNone(store.claim_action('post','c',text='A different daily warmup.',metadata={'purpose':'warmup'})[0])
+        self.assertIsNotNone(store.claim_action('post','c',text='A different daily warmup.',metadata={'purpose':'warmup'})[0])
         store.start_action(warm);store.finish_action(warm,'succeeded',response={'post_id':'warm'})
         self.assertGreater(store._conn.execute('SELECT warmed_at FROM account_readiness').fetchone()[0],0)
 
@@ -265,6 +265,8 @@ class HybridReportTests(unittest.IsolatedAsyncioTestCase):
         self.actuator=actor(self.platform,self.store)
         self.reporter=BlueTeamReporter(self.actuator,self.store,accounts=['reporter'],enabled=True)
         self.store.set_policy('report_mode','hybrid')
+        # Automation is enabled explicitly; the shipped default is shadow mode.
+        self.store.set_policy('report_decision',{'shadow':False})
         self.payload=strong_evidence(self.store)
 
     async def test_strong_independent_evidence_sends_without_human(self):
@@ -275,13 +277,19 @@ class HybridReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store._conn.execute('SELECT COUNT(*) FROM report_approvals').fetchone()[0],0)
         self.assertEqual(self.store._conn.execute('SELECT status FROM report_attempts').fetchone()[0],'pending')
 
-    async def test_unknown_state_or_human_only_clearance_blocks_auto(self):
+    async def test_shadow_mode_records_decision_but_never_sends(self):
+        self.store.set_policy('report_decision',{'shadow':True})
         self.assertIsNone(await self.reporter._submit_candidate('post','leak','enemy'))
         clearance(self.store,live=False)
         self.assertIsNone(await self.reporter._submit_candidate('post','leak','enemy'))
         self.assertEqual(self.platform.write_count,0)
+        row=self.store._conn.execute('SELECT action,reason,bucket FROM report_decisions').fetchone()
+        self.assertEqual(tuple(row),('human','shadow_mode','leak_behavior'))
+        # The recommendation is queued for a human instead.
+        self.assertEqual(self.store._conn.execute("SELECT status FROM report_reviews").fetchone()[0],'review')
 
     async def test_hybrid_allows_explicit_manual_fallback_when_auto_capability_is_unavailable(self):
+        self.store.set_policy('report_decision',{'shadow':True})
         clearance(self.store,live=False)
         candidate=self.store.store_report_candidate(self.payload)
         approval=self.store.approve_report(candidate)
@@ -389,16 +397,16 @@ class PaginationAndRegistrationTests(unittest.IsolatedAsyncioTestCase):
         platform=MockLegitClient(failure_rate=0,latency_ms=(0,0));act=actor(platform,store)
         first=router.registry.get('yes_001')
         blocked=await act.reply(first.account_id,'p','A response before readiness.',context=router.context_for(first))
-        self.assertEqual(blocked.detail,'account_needs_warmup')
+        self.assertEqual(blocked.detail,'account_needs_initialise')
         checker=Mock();checker.check.return_value=PostflightVerdict(True,'approved')
         self.assertTrue((await warmup_step(act,router,checker))['ok'])
         self.assertTrue((await warmup_step(act,router,checker))['ok'])
         self.assertEqual((await warmup_step(act,router,checker))['status'],'idle')
         with store.batch_transaction():
-            store._conn.execute('UPDATE account_states SET last_posted_at=last_posted_at-120')
+            store._conn.execute('UPDATE account_states SET last_posted_at=last_posted_at-300')  # beyond base cooldown + jitter
         result=await act.reply(first.account_id,'p','A response after successful warmup.',context=router.context_for(first))
         self.assertTrue(result.ok,result.detail)
-        self.assertGreater(store.get_account_state(first.account_id).original_locked_until,time.time())
+        self.assertEqual(store.get_account_state(first.account_id).original_locked_until,0)
 
     async def test_successful_empty_page_completes_failed_page_preserves_cursor(self):
         store=StateStore();self.addCleanup(store.close)
@@ -427,7 +435,7 @@ class PaginationAndRegistrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await check_registration(store,client,'new_handle'))['status'],'succeeded')
         self.assertEqual(len(fleet_plan(30)),30)
         self.assertEqual(len(fleet_plan(50,phase='shaping')),50)
-        self.assertEqual(len(fleet_plan(50,phase='warmup')),48)
+        self.assertEqual(len(fleet_plan(50,phase='warmup')),50)
 
 
 class MultiprocessReportTests(unittest.TestCase):
@@ -476,6 +484,7 @@ class EvidencePostflightTests(unittest.TestCase):
         self.assertEqual(verdict.reason,'unsupported_or_unclear_evidence')
 
 
+@patch.dict('ctn.pipeline.targeting.POLICY',{'caps':{'per_author_per_day':10,'per_thread_per_day':10,'per_account_per_day':35}})
 class FrozenRagBatchTests(unittest.IsolatedAsyncioTestCase):
     async def test_ordinary_corpus_update_does_not_retrieve_again_for_existing_batch(self):
         from tests.test_persona80 import BatchEndToEndTests

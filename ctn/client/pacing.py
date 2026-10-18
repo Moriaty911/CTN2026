@@ -80,7 +80,12 @@ class HttpPacer:
             if account:
                 buckets.append(('account:'+str(account)+':'+kind,
                     self.rate.per_account_read_rps if kind=='read' else self.rate.per_account_write_rps))
-            reservation,delay=self.store.reserve_http_request(buckets,kind=kind,cap=cap,now=self.clock())
+            try:
+                reservation,delay=self.store.reserve_http_request(buckets,kind=kind,cap=cap,now=self.clock())
+            except RuntimeError as exc:
+                # Nothing was sent: report a definite local failure, never an uncertain send.
+                from .base import PlatformError
+                raise PlatformError('local '+str(exc),retryable=False,status=409) from None
             try:
                 if delay>0: self._wait(delay)
                 while True:
@@ -100,9 +105,18 @@ class HttpPacer:
                         if not ready:
                             from .base import PlatformError
                             raise PlatformError(reason,retryable=False,status=409)
-                    sent,wait=self.store.try_mark_http_sent(reservation,cap=cap,now=self.clock())
+                    if method!='GET' and self._closed.is_set():
+                        from .base import PlatformError
+                        raise PlatformError('client shutting down',retryable=False,status=409)
+                    action=ident if ident and method!='GET' and not path.startswith('/auth/') else None
+                    sent,wait=self.store.try_mark_http_sent(reservation,cap=cap,now=self.clock(),action=action)
                     if sent: break
-                    if wait is None: raise RuntimeError(kind+' request budget exhausted before send')
+                    if isinstance(wait,str):
+                        from .base import PlatformError
+                        raise PlatformError(wait,retryable=False,status=409)
+                    if wait is None:
+                        from .base import PlatformError
+                        raise PlatformError('local '+kind+' request budget exhausted before send',retryable=False,status=409)
                     self._wait(wait)
             except BaseException:
                 self.store.cancel_http_reservation(reservation)

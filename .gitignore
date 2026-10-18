@@ -192,3 +192,11 @@ local_*
 #    systemd/*.service       process supervision
 #    docs/**                 documentation
 #    .env.example            configuration template (variable names only)
+
+# Optional Discord configuration template is safe to commit.
+!.env.discord.example
+!.env.macro.example
+.env.discord
+.env.macro
+*.migration.lock
+pypi-capturethenarrative/

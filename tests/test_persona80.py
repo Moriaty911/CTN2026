@@ -110,14 +110,17 @@ class CatalogAndRoutingTests(unittest.TestCase):
     def test_activation_cap_phase_and_explicit_grade(self):
         router=bound_router(self.store,('yes_001','yes_002','yes_073'),active=False)
         self.store.set_policy('phase','warmup')
-        with self.assertRaises(ValueError):self.store.set_persona_modes(['yes_073'],'active')
+        self.assertEqual(self.store.set_persona_modes(['yes_073'],'active'),1)
         with self.assertRaises(ValueError):self.store.set_persona_modes(['yes_001','yes_002'],'active',max_active=1)
         self.store.set_policy('phase','shaping');self.store.set_persona_modes(['yes_073'],'active')
         high={'action_decision':{'required_account_level':'high'}}
         self.assertEqual(router.get_state('fresh_yes_073').capability_tier,'standard')
-        with self.assertRaises(ValueError):router.route(high,'clinical trial')
+        # High is a preference: without a high-tier account a standard account still replies.
+        fallback=router.route(high,'clinical trial')
+        self.assertEqual(fallback.account_id,'fresh_yes_073');self.assertTrue(fallback.reason.startswith('high_fallback_standard'))
         self.store.set_account_policy('fresh_yes_073',capability_tier='high')
-        self.assertEqual(router.route(high,'clinical trial').account_id,'fresh_yes_073')
+        preferred=router.route(high,'clinical trial')
+        self.assertEqual(preferred.account_id,'fresh_yes_073');self.assertTrue(preferred.reason.startswith('high_tier'))
         self.store.set_account_banned('fresh_yes_073',True)
         with self.assertRaises(ValueError):router.route(high,'clinical trial')
 
@@ -203,6 +206,8 @@ class ExpansionRubricTests(unittest.TestCase):
         self.assertFalse(verdict.can_send);self.assertEqual(verdict.reason,'no_substantive_addition')
 
 
+# Batch mechanics are tested with the anti-pile-on caps lifted; caps have their own tests.
+@patch.dict('ctn.pipeline.targeting.POLICY',{'caps':{'per_author_per_day':10,'per_thread_per_day':10,'per_account_per_day':35}})
 class PersistentBatchTests(unittest.TestCase):
     def setUp(self):
         self.store=StateStore();self.addCleanup(self.store.close)
@@ -267,13 +272,15 @@ class PersistentBatchTests(unittest.TestCase):
             store.set_account_frozen('fresh_yes_001',True)
             store._conn.execute('PRAGMA user_version=3');store.close()
             reopened=StateStore(path);self.addCleanup(reopened.close)
-            self.assertEqual(reopened._conn.execute('PRAGMA user_version').fetchone()[0],5)
-            self.assertTrue(Path(str(path)+'.before-v5.bak').exists())
+            self.assertEqual(reopened._conn.execute('PRAGMA user_version').fetchone()[0],6)
+            self.assertTrue(Path(str(path)+'.before-v6.bak').exists())
             self.assertTrue(reopened.get_account_state('fresh_yes_001').is_frozen)
             self.assertEqual(before,[tuple(r) for r in reopened._conn.execute('SELECT persona_id,account_id FROM reply_slots ORDER BY slot')])
             self.assertIsNotNone(reopened.claim_reply_slot())
 
 
+# Batch mechanics are tested with the anti-pile-on caps lifted; caps have their own tests.
+@patch.dict('ctn.pipeline.targeting.POLICY',{'caps':{'per_author_per_day':10,'per_thread_per_day':10,'per_account_per_day':35}})
 class BatchEndToEndTests(unittest.IsolatedAsyncioTestCase):
     async def make_loop(self,*,dry=False,probability=.9,duplicate=False):
         store=StateStore();self.addCleanup(store.close);router=bound_router(store)
@@ -438,7 +445,7 @@ class PerformanceTests(unittest.TestCase):
                 self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],3)
                 self.assertIsNone(conn.execute("SELECT name FROM sqlite_master WHERE name='should_rollback'").fetchone())
                 self.assertEqual(conn.execute("SELECT mode,post_count FROM account_states WHERE account_id='old_identity'").fetchone(),('dormant',1))
-            with closing(sqlite3.connect(str(path)+'.before-v5.bak')) as backup:
+            with closing(sqlite3.connect(str(path)+'.before-v6.bak')) as backup:
                 self.assertEqual(backup.execute('PRAGMA user_version').fetchone()[0],3)
 
 
@@ -551,10 +558,10 @@ class LocalPersonaOperationsTests(unittest.TestCase):
             call('persona','activate','--group','transport_logistics')
             self.assertEqual(call('persona','list')['personas'][0]['mode'],'active')
             call('persona','standby','--id','yes_001')
-            call('phase','shaping')
+            call('phase','shaping','--until','2099-01-01T00:00:00+11:00')
             with closing(StateStore(path)) as store:
                 store.seed_campaign_policy(PersonaRegistry().list_all())
-                self.assertEqual(store.policy('phase'),'shaping')
+                self.assertEqual(store.effective_phase(),'shaping')
             self.assertEqual(call('performance')['groups'],[])
             self.assertEqual(call('persona','show','--id','yes_001')['profile']['name'],'Nolan Mercer')
 

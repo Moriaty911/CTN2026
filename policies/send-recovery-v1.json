@@ -1,0 +1,18 @@
+{
+  "version": "send-recovery.v1",
+  "notes": "Uncertain sends block the target, not the account. wire_at marks the moment a write request left this host; a send without it was never transmitted.",
+  "send_lease_seconds": 90,
+  "unknown_account_hold_seconds": 900,
+  "check_after_seconds": [60, 180, 480, 840],
+  "absent_min_age_seconds": 480,
+  "absent_required_checks": 2,
+  "abandon_after_seconds": 900,
+  "late_check_every_seconds": 1800,
+  "late_check_until_seconds": 21600,
+  "max_pages": 5,
+  "checks_per_step": 4,
+  "report_unknown_release_seconds": 7200,
+  "alert_window_seconds": 900,
+  "alert_accounts": 5,
+  "shutdown_drain_seconds": 20
+}

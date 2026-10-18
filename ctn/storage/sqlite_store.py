@@ -195,11 +195,24 @@ def current_sydney_day(ts: float | None = None) -> str:
 
 
 from .operations import OperationsStoreMixin
+from .lifecycle import LifecycleStoreMixin
 
-class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
+@contextlib.contextmanager
+def _migration_lock(path):
+    if path == ":memory:":
+        yield
+        return
+    import fcntl
+    with open(path+".migration.lock", "a") as lock:
+        os.chmod(path+".migration.lock",0o600)
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        try:yield
+        finally:fcntl.flock(lock,fcntl.LOCK_UN)
+
+class StateStore(LifecycleStoreMixin, OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
     """SQLite-backed store for account cooldowns, post history mirror, bot intelligence, and reporting gates."""
 
-    def __init__(self, db_path: str | Path = ":memory:") -> None:
+    def __init__(self, db_path: str | Path = ":memory:", *, migrate: bool = True) -> None:
         self.db_path = str(db_path)
         self._lock = threading.RLock()
         self._closed = False
@@ -213,17 +226,20 @@ class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0)
         self._finalizer = weakref.finalize(self, self._conn.close)
         self._conn.row_factory = sqlite3.Row
-        with self._lock:
+        with self._lock, _migration_lock(self.db_path):
             self._conn.execute("PRAGMA temp_store=MEMORY")
             self._conn.execute("PRAGMA busy_timeout=5000")
             if self.db_path != ":memory:":
                 self._conn.execute("PRAGMA journal_mode=WAL")
-                self._conn.execute("PRAGMA synchronous=NORMAL")
+                self._conn.execute("PRAGMA synchronous=FULL")
                 self._conn.execute("PRAGMA cache_size=-32000")
                 self._conn.execute("PRAGMA mmap_size=67108864")
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
             if version > SCHEMA_VERSION:
                 raise ValueError("database schema is newer than this executable")
+            if not migrate:
+                if version != SCHEMA_VERSION:raise ValueError("run fleet migration before starting workers")
+                return
             existed = self._conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'").fetchone()
             if existed and version < SCHEMA_VERSION and self.db_path != ":memory:":
                 self.backup(self.db_path + f".before-v{SCHEMA_VERSION}.bak")
@@ -236,6 +252,7 @@ class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
                 self.migrate_runtime()
                 self.migrate_campaign()
                 self.migrate_operations()
+                self.migrate_lifecycle(version)
                 for sql in statements:
                     if sql.startswith('CREATE INDEX'):
                         self._conn.execute(sql)
@@ -380,36 +397,14 @@ class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
 
     # ---- Account States -------------------------------------------------- #
     def get_account_state(self, account_id: str) -> AccountState:
-        """Fetch or initialize account state from SQLite."""
-        with self.batch_transaction():
-            row = self._conn.execute(
-                """
-                SELECT *
-                FROM account_states WHERE account_id = ?
-                """,
-                (account_id,),
-            ).fetchone()
-            if row is None:
-                self._conn.execute(
-                    """
-                    INSERT OR IGNORE INTO account_states (
-                        account_id, last_posted_at, post_count, is_frozen, is_banned
-                    ) VALUES (?, 0.0, 0, 0, 0)
-                    """,
-                    (account_id,),
-                )
-                self._commit()
-                return AccountState(account_id=account_id)
-            return AccountState(
-                account_id=str(row["account_id"]),
-                last_posted_at=float(row["last_posted_at"]),
-                post_count=int(row["post_count"]),
-                is_frozen=bool(row["is_frozen"]),
-                is_banned=bool(row["is_banned"]),
-                mode=str(row["mode"]), capability_tier=str(row["capability_tier"]),
-                original_locked_until=float(row["original_locked_until"]),
-                last_original_at=float(row["last_original_at"]), last_reply_at=float(row["last_reply_at"]),
-            )
+        with self._lock:
+            row=self._conn.execute('SELECT * FROM account_states WHERE account_id=?',(account_id,)).fetchone()
+        if row is None:
+            with self.batch_transaction():
+                self._conn.execute('INSERT OR IGNORE INTO account_states(account_id) VALUES(?)',(account_id,))
+                row=self._conn.execute('SELECT * FROM account_states WHERE account_id=?',(account_id,)).fetchone()
+        from dataclasses import fields
+        return AccountState(**{f.name:row[f.name] for f in fields(AccountState) if f.name in row.keys()})
 
     def save_account_state(
         self,
@@ -788,6 +783,17 @@ class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
             )
             self._commit()
 
+    def publication_counts(self, accounts) -> dict[str, int]:
+        """Successful posts and replies per account (initialise posts included)."""
+        accounts=[a for a in accounts if a]
+        if not accounts:
+            return {}
+        marks=','.join('?'*len(accounts))
+        with self._lock:
+            rows=self._conn.execute(f"SELECT account_id,COUNT(*) FROM interaction_log WHERE action IN ('post','reply') "
+                                    f"AND account_id IN ({marks}) GROUP BY account_id",accounts).fetchall()
+        return {r[0]:int(r[1]) for r in rows}
+
     def has_replied_to_post(self, target_post_id: str) -> bool:
         """Return True if any of our accounts has already replied to target_post_id."""
         if not target_post_id:
@@ -1077,7 +1083,9 @@ class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
             record["version"] = version
             record["content_changed"] = changed
             if is_new or changed:
-                self.enqueue_post(post_id, version, now=ts)
+                self.enqueue_post(post_id, version, now=ts, post={**record,'root_post_id':root_post_id})
+            elif (likes,replies,reposts)!=(int(existing['likes']),int(existing['replies']),int(existing['reposts'])):
+                self.refresh_task_audience({**record,'root_post_id':root_post_id}, now=ts)
             if replies > int(record.get("replies_crawled", 0)):
                 self._conn.execute('INSERT INTO comment_queue(post_id,priority,next_fetch_at) VALUES(?,?,?) '
                     'ON CONFLICT(post_id) DO UPDATE SET priority=excluded.priority',
@@ -1104,6 +1112,7 @@ class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
         Posts crawled within `cooldown_s` are skipped.
         """
         ts = time.time() if now is None else float(now)
+        args = (max(1, min_unseen_replies), ts - max(0.0, cooldown_s))
         with self._lock:
             rows = self._conn.execute(
                 """
@@ -1112,10 +1121,27 @@ class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
                 WHERE q.priority >= ? AND q.next_fetch_at <= ?
                 ORDER BY q.priority DESC LIMIT ?
                 """,
-                (max(1, min_unseen_replies), ts - max(0.0, cooldown_s), max(1, limit)),
+                (*args, max(1, limit)),
             ).fetchall()
+            # Threads under our own posts, verified authors or trending posts usually have few unseen
+            # replies but the most valuable readers; never let one huge thread hide them.
+            special = self._conn.execute(
+                """
+                SELECT p.*, q.priority AS unseen_replies
+                FROM comment_queue q JOIN observed_posts p ON p.post_id=q.post_id
+                WHERE q.priority >= ? AND q.next_fetch_at <= ?
+                  AND (p.author IN (SELECT account_id FROM bot_registry WHERE status IN ('own_bot','verified_npc'))
+                       OR p.post_id IN (SELECT post_id FROM trending_seen WHERE seen_at >= ?))
+                ORDER BY q.next_fetch_at LIMIT ?
+                """,
+                (*args, ts - 1800, max(1, limit)),
+            ).fetchall()
+            seen = set()
             out = []
-            for r in rows:
+            for r in [*rows, *special]:
+                if r['post_id'] in seen:
+                    continue
+                seen.add(r['post_id'])
                 rec = self._unpack_observed_row(r)
                 rec["unseen_replies"] = int(r["unseen_replies"])
                 out.append(rec)

@@ -383,6 +383,6 @@ class JevEvaluator:
         if (flow.status not in {"evaluated", "partial"} or flow.relative_stance not in {"neutral", "mixed"} or
             final_route is None or final_route.route != "deep"):
             raise EvaluatorValidationError("response: eligible neutral/mixed deep assessment required")
-        questions = load_rubric("response")
+        questions = getattr(self,"response_questions",None) or load_rubric("response")
         packed = self.packer.pack_response(flow.deep.parsed._packed, question_set=questions)
         return self._evaluate_stage(packed, questions, batch_memo, force_refresh=force_refresh)

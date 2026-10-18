@@ -1,0 +1,54 @@
+{
+  "version": "reply-targeting.v1",
+  "notes": "Ordinal weights, not probabilities of scoring. Bot estimates are priors for ordering only; reports use report-decision.v2.",
+  "bot_prior": {
+    "unknown": 0.3,
+    "suspected_bot": 0.6,
+    "confirmed_bot": 0.9,
+    "upheld_author": 0.9
+  },
+  "weights": {
+    "author_reader": 10.0,
+    "onlooker": 4.0,
+    "replies_to_us": 15.0,
+    "trending": 6.0,
+    "verified_author": 6.0
+  },
+  "freshness_half_life_seconds": 1800,
+  "author_history_posts": 20,
+  "cold": {
+    "min_age_seconds": 600,
+    "max_engagement": 3,
+    "min_bot_probability": 0.5
+  },
+  "defer_suspected_until_seconds": 660,
+  "caps": {
+    "per_author_per_day": 2,
+    "per_thread_per_day": 3,
+    "per_account_per_day": 35
+  },
+  "cooldown_jitter_seconds": 120,
+  "trending_window_seconds": 1800,
+  "refresh": {
+    "stages_seconds": [
+      600,
+      1500
+    ],
+    "per_minute": 120,
+    "per_step": 10,
+    "spacing_seconds": 0.5,
+    "stale_after_seconds": 300,
+    "max_team_read_backlog_seconds": 2.0
+  },
+  "feed": {
+    "trending_every": 2,
+    "page_limit": 50,
+    "backlog_max_age_seconds": 300
+  },
+  "comments": {
+    "pages_per_post_per_hour": 4,
+    "own_thread_bonus": 80,
+    "verified_bonus": 40,
+    "trending_bonus": 30
+  }
+}

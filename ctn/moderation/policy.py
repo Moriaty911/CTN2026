@@ -34,10 +34,51 @@ def candidate_payload(store, kind, target, author):
     else:target_version=None
     eligibility={'activity':store.confirmed_activity(author),'upheld_posts':prof['upheld_strikes']} if kind=='account' else None
     evidence_hash=digest({'evidence':evidence,'target_version':target_version,'eligibility':eligibility,'policy':POLICY,'scoring_policy':store.policy('evidence_policy',{})})
-    detail=PREFIXES[kind]+json.dumps(evidence,sort_keys=True,ensure_ascii=True,separators=(',',':'))
+    # The platform moderator reads plain English; the structured evidence stays local for audit and hashing.
+    detail=PREFIXES[kind]+summarize_evidence(kind,evidence,eligibility)
     return dict(subject_kind=kind,subject_id=str(target),author=author,reason='inauthentic',detail=detail,
         evidence=evidence,evidence_hash=evidence_hash,target_version=target_version,policy_version=POLICY['version'],
         automatic_policy=POLICY,scoring_policy=store.policy('evidence_policy',{}),suspicion_score=prof['suspicion_score'])
+
+
+def _clip(text, limit=90):
+    from .detector import BotDetector
+    flat=' '.join(BotDetector._unquoted(str(text)).replace('"',"'").split())
+    return flat if len(flat)<=limit else flat[:limit-1].rstrip()+'…'
+
+
+def _thread(row):
+    return row.get('root_post_id') or row.get('parent_id') or row.get('post_id')
+
+
+def summarize_evidence(kind, evidence, eligibility=None):
+    """Deterministic plain-English reasons (no model call, so target text cannot steer it)."""
+    parts=[]
+    leaks=[e for e in evidence if e['family']=='leak']
+    if leaks:
+        parts.append(f'it posted text that exposes an AI or template origin ("{_clip(leaks[0]["post"]["text"])}")')
+    reps=[e for e in evidence if e['family']=='repetition']
+    if reps:
+        rows={r['post_id']:r for e in reps for r in [e['post'],*e['related']]}
+        threads={_thread(r) for r in rows.values()}
+        parts.append(f'it published near-identical long text in {len(rows)} posts across {len(threads)} threads')
+    coordination=[e for e in evidence if e['family']=='coordination']
+    if coordination:
+        peers=sorted({p for e in coordination for p in (e['detail'].get('peers') or {})})
+        threads={t for e in coordination for t in [e['detail'].get('current_thread')] if t}
+        named=', '.join('@'+p for p in peers[:3])+(' and others' if len(peers)>3 else '')
+        parts.append(f'it repeatedly replied within 15 seconds of the same accounts ({named or "the same accounts"}) in more than one thread'
+                     +(f' ({len(threads)} observed)' if len(threads)>1 else ''))
+    timing=[e for e in evidence if e['family']=='timing']
+    if timing:
+        count=max(int(e['detail'].get('fast_intervals',0)) for e in timing)
+        parts.append(f'it posted {count} times less than 15 seconds after its previous post')
+    if kind=='account' and eligibility:
+        actions=(eligibility.get('activity') or {}).get('action_count')
+        parts.append(f"moderators have already upheld {eligibility.get('upheld_posts',0)} report(s) on its posts"
+                     +(f' and it has taken at least {actions} actions' if actions is not None else ''))
+    text='; '.join(parts) if parts else 'its observed behavior matches automated posting'
+    return (text+'.')[:900]
 
 
 def automatic_evidence(store, payload):

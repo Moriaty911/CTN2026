@@ -193,6 +193,8 @@ class Decision:
     created_at: float = field(default_factory=time.time)
     # Filled in later, when the in-universe poll next moves.
     observed_poll_delta: float | None = None
+    disposition: str = "auto"  # execute, wait, retry, skip; auto for legacy saved decisions
+    needs: tuple[str, ...] = ()
 
 
 @dataclass

@@ -106,6 +106,7 @@ class ActionPolicy:
                 "opposing_reply_from": self.opposing_reply_from, "opposing_high_above": self.opposing_high_above,
                 "platform_levels": dict(self.platform_levels),
                 "engagement_policy": "visible_signals_in_reply_value_no_standalone_trigger",
+                "unknown_target_level_policy": "allow_standard_preserve_unknown" if self.version=="jev-actions.v3" else "await_metadata",
                 "pending_rules": (["mixed_neutral_actions"] if self.version == "jev-actions.v1" else []) + ["engagement_trigger_thresholds"]}
         if self.version == "jev-actions.v2":
             data["mixed_neutral_policy"] = "downstream_response_planning"
@@ -160,9 +161,12 @@ class ActionPolicy:
         if high:
             return ActionDecision("decided", "reply", "opposing_high_account_required", key, score,
                                   "high", "high", "high", grade)
-        if grade == "unknown":
+        if grade == "unknown" and self.version != "jev-actions.v3":
             return ActionDecision("needs_account_metadata", "reply", "opposing_target_level_unknown", key, score,
                                   "unknown", "standard", "unresolved", grade,
                                   ("author.platform_level" if label is None else "platform_level_mapping",))
+        if grade == "unknown":
+            return ActionDecision("decided", "reply", "opposing_unknown_level_standard_reply", key, score,
+                                  "standard", "standard", "ordinary", grade)
         return ActionDecision("decided", "reply", "opposing_standard_reply", key, score,
                               "standard", "standard", "ordinary", grade)

@@ -73,7 +73,8 @@ async def run_reply_batches(loop,report,limit):
             if result.ok:loop._remember(decision,result)
             if not result.action_id:
                 terminal=result.detail in ('target_edited','draft_or_opportunity_expired','persona_catalog_mismatch',
-                    'account_disabled','account_level_required','invalid_reply_slot','duplicate_publication','near_duplicate_publication','rag_snapshot_withdrawn')
+                    'account_disabled','account_level_required','invalid_reply_slot','duplicate_publication','near_duplicate_publication','rag_snapshot_withdrawn',
+                    'author_daily_cap','thread_daily_cap','account_daily_cap')
                 await asyncio.to_thread(loop.store.defer_reply_slot,slot,result.detail,cancel=terminal)
         except AuthError:
             loop.actuator.suspended.add(slot['account_id'])

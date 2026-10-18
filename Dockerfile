@@ -49,6 +49,8 @@ FROM deps AS verify
 
 WORKDIR /app
 COPY . .
+# Include optional UI dependencies in offline verification.
+RUN /opt/venv/bin/pip install -r requirements-discord.lock
 # Interpreter version guard plus the full offline test suite
 RUN /opt/venv/bin/python scripts/check_env.py --tests
 
@@ -92,3 +94,28 @@ HEALTHCHECK --interval=60s --timeout=15s --start-period=20s --retries=3 \
   CMD ["bash", "scripts/healthcheck.sh"]
 
 CMD ["python", "-m", "ctn.main"]
+
+# Optional reporting UI. Fleet runtime dependencies remain separate.
+FROM runtime AS discord-runtime
+USER root
+RUN /opt/venv/bin/pip install -r /app/requirements-discord.lock
+USER ctn
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+ CMD ["python", "-m", "ctn.discord_bot", "--healthcheck"]
+CMD ["python", "-m", "ctn.discord_bot"]
+
+# Pi is pinned to the installed and inspected CLI contract.
+FROM node:24-bookworm-slim AS pi-runtime
+RUN npm install --global @earendil-works/pi-coding-agent@1.3.0
+FROM runtime AS macro-runtime
+# Match the team's local Pi selection; credentials arrive through the Pi mount.
+ENV CTN_PI_MODEL=deepseek/deepseek-flash \
+    CTN_PI_THINKING=high
+USER root
+COPY --from=pi-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=pi-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js /usr/local/bin/pi
+USER ctn
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+ CMD ["python", "-m", "ctn.macro.worker", "--healthcheck"]
+CMD ["python", "-m", "ctn.macro.worker", "--harness", "/state/harness.md"]

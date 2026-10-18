@@ -22,9 +22,14 @@ def main(argv=None):
     subs.add_parser('preflight')
     p=subs.add_parser('fleet');p.add_argument('operation',choices=['plan','register','check','import'])
     p.add_argument('--size',type=int,choices=[30,50],default=30);p.add_argument('--account');p.add_argument('--source')
+    p.add_argument('--persona-id',help='explicit unused persona for replacement registration')
     p.add_argument('--execute',action='store_true',help='explicitly execute the reviewed registration plan')
-    p=subs.add_parser('reports');p.add_argument('operation',choices=['list','approve','clearance'])
-    p.add_argument('--candidate');p.add_argument('--source')
+    p=subs.add_parser('reports');p.add_argument('operation',choices=['list','approve','reject','defer','clearance','pause','affiliation','automation','calibration'])
+    p.add_argument('--shadow',choices=['on','off'],help='automation: on records decisions only; off lets enabled buckets send')
+    p.add_argument('--buckets',help='automation: comma-separated buckets that may send automatically')
+    p.add_argument('--p-floor',type=float,help='automation: raise the minimum bot probability (never below 0.7)')
+    p.add_argument('--max-expected-genuine',type=float,help='automation: risk budget for unresolved post reports')
+    p.add_argument('--candidate');p.add_argument('--source');p.add_argument('--reason',default='');p.add_argument('--revision',type=int);p.add_argument('--resume-at',type=float)
     p=subs.add_parser('rag-withdraw');p.add_argument('snapshot_id',nargs='?');p.add_argument('--reference');p.add_argument('--corpus-hash')
     p=subs.add_parser('account');p.add_argument('account_id');p.add_argument('--mode',choices=['active','standby','dormant'])
     p.add_argument('--tier',choices=['standard','high']);p.add_argument('--original-locked-until',type=float)
@@ -33,7 +38,9 @@ def main(argv=None):
     p=subs.add_parser('import-accounts');p.add_argument('source',help='legacy JSON account-state mapping')
     p=subs.add_parser('background');p.add_argument('source',help='operator-verified BackgroundReference JSON array')
     p=subs.add_parser('resolve-action');p.add_argument('action_id');p.add_argument('evidence',help='explicit operator review JSON')
-    p=subs.add_parser('phase');p.add_argument('phase',choices=['warmup','shaping','climax'])
+    p=subs.add_parser('phase');p.add_argument('phase',choices=['startup','warmup','shaping','climax','auto']);p.add_argument('--until',help='ISO timestamp including timezone; required for override')
+    p=subs.add_parser('campaign');p.add_argument('operation',choices=['configure','show']);p.add_argument('--daily-original-limit',type=int);p.add_argument('--ends-at',help='official end time with timezone')
+    p=subs.add_parser('maintenance');p.add_argument('operation',choices=['list','recommend','admit','release']);p.add_argument('--account');p.add_argument('--reason',default='')
     p=subs.add_parser('performance');p.add_argument('--group-by',choices=['persona_id','occupation_group','kind','slot'],default='occupation_group')
     p.add_argument('--hours',type=float,default=24);p.add_argument('--format',choices=['json','markdown'],default='json')
     p=subs.add_parser('persona');p.add_argument('operation',choices=['validate','preview','list','show','apply','bind','activate','standby','dormant'])
@@ -73,7 +80,7 @@ def main(argv=None):
             from .persona.registry import PersonaRegistry
             registry=PersonaRegistry().attach(store)
             if args.operation=='plan':
-                result={'requested':args.size,'selected':fleet_plan(args.size,phase=store.policy('phase','warmup')),
+                result={'requested':args.size,'selected':fleet_plan(args.size,phase=store.effective_phase(),persona_id=args.persona_id,account_id=args.account),
                     'platform_counts':store.get_managed_account_counts(),'note':'standby platform accounts also occupy server slots'}
             elif args.operation=='import':
                 if not args.source:parser.error('fleet import requires --source')
@@ -97,7 +104,7 @@ def main(argv=None):
                             if not args.account:raise ValueError('check requires --account')
                             return await check_registration(store,client,args.account)
                         outcomes=[]
-                        for row in fleet_plan(args.size,phase=store.policy('phase','warmup')):
+                        for row in fleet_plan(args.size,phase=store.effective_phase(),persona_id=args.persona_id,account_id=args.account):
                             if args.account and row['account_id']!=args.account:continue
                             outcome=await register_one(store,client,row['persona_id'],row['account_id'],settings.platform.bot_password,
                                 max_active=settings.fleet.bot_accounts,max_total=settings.fleet.max_total_accounts)
@@ -107,20 +114,32 @@ def main(argv=None):
                     finally:await client.close()
                 result=asyncio.run(perform())
         elif args.command=='reports':
-            if args.operation=='approve':
-                if not args.candidate:parser.error('approve requires --candidate')
-                result={'approval_id':store.approve_report(args.candidate),'expires_in_s':300}
+            from .moderation.review import ReviewService
+            service=ReviewService(store)
+            if args.operation in ('approve','reject','defer'):
+                if not args.candidate:parser.error('candidate ID required')
+                result=service.review(args.candidate,args.operation,revision=args.revision,reason=args.reason,resume_at=args.resume_at)
             elif args.operation=='clearance':
-                if not args.source:parser.error('clearance requires operator evidence JSON')
+                if not args.source:parser.error('operator evidence JSON required')
                 proof=json.loads(Path(args.source).read_text())
-                if not proof.get('source') or proof.get('allowed') is not True:parser.error('clearance needs source and allowed=true')
-                store.set_policy('report_clearance',{'source':proof['source'],'allowed':True,
-                    'expires_at':time.time()+300,'live_source_verified':False})
-                result={'manual_clearance_expires_in_s':300,'automatic_capability':False}
-            else:
-                with store._lock:
-                    result={'state':store.report_state_ready(),'candidates':[dict(r) for r in store._conn.execute('SELECT * FROM report_candidates ORDER BY created_at DESC LIMIT 50')],
-                        'attempts':[dict(r) for r in store._conn.execute('SELECT * FROM report_attempts ORDER BY submitted_at DESC LIMIT 50')]}
+                if proof.get('allowed') is not True:parser.error('allowed=true required')
+                result=service.clearance(proof.get('source',''),'cli')
+            elif args.operation=='pause':result=service.pause('cli')
+            elif args.operation=='automation':
+                from .moderation.decision import set_overrides,calibration_summary
+                set_overrides(store,shadow=None if args.shadow is None else args.shadow=='on',
+                    auto_buckets=None if args.buckets is None else [b.strip() for b in args.buckets.split(',') if b.strip()],
+                    p_floor=args.p_floor,max_expected_genuine=args.max_expected_genuine,actor='cli')
+                result=calibration_summary(store)
+            elif args.operation=='calibration':
+                from .moderation.decision import calibration_summary
+                result=calibration_summary(store)
+            elif args.operation=='affiliation':
+                if not args.source:parser.error('source JSON required')
+                proof=json.loads(Path(args.source).read_text())
+                service.affiliation(proof['author'],proof['side'],proof.get('team_id',''),proof['source'],proof.get('observed_at'))
+                result={'imported':True}
+            else:result=service.dashboard()
         elif args.command=='rag-withdraw':
             if args.reference:
                 if args.snapshot_id or not args.corpus_hash:parser.error('reference withdrawal requires --corpus-hash and no snapshot ID')
@@ -139,7 +158,29 @@ def main(argv=None):
                 original_locked_until=args.original_locked_until)
             result=store.get_account_metrics(args.account_id)
         elif args.command=='phase':
-            store.set_policy('phase',args.phase);result={'phase':args.phase,'activated':0}
+            if args.phase=='auto':store.set_policy('phase_override',{})
+            else:
+                from datetime import datetime
+                if not args.until:parser.error('phase override requires --until with timezone')
+                at=datetime.fromisoformat(args.until.replace('Z','+00:00'))
+                if at.tzinfo is None:parser.error('--until must include timezone')
+                store.override_phase(args.phase,at.timestamp())
+            result={'phase':store.effective_phase(),'activated':0}
+        elif args.command=='campaign':
+            if args.operation=='configure':
+                if args.daily_original_limit is not None:store.configure_campaign(args.daily_original_limit)
+                if args.ends_at:
+                    from datetime import datetime
+                    at=datetime.fromisoformat(args.ends_at.replace('Z','+00:00'))
+                    if at.tzinfo is None:parser.error('--ends-at must include timezone')
+                    store.set_policy('campaign_ends_at',at.timestamp())
+            result={'phase':store.effective_phase(),'phase_override':store.policy('phase_override',{}),'phase_times':store.policy('phase_times'),'daily_original_limit':store.policy('daily_original_limit',10),'original_lock_seconds':store.policy('original_lock_seconds',86400),'ends_at':store.policy('campaign_ends_at')}
+        elif args.command=='maintenance':
+            if args.operation in ('admit','release'):
+                if not args.account:parser.error('--account required')
+                store.set_maintenance(args.account,args.operation=='admit',args.reason)
+                result=store.lifecycle(args.account)
+            else:result=store.maintenance_recommendations()
         elif args.command=='performance':
             if args.hours<=0:parser.error('--hours must be positive')
             result=store.performance_report(since=time.time()-args.hours*3600,group_by=args.group_by)
@@ -197,7 +238,7 @@ def main(argv=None):
             events=json.loads(Path(args.source).read_text())
             applied=0;invalid=0
             for event in events:
-                try:applied+=bool(store.apply_moderation_event(event))
+                try:applied+=bool(store.import_ruling(event))
                 except (ValueError,TypeError,KeyError):invalid+=1
             result={'applied':applied,'events':len(events),'invalid':invalid}
         elif args.command=='background':
@@ -209,7 +250,7 @@ def main(argv=None):
             with store.batch_transaction():
                 store.set_policy('trusted_background',data)
                 store.set_policy('background_version','trusted-background.v1:'+digest(data))
-            result={'references':len(data),'restart_service_to_apply':True}
+            result={'references':len(data),'restart_service_to_apply':False}
         elif args.command=='import-accounts':
             data=json.loads(Path(args.source).read_text())
             allowed={f.name for f in fields(AccountState)}
@@ -218,8 +259,11 @@ def main(argv=None):
                     store.save_account_state(AccountState(**{k:v for k,v in {**value,'account_id':account}.items() if k in allowed}))
             result={'imported':len(data),'source':str(Path(args.source).resolve())}
         else:
+            checks={r['action_id']:dict(r) for r in store._conn.execute('SELECT * FROM unknown_checks').fetchall()}
             result={**store.runtime_metrics(),'database':str(path),'unknown':[
-                {k:r[k] for k in ('id','kind','account_id','target_id','created_at','detail')} for r in store.list_actions('unknown')]}
+                {**{k:r[k] for k in ('id','kind','account_id','target_id','created_at','wire_at','detail')},
+                 'check_state':checks.get(r['id'],{}).get('state',''),'checks':checks.get(r['id'],{}).get('checks',0),
+                 'last_check':checks.get(r['id'],{}).get('last_detail','')} for r in store.list_actions('unknown')]}
         print(json.dumps(result,ensure_ascii=False,indent=2));return 0
     except ValueError as exc:
         parser.error(str(exc))

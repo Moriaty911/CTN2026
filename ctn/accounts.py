@@ -10,13 +10,19 @@ EXPANDED={**{g:6 for g in ('transport_logistics','retail_food','tourism_leisure'
     'agriculture_trades':5,'office_community':5,'independent_commentary':2,'medical_public_health':1,'law_policy':1}
 
 
-def fleet_plan(size=30, *, phase='warmup'):
+def fleet_plan(size=30, *, phase='warmup', persona_id=None, account_id=None):
     if size not in (30,50):raise ValueError('fleet stages are 30 and 50')
+    if persona_id:
+        import re
+        profile=next((p for p in load_catalog()['personas'] if p['persona_id']==persona_id),None)
+        if not profile:raise ValueError('unknown replacement persona')
+        handle=account_id or profile['candidate_username']
+        if not re.fullmatch(r'[a-z][a-z0-9_]{2,63}',handle):raise ValueError('invalid account handle')
+        return [{'persona_id':persona_id,'account_id':handle,'occupation_group':profile['occupation_group']}]
     limits=INITIAL if size==30 else EXPANDED
     selected=[];used={}
     for profile in load_catalog()['personas']:
         group=profile['occupation_group']
-        if phase=='warmup' and group in ('medical_public_health','law_policy'):continue
         if used.get(group,0)>=limits.get(group,0):continue
         selected.append({'persona_id':profile['persona_id'],'account_id':profile['candidate_username'],'occupation_group':group})
         used[group]=used.get(group,0)+1
@@ -54,6 +60,7 @@ async def register_one(store,client,persona_id,account_id,password,*,max_active=
     with store.batch_transaction():
         store._conn.execute("UPDATE registration_intents SET status='succeeded',updated_at=? WHERE account_id=?",(time.time(),account_id))
         store._conn.execute("DELETE FROM runtime_policy WHERE key=?",('registration_password:'+account_id,))
+        store.initialise_registered_account(account_id)
     return {'account':account_id,'status':'succeeded'}
 
 
@@ -86,7 +93,10 @@ def preflight(settings,store,*,corpus=None):
     return {'offline':{'ready':corpus is not None},'live':{'ready':not missing,'blocking':missing},
         'reporting':{'mode':settings.report_mode,'ready':settings.report_mode!='off' and ready,'reason':reason},
         'side':settings.side.value,'active_accounts':len(active),'bound_accounts':len(states),
-        'warmed_accounts':store._conn.execute('SELECT COUNT(*) FROM account_readiness WHERE warmed_at>0').fetchone()[0],
+        'initialised_accounts':store._conn.execute("SELECT COUNT(*) FROM account_lifecycle WHERE initialise_status='ready'").fetchone()[0],
+        'high_accounts':sum(s.capability_tier=='high' for s in states.values() if not s.is_disabled()),
+        'high_supply_warning':not any(s.capability_tier=='high' for s in states.values() if not s.is_disabled()),
+        'phase':store.effective_phase(),
         'platform_counts':store.get_managed_account_counts(),'catalog_hash':registry.catalog_hash,
         'rag_version':corpus.data['corpus_version'] if corpus else None,
         'unknown_actions':len(store.list_actions('unknown'))}

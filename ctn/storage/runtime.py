@@ -13,8 +13,9 @@ import uuid
 from pathlib import Path
 
 DEFAULT_EVIDENCE_POLICY=json.loads((Path(__file__).resolve().parents[2]/"policies/evidence-v1.json").read_text())
+SEND_RECOVERY=json.loads((Path(__file__).resolve().parents[2]/"policies/send-recovery-v1.json").read_text())
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 RUNTIME_SCHEMA = """
 CREATE TABLE IF NOT EXISTS runtime_policy(key TEXT PRIMARY KEY,value_json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS action_intents(
@@ -25,6 +26,11 @@ CREATE TABLE IF NOT EXISTS action_intents(
  metadata_json TEXT NOT NULL DEFAULT '{}',response_json TEXT NOT NULL DEFAULT '{}');
 CREATE INDEX IF NOT EXISTS idx_intents_status ON action_intents(status,lease_until);
 CREATE INDEX IF NOT EXISTS idx_intents_account ON action_intents(account_id,status);
+CREATE TABLE IF NOT EXISTS unknown_checks(
+ action_id TEXT PRIMARY KEY,unknown_at REAL NOT NULL,next_check_at REAL NOT NULL,state TEXT NOT NULL DEFAULT 'open',
+ checks INTEGER NOT NULL DEFAULT 0,absent_checks INTEGER NOT NULL DEFAULT 0,last_checked_at REAL NOT NULL DEFAULT 0,
+ last_detail TEXT NOT NULL DEFAULT '',abandoned_at REAL NOT NULL DEFAULT 0,resolved TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS idx_unknown_due ON unknown_checks(state,next_check_at);
 CREATE TABLE IF NOT EXISTS account_leases(
  account_id TEXT PRIMARY KEY,action_id TEXT NOT NULL,lease_until REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS post_tasks(
@@ -87,6 +93,13 @@ class RuntimeStoreMixin:
         for statement in RUNTIME_SCHEMA.split(';'):
             if statement.strip():
                 self._conn.execute(statement)
+        existing={r['name'] for r in self._conn.execute('PRAGMA table_info(action_intents)')}
+        for col,ddl in (('wire_at','REAL'),('wire_tracked','INTEGER NOT NULL DEFAULT 0')):
+            if col not in existing:
+                self._conn.execute(f'ALTER TABLE action_intents ADD COLUMN {col} {ddl}')
+                if col=='wire_at':
+                    # Sends started by an older version may already be on the wire.
+                    self._conn.execute("UPDATE action_intents SET wire_at=updated_at WHERE status IN ('sending','unknown','succeeded')")
         self._conn.execute('INSERT OR IGNORE INTO comment_queue(post_id,priority,next_fetch_at) '
             "SELECT post_id,MAX(0,replies-replies_crawled),comments_crawled_at FROM observed_posts "
             "WHERE replies>replies_crawled")
@@ -116,7 +129,9 @@ class RuntimeStoreMixin:
                      'legacy result requires reconciliation',json.dumps(meta)))
                 if row['action'] in ('post','reply'):
                     actual=self._conn.execute('SELECT id FROM action_intents WHERE action_key=?',(key,)).fetchone()[0]
-                    self._conn.execute('INSERT OR IGNORE INTO account_leases VALUES(?,?,1e20)',(row['account_id'],actual))
+                    now_ts=time.time()
+                    self._conn.execute('INSERT OR IGNORE INTO unknown_checks(action_id,unknown_at,next_check_at) VALUES(?,?,?)',(actual,now_ts,now_ts))
+                    self._conn.execute('INSERT OR IGNORE INTO account_leases VALUES(?,?,?)',(row['account_id'],actual,now_ts+SEND_RECOVERY['unknown_account_hold_seconds']))
             ts=time.time()
             self._conn.execute("INSERT OR IGNORE INTO post_tasks(post_id,version,status,next_attempt_at,expires_at,reason) "
                 "SELECT p.post_id,p.version,CASE WHEN EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='reply' "
@@ -146,7 +161,7 @@ class RuntimeStoreMixin:
                 if not exists:
                     self.get_account_state(p.account_id)
                     self._conn.execute("UPDATE account_states SET mode='standby' WHERE account_id=?",(p.account_id,))
-            for key,value in (('original_lock_seconds',86400),('daily_original_limit',10),('daily_warmup_limit',15),('phase','warmup')):
+            for key,value in (('original_lock_seconds',86400),('daily_original_limit',10),('phase','startup')):
                 if self.policy(key) is None:self.set_policy(key,value)
             if self.policy('evidence_policy') is None: self.set_policy('evidence_policy',DEFAULT_EVIDENCE_POLICY)
             self.set_policy('campaign_seeded',True)
@@ -199,6 +214,8 @@ class RuntimeStoreMixin:
         owner = account if kind in ('like','repost','follow','unfollow','delete_account') else 'team'
         if kind in ('report','report_account') and (metadata or {}).get('report_attempt_id'):
             subject=[str(target),metadata['report_attempt_id']]
+        if kind=='post' and (metadata or {}).get('purpose') in ('warmup','initialise'):
+            subject='initialise';owner=account
         if kind=='reply' and (metadata or {}).get('reply_batch_id'):
             subject=[str(target),metadata['reply_batch_id'],metadata['reply_slot']]
         return hashlib.sha256(json.dumps([self.policy('campaign_id','ctn2026'),kind,owner,subject]).encode()).hexdigest()
@@ -209,6 +226,9 @@ class RuntimeStoreMixin:
         meta=metadata or {}
         with self.batch_transaction():
             self.recover_actions(now=ts)
+            if meta.get('macro_job_id'):
+                job=self._conn.execute('SELECT status,owner,lease_until FROM macro_jobs WHERE id=?',(meta['macro_job_id'],)).fetchone()
+                if not job or job['status']!='claimed' or job['owner']!=meta.get('macro_owner') or job['lease_until']<=ts:return None,'macro_lease_lost'
             ready,reason=self.catalog_write_ready(account,meta)
             if not ready:return None,reason
             if kind in ('post','reply'):
@@ -217,6 +237,9 @@ class RuntimeStoreMixin:
             if kind=='reply':
                 ready,reason=self.reply_slot_ready(account,target,meta)
                 if not ready:return None,reason
+            if kind=='post' and meta.get('purpose') in ('warmup','initialise'):
+                lifecycle=self.lifecycle(account)
+                if lifecycle and lifecycle['initialise_status'] in ('ready','waived'):return None,'already_initialised'
             key=self.action_key(kind,account,target,text,meta)
             old=self._conn.execute('SELECT * FROM action_intents WHERE action_key=?',(key,)).fetchone()
             if old and old['status']!='failed':
@@ -224,9 +247,8 @@ class RuntimeStoreMixin:
             if kind in ('post','reply'):
                 ready,reason=self.publication_gate(text,meta)
                 if not ready:return None,reason
-                if self.policy('require_warmup',False) and meta.get('purpose')!='warmup':
-                    warm=self._conn.execute('SELECT warmed_at FROM account_readiness WHERE account_id=?',(account,)).fetchone()
-                    if not warm or not warm[0]:return None,'account_needs_warmup'
+                if self.policy('require_warmup',False) and meta.get('purpose') not in ('warmup','initialise'):
+                    if not self.account_initialise_ready(account,now=ts):return None,'account_needs_initialise'
             st=self.get_account_state(account)
             if st.is_disabled() and kind!='delete_account':
                 return None,'account_disabled'
@@ -240,13 +262,19 @@ class RuntimeStoreMixin:
                 occupied=self._conn.execute("SELECT batch_id,slot FROM reply_slots WHERE account_id=? AND status IN ('claimed','sending','unknown') AND lease_until>?",(account,ts)).fetchall()
                 if any(r['batch_id']!=meta.get('reply_batch_id') or r['slot']!=meta.get('reply_slot') for r in occupied):
                     return None,'account_occupied_by_reply_slot'
+            if kind in ('post','reply') and meta.get('purpose') not in ('warmup','initialise'):
+                # Team-wide anti-pile-on caps per target author and thread, plus per-account daily volume.
+                from ctn.pipeline.targeting import cap_reason
+                capped=cap_reason(self,target_author=meta.get('target_author','') if kind=='reply' else '',
+                    root_post_id=str(meta.get('root_post_id') or target) if kind=='reply' else '',account=account,now=ts)
+                if capped:return None,capped
             if kind=='reply' and meta.get('target_stance')=='aligned':
                 sent=self.count_recent_allied_replies(now=ts)
                 reserved=self._conn.execute("SELECT COUNT(*) FROM action_intents WHERE kind='reply' "
                     "AND status IN ('claimed','sending','unknown') AND json_extract(metadata_json,'$.target_stance')='aligned'").fetchone()[0]
                 if sent+reserved>=int(meta.get('allied_hourly_cap',3)):
                     return None,'allied_hourly_cap'
-            if kind=='post':
+            if kind=='post' and meta.get('purpose') not in ('warmup','initialise'):
                 if st.original_locked_until>ts:
                     return None,'original_locked'
                 day=current_sydney_day(ts)
@@ -255,7 +283,7 @@ class RuntimeStoreMixin:
                     "AND status IN ('claimed','sending','unknown','succeeded')").fetchall()
                 warmup=meta.get('purpose')=='warmup'
                 limit=self.policy('daily_warmup_limit',15) if warmup else self.policy('daily_original_limit',10)
-                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose')=='warmup')==warmup for r in rows)>=int(limit):
+                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose') in ('warmup','initialise'))==warmup for r in rows)>=int(limit):
                     return None,'daily_original_limit'
             if kind in ('report','report_account'):
                 if self.is_reporting_suspended(now=ts)[0]:
@@ -269,12 +297,18 @@ class RuntimeStoreMixin:
                 pending=self._conn.execute("SELECT target_author FROM report_log WHERE outcome='pending' UNION ALL "
                     "SELECT target_author FROM account_reports WHERE outcome='pending'").fetchall()
                 intents=self._conn.execute("SELECT metadata_json FROM action_intents WHERE kind IN ('report','report_account') "
-                    "AND status IN ('claimed','sending','unknown')").fetchall()
+                    "AND (status IN ('claimed','sending') OR (status='unknown' AND updated_at>?))",(ts-SEND_RECOVERY['report_unknown_release_seconds'],)).fetchall()
                 authors=[r[0] for r in pending]+[json.loads(r[0]).get('target_author') for r in intents]
                 if len(authors)>=int(self.policy('max_pending_reports',5)):
                     return None,'pending_team_limit'
                 if authors.count(author)>=int(self.policy('max_pending_per_author',1)):
                     return None,'pending_author_limit'
+                if kind=='report':
+                    # Every unresolved post report can still come back genuine and stop reporting for six hours.
+                    from ctn.moderation.decision import policy as decision_policy,expected_genuine
+                    rules=decision_policy(self)
+                    if expected_genuine(self,rules,extra_p=meta.get('decision_p',rules['p_floor']))>float(rules['max_expected_genuine'])+1e-9:
+                        return None,'genuine_risk_budget'
             if kind in ('report','report_account'):
                 if kind=='report' and self._conn.execute("SELECT 1 FROM action_intents WHERE kind='report' AND target_id=? AND status!='failed' LIMIT 1",(target,)).fetchone():return None,'report_target_already_claimed'
                 ready,reason=self.report_authorization(kind,target,meta,now=ts)
@@ -284,8 +318,9 @@ class RuntimeStoreMixin:
                 'lease_until,created_at,updated_at,metadata_json) VALUES(?,?,?,?,?,?,\'claimed\',?,?,?,?,?) '
                 'ON CONFLICT(action_key) DO UPDATE SET status=\'claimed\',owner=excluded.owner,'
                 'lease_until=excluded.lease_until,updated_at=excluded.updated_at,detail=\'\','
-                'account_id=excluded.account_id,text=excluded.text,metadata_json=excluded.metadata_json,response_json=\'{}\'',
-                (ident,key,kind,account,target,text,uuid.uuid4().hex,ts+900,ts,ts,json.dumps(meta)))
+                'account_id=excluded.account_id,text=excluded.text,metadata_json=excluded.metadata_json,response_json=\'{}\','
+                'wire_at=NULL,wire_tracked=0',
+                (ident,key,kind,account,target,text,uuid.uuid4().hex,ts+SEND_RECOVERY['send_lease_seconds'],ts,ts,json.dumps(meta)))
             if kind in ('post','reply'):
                 from .sqlite_store import normalize_text
                 normalized=normalize_text(text)
@@ -294,41 +329,119 @@ class RuntimeStoreMixin:
                 attempt=meta.get('report_attempt_id') or ident
                 self._conn.execute("INSERT INTO report_attempts VALUES(?,?,?,?,?,?,'claimed',?,0,'',?) ON CONFLICT(action_id) DO UPDATE SET status='claimed',payload_json=excluded.payload_json",
                     (attempt,ident,'account' if kind=='report_account' else 'post',target,meta.get('target_author',target),'',ts,json.dumps(meta)))
+                review=self.report_review(meta.get('candidate_id',''))
+                if review:
+                    self._conn.execute("UPDATE report_reviews SET status='sending',revision=revision+1,updated_at=? WHERE candidate_id=?",(ts,meta['candidate_id']))
+                    self.notify_discord(f"sending:{ident}",{'type':'candidate','candidate_id':meta['candidate_id']})
                 if meta.get('approval_id'):
                     self._conn.execute("UPDATE report_approvals SET consumed_by=? WHERE id=? AND consumed_by=''",(ident,meta['approval_id']))
             if kind in ('post','reply'):
                 self._conn.execute('INSERT INTO account_leases VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE '
-                    'SET action_id=excluded.action_id,lease_until=excluded.lease_until',(account,ident,ts+900))
+                    'SET action_id=excluded.action_id,lease_until=excluded.lease_until',(account,ident,ts+SEND_RECOVERY['send_lease_seconds']))
             if kind=='reply' and meta.get('reply_batch_id'):
                 self._conn.execute('UPDATE reply_slots SET action_id=? WHERE batch_id=? AND slot=?',
                     (ident,meta['reply_batch_id'],meta['reply_slot']))
+            self.initialise_action_changed(self._conn.execute('SELECT * FROM action_intents WHERE id=?',(ident,)).fetchone(),'claimed',ts)
             return ident,'claimed'
 
     def recover_actions(self, *, now=None):
         ts=time.time() if now is None else float(now)
         with self.batch_transaction():
-            self._conn.execute("UPDATE action_intents SET status='unknown',detail='owner_lost_during_send' "
-                "WHERE status='sending' AND lease_until<?",(ts,))
-            self._conn.execute("UPDATE account_leases SET lease_until=1e20 WHERE action_id IN "
-                "(SELECT id FROM action_intents WHERE status='unknown')")
+            # A dead owner's send either never reached the wire (definitely not sent) or is uncertain.
+            self._conn.execute("UPDATE action_intents SET status='failed',detail='owner_lost_before_wire',updated_at=? "
+                "WHERE status='sending' AND lease_until<? AND wire_at IS NULL",(ts,ts))
+            self._conn.execute("UPDATE action_intents SET status='unknown',detail='owner_lost_during_send',updated_at=? "
+                "WHERE status='sending' AND lease_until<?",(ts,ts))
             self._conn.execute("UPDATE action_intents SET status='failed',detail='claim_expired_before_send' "
                 "WHERE status='claimed' AND lease_until<?",(ts,))
             self._conn.execute("UPDATE report_attempts SET status=(SELECT status FROM action_intents WHERE id=action_id) WHERE status IN ('claimed','sending') AND action_id IN (SELECT id FROM action_intents WHERE status IN ('unknown','failed'))")
-            self._conn.execute('DELETE FROM account_leases WHERE lease_until<?',(ts,))
-            self._conn.execute("INSERT OR IGNORE INTO account_leases(account_id,action_id,lease_until) SELECT account_id,MIN(id),1e20 "
-                "FROM action_intents WHERE status='unknown' AND kind IN ('post','reply') GROUP BY account_id")
+            self._conn.execute("UPDATE account_lifecycle SET initialise_status=CASE (SELECT status FROM action_intents WHERE id=initialise_action) WHEN 'failed' THEN 'pending' WHEN 'unknown' THEN 'unknown' ELSE initialise_status END WHERE initialise_status='sending'")
+            self._conn.execute("UPDATE post_tasks SET status=CASE WHEN EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='reply' AND a.target_id=post_tasks.post_id AND a.status='succeeded') THEN 'succeeded' "
+                "WHEN expires_at<=? THEN 'expired' ELSE 'queued' END,reason='action_recovered',next_attempt_at=? "
+                "WHERE status='unknown' AND NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='reply' AND a.target_id=post_tasks.post_id AND a.status IN ('claimed','sending','unknown')) "
+                "AND NOT EXISTS(SELECT 1 FROM reply_batches b WHERE b.target_id=post_tasks.post_id AND b.status IN ('active','paused'))",(ts,ts))
+            # An uncertain report stops occupying pending capacity and the genuine-risk budget after a while;
+            # its target is still never reported again (claim_action blocks any non-failed report on it).
+            self._conn.execute("UPDATE report_attempts SET status='unknown_released' WHERE status='unknown' AND action_id IN "
+                "(SELECT id FROM action_intents WHERE status='unknown' AND updated_at<=?)",(ts-SEND_RECOVERY['report_unknown_release_seconds'],))
+            self.sync_unknown_holds(ts)
 
-    def start_action(self, ident):
+    def sync_unknown_holds(self, ts):
+        """Every uncertain post/reply holds its account for a bounded time and is tracked until resolved."""
+        self._conn.execute("INSERT OR IGNORE INTO unknown_checks(action_id,unknown_at,next_check_at) "
+            "SELECT id,updated_at,updated_at+? FROM action_intents WHERE status='unknown' AND kind IN ('post','reply')",
+            (SEND_RECOVERY['check_after_seconds'][0],))
+        self._conn.execute("DELETE FROM account_leases WHERE action_id IN (SELECT action_id FROM unknown_checks WHERE state<>'open')")
+        self._conn.execute("INSERT INTO account_leases(account_id,action_id,lease_until) SELECT a.account_id,a.id,c.unknown_at+? "
+            "FROM unknown_checks c JOIN action_intents a ON a.id=c.action_id WHERE c.state='open' AND a.status='unknown' "
+            "AND c.unknown_at+?>? AND NOT EXISTS(SELECT 1 FROM account_leases l WHERE l.account_id=a.account_id AND l.action_id<>a.id AND l.lease_until>?) "
+            "ON CONFLICT(account_id) DO UPDATE SET action_id=excluded.action_id,lease_until=excluded.lease_until",
+            (SEND_RECOVERY['unknown_account_hold_seconds'],SEND_RECOVERY['unknown_account_hold_seconds'],ts,ts))
+        self._conn.execute('DELETE FROM account_leases WHERE lease_until<?',(ts,))
+        for row in self._conn.execute("SELECT action_id FROM unknown_checks WHERE state='open' AND unknown_at+?<=?",
+                                      (SEND_RECOVERY['abandon_after_seconds'],ts)).fetchall():
+            self.abandon_unknown(row[0],ts)
+
+    def abandon_unknown(self, ident, ts):
+        """Stop waiting for an unresolved send: free the account, never resend to its target."""
+        r=self._conn.execute('SELECT * FROM action_intents WHERE id=?',(ident,)).fetchone()
+        self._conn.execute("UPDATE unknown_checks SET state='abandoned',abandoned_at=?,next_check_at=? WHERE action_id=? AND state='open'",
+            (ts,ts+SEND_RECOVERY['late_check_every_seconds'],ident))
+        self._conn.execute('DELETE FROM account_leases WHERE action_id=?',(ident,))
+        if not r or r['status']!='unknown':return
+        self._conn.execute("UPDATE action_intents SET detail='abandoned: '||detail WHERE id=? AND detail NOT LIKE 'abandoned:%'",(ident,))
+        meta=json.loads(r['metadata_json'])
+        if r['kind']=='reply':
+            self._conn.execute("UPDATE post_tasks SET status='skipped',reason='unknown_abandoned',lease_until=0 WHERE post_id=? AND status='unknown'",(r['target_id'],))
+        if r['kind']=='post' and meta.get('purpose') in ('warmup','initialise'):
+            # A second initialise post is harmless; an account that never initialises is not.
+            self._conn.execute("UPDATE account_lifecycle SET initialise_status='pending',next_attempt_at=? WHERE account_id=? AND initialise_status='unknown'",(ts,r['account_id']))
+        if meta.get('macro_job_id'):
+            self._conn.execute("UPDATE macro_jobs SET status='failed',reason='unknown_abandoned' WHERE id=? AND status='unknown'",(meta['macro_job_id'],))
+
+    def due_unknown_checks(self, *, now=None, limit=4):
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            self.sync_unknown_holds(ts)
+            self._conn.execute("UPDATE unknown_checks SET state='closed' WHERE state='abandoned' AND unknown_at+?<=?",
+                (SEND_RECOVERY['late_check_until_seconds'],ts))
+            rows=self._conn.execute("SELECT c.*,a.kind,a.account_id,a.target_id,a.text,a.created_at,a.wire_at,a.metadata_json FROM unknown_checks c "
+                "JOIN action_intents a ON a.id=c.action_id WHERE c.state IN ('open','abandoned') AND a.status='unknown' AND c.next_check_at<=? "
+                "ORDER BY c.state='abandoned',c.next_check_at LIMIT ?",(ts,limit)).fetchall()
+            return [dict(r) for r in rows]
+
+    def record_unknown_check(self, ident, outcome, *, complete, detail='', now=None):
+        """Store one reconciliation attempt; `outcome` is 'found', 'absent' or 'incomplete'."""
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            c=self._conn.execute('SELECT * FROM unknown_checks WHERE action_id=?',(ident,)).fetchone()
+            if not c:return 'missing'
+            absent=c['absent_checks']+(1 if outcome=='absent' and complete else 0)
+            age=ts-c['unknown_at']
+            if c['state']=='abandoned':
+                nxt=ts+SEND_RECOVERY['late_check_every_seconds']
+            else:
+                later=[c['unknown_at']+d for d in SEND_RECOVERY['check_after_seconds'] if c['unknown_at']+d>ts+1]
+                nxt=later[0] if later else c['unknown_at']+SEND_RECOVERY['abandon_after_seconds']
+            self._conn.execute('UPDATE unknown_checks SET checks=checks+1,absent_checks=?,next_check_at=?,last_detail=?,last_checked_at=? WHERE action_id=?',
+                (absent,nxt,detail[:300],ts,ident))
+            if outcome=='absent' and complete and absent>=int(SEND_RECOVERY['absent_required_checks']) and age>=float(SEND_RECOVERY['absent_min_age_seconds']):
+                return 'fail'
+            return 'wait'
+
+    def start_action(self, ident, *, wire_tracked=False):
+        """`wire_tracked` means the HTTP pacer records wire_at; otherwise the send counts as on the wire now."""
+        ts=time.time()
         with self.batch_transaction():
             self._conn.execute("UPDATE report_attempts SET status='sending' WHERE action_id=? AND status='claimed'",(ident,))
-            return self._conn.execute("UPDATE action_intents SET status='sending',updated_at=? "
-                "WHERE id=? AND status='claimed'",(time.time(),ident)).rowcount==1
+            return self._conn.execute("UPDATE action_intents SET status='sending',updated_at=?,wire_tracked=?,wire_at=? "
+                "WHERE id=? AND status='claimed'",(ts,int(bool(wire_tracked)),None if wire_tracked else ts,ident)).rowcount==1
 
     def renew_action(self, ident):
         with self.batch_transaction():
-            self._conn.execute("UPDATE action_intents SET lease_until=? WHERE id=? AND status='sending'",(time.time()+900,ident))
-            self._conn.execute('UPDATE account_leases SET lease_until=? WHERE action_id=? AND lease_until<1e20',
-                (time.time()+900,ident))
+            lease=time.time()+SEND_RECOVERY['send_lease_seconds']
+            if self._conn.execute("UPDATE action_intents SET lease_until=? WHERE id=? AND status='sending'",(lease,ident)).rowcount:
+                self._conn.execute('UPDATE account_leases SET lease_until=? WHERE action_id=?',(lease,ident))
 
     def guard_wire_action(self, ident, *, now=None):
         """Recheck after all pacing/login waits and immediately before the actual write."""
@@ -341,11 +454,16 @@ class RuntimeStoreMixin:
             if row['kind'] in ('post','reply'):
                 ready,reason=self.publication_gate(row['text'],meta,exclude_action=ident)
                 if not ready:return False,reason
+            if meta.get('macro_job_id'):
+                job=self._conn.execute('SELECT status,owner,lease_until FROM macro_jobs WHERE id=?',(meta['macro_job_id'],)).fetchone()
+                if not job or job['status']!='claimed' or job['owner']!=meta.get('macro_owner') or job['lease_until']<=ts:return False,'macro_lease_lost'
             ready,reason=self.catalog_write_ready(row['account_id'],meta)
             if not ready:return False,reason
             if row['kind'] in ('post','reply'):
                 ready,reason=self.persona_action_ready(row['account_id'],meta)
                 if not ready:return False,reason
+            if row['kind'] in ('post','reply') and self.policy('require_warmup',False) and meta.get('purpose') not in ('warmup','initialise'):
+                if not self.account_initialise_ready(row['account_id'],now=ts):return False,'account_needs_initialise'
             if row['kind']=='reply':
                 ready,reason=self.reply_slot_ready(row['account_id'],row['target_id'],meta,sending=True)
                 if not ready:return False,reason
@@ -353,18 +471,18 @@ class RuntimeStoreMixin:
                 return False,'draft_or_opportunity_expired'
             state=self.get_account_state(row['account_id'])
             if state.is_disabled() and row['kind']!='delete_account': return False,'account_disabled'
-            if meta.get('required_account_level')=='high' and state.capability_tier!='high': return False,'account_level_required'
+            # required_account_level is a routing preference and drafting hint, not a send gate.
             if row['kind'] in ('reply','like','repost') and meta.get('target_version'):
                 post=self.get_observed_post(row['target_id'])
                 if not post or post['version']!=meta['target_version']: return False,'target_edited'
-            if row['kind']=='post':
+            if row['kind']=='post' and meta.get('purpose') not in ('warmup','initialise'):
                 if state.original_locked_until>ts: return False,'original_locked'
                 day=current_sydney_day(ts)
                 others=self._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' "
                     "AND status IN ('claimed','sending','unknown','succeeded') AND id<>?",(ident,)).fetchall()
                 warmup=meta.get('purpose')=='warmup'
                 limit=self.policy('daily_warmup_limit',15) if warmup else self.policy('daily_original_limit',10)
-                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose')=='warmup')==warmup for r in others)>=int(limit):
+                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose') in ('warmup','initialise'))==warmup for r in others)>=int(limit):
                     return False,'daily_original_limit'
                 self._conn.execute("UPDATE action_intents SET metadata_json=json_set(metadata_json,'$.execution_day',?) WHERE id=?",(day,ident))
             if row['kind'] in ('report','report_account'):
@@ -384,6 +502,9 @@ class RuntimeStoreMixin:
             r=self._conn.execute('SELECT * FROM action_intents WHERE id=?',(ident,)).fetchone()
             if not r or r['status'] in ('succeeded','failed'):
                 return False
+            if status=='unknown' and r['wire_at'] is None and r['status'] in ('claimed','sending'):
+                # The request never left this host (shutdown or cancellation during pacing): definitely not sent.
+                status,detail='failed',(detail+'; ' if detail else '')+'never reached the wire'
             self._conn.execute('UPDATE action_intents SET status=?,updated_at=?,detail=?,response_json=? WHERE id=?',
                 (status,ts,detail,json.dumps(response or {}),ident))
             self._conn.execute("UPDATE report_attempts SET status=?,report_id=?,submitted_at=CASE WHEN ?='succeeded' THEN ? ELSE submitted_at END WHERE action_id=?",
@@ -391,12 +512,25 @@ class RuntimeStoreMixin:
             self.set_counter('business_progress_ms',max(self.get_counter('business_progress_ms'),int(ts*1000)))
             if status != 'unknown':
                 self._conn.execute('DELETE FROM account_leases WHERE action_id=?',(ident,))
-            else:
-                self._conn.execute('UPDATE account_leases SET lease_until=1e20 WHERE action_id=?',(ident,))
+                self._conn.execute("UPDATE unknown_checks SET state='closed',resolved=? WHERE action_id=?",(status,ident))
+            elif r['kind'] in ('post','reply'):
+                self._conn.execute('INSERT OR REPLACE INTO unknown_checks(action_id,unknown_at,next_check_at) VALUES(?,?,?)',
+                    (ident,ts,ts+SEND_RECOVERY['check_after_seconds'][0]))
+                self._conn.execute('INSERT INTO account_leases VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE SET action_id=excluded.action_id,lease_until=excluded.lease_until',
+                    (r['account_id'],ident,ts+SEND_RECOVERY['unknown_account_hold_seconds']))
             if r['kind']=='reply' and status in ('succeeded','failed'):
                 self._conn.execute("UPDATE post_tasks SET status=CASE WHEN ?='succeeded' THEN 'succeeded' "
                     "WHEN expires_at<=? THEN 'expired' ELSE 'queued' END,reason='action_reconciled',next_attempt_at=? "
                     "WHERE post_id=? AND status='unknown'",(status,ts,ts,r['target_id']))
+            if r['kind'] in ('report','report_account'):
+                meta=json.loads(r['metadata_json'])
+                candidate=meta.get('candidate_id','')
+                state={'succeeded':'pending','unknown':'unknown','failed':'review'}[status]
+                self._conn.execute('UPDATE report_reviews SET status=?,revision=revision+1,updated_at=? WHERE candidate_id=?',(state,ts,candidate))
+                self.notify_discord(f"report:{ident}:{status}",{'type':'candidate','candidate_id':candidate})
+            macro_id=json.loads(r['metadata_json']).get('macro_job_id')
+            if macro_id:self._conn.execute("UPDATE macro_jobs SET status=? WHERE id=? AND status='unknown'",('succeeded' if status=='succeeded' else ('failed' if status=='failed' else 'unknown'),macro_id))
+            self.initialise_action_changed(r,status,ts)
             if status=='succeeded':
                 meta=json.loads(r['metadata_json'])
                 if meta.get('accounting_already_applied'):
@@ -414,14 +548,19 @@ class RuntimeStoreMixin:
                     self._conn.execute("INSERT INTO account_reports VALUES(?,?,'pending',?,0,?) ON CONFLICT(target_author) DO UPDATE SET report_id=excluded.report_id,outcome='pending',submitted_at=excluded.submitted_at,ruled_at=0,reason=excluded.reason",
                         (r['target_id'],str((response or {}).get('report_id','')),ts,meta.get('detail','')))
                 if r['kind'] in ('post','reply'):
-                    self.mark_account_used(r['account_id'],now=ts,kind=r['kind'],target_stance=meta.get('target_stance',''))
-                    if r['kind']=='post' and meta.get('purpose')=='warmup':
+                    self.mark_account_used(r['account_id'],now=ts,kind='initialise' if r['kind']=='post' and meta.get('purpose') in ('warmup','initialise') else r['kind'],target_stance=meta.get('target_stance',''))
+                    if r['kind']=='post' and meta.get('purpose') in ('warmup','initialise'):
                         self._conn.execute('INSERT INTO account_readiness VALUES(?,?) ON CONFLICT(account_id) DO UPDATE SET warmed_at=excluded.warmed_at',(r['account_id'],ts))
                 self.log_interaction(engine=meta.get('engine','micro'),account_id=r['account_id'],action=r['kind'],
                     target_post_id=str(((response or {}).get('post_id') or r['target_id']) if r['kind']=='post' else r['target_id']),
                     target_author=meta.get('target_author',''),target_stance=meta.get('target_stance',''),
                     purpose=meta.get('purpose',''),text=r['text'],now=ts)
             return True
+
+    def get_action(self, ident):
+        with self._lock:
+            row=self._conn.execute('SELECT * FROM action_intents WHERE id=?',(ident,)).fetchone()
+            return dict(row) if row else None
 
     def list_actions(self, status=None):
         with self._lock:
@@ -434,19 +573,82 @@ class RuntimeStoreMixin:
             self._conn.execute('INSERT INTO simulation_log(created_at,kind,account_id,target_id,payload_json) '
                 'VALUES(?,?,?,?,?)',(time.time(),kind,account,target,json.dumps(payload)))
 
-    def enqueue_post(self, post_id, version=1, *, now=None, ttl=1800):
+    def enqueue_post(self, post_id, version=1, *, now=None, ttl=1800, post=None):
         ts=time.time() if now is None else float(now)
+        schedule=None
+        if post is not None:
+            from ctn.pipeline.targeting import initial_schedule
+            schedule=initial_schedule(self,post,now=ts)
         with self.batch_transaction():
             # The persistent plan owns this target, including after a restart or edit.
-            self._expire_reply_batches(ts)
+            self._expire_reply_batches(ts, target_id=post_id)
             planned=self._conn.execute("SELECT target_version FROM reply_batches WHERE target_id=? AND (target_version=? OR status IN ('active','paused') OR EXISTS (SELECT 1 FROM action_intents WHERE kind='reply' AND target_id=? AND status IN ('sending','unknown','succeeded'))) ORDER BY created_at DESC LIMIT 1",(post_id,version,post_id)).fetchone()
             self._conn.execute("UPDATE post_tasks SET status='skipped',reason='superseded' WHERE post_id=? "
                 "AND version<>? AND status IN ('queued','claimed','waiting_materials')",(post_id,version))
             self._conn.execute('INSERT OR IGNORE INTO post_tasks(post_id,version,next_attempt_at,expires_at) VALUES(?,?,?,?)',
                 (post_id,version,ts,ts+ttl))
+            self._conn.execute('UPDATE post_tasks SET queued_at=CASE WHEN queued_at=0 THEN ? ELSE queued_at END WHERE post_id=? AND version=?',(ts,post_id,version))
+            if schedule is not None and not schedule[0].get('own'):
+                info,start=schedule
+                self._conn.execute("UPDATE post_tasks SET audience=?,priority=jev_score+?,next_attempt_at=MAX(next_attempt_at,?),"
+                    "assessment_json=? WHERE post_id=? AND version=? AND status='queued'",
+                    (info['priority'],info['priority'],start,json.dumps({'targeting':info}),post_id,version))
+                from ctn.pipeline.targeting import POLICY as TARGETING
+                created=float(post.get('created_at') or 0) or ts
+                for stage,offset in enumerate(TARGETING['refresh']['stages_seconds']):
+                    self._conn.execute('INSERT OR IGNORE INTO post_refresh(post_id,stage,due_at) VALUES(?,?,?)',(post_id,stage,created+offset))
             if planned:
                 self._conn.execute("UPDATE post_tasks SET status=?,reason='target_already_planned' WHERE post_id=? AND version=? AND status IN ('queued','claimed')",
                     ('planned' if planned[0]==version else 'skipped',post_id,version))
+
+    def refresh_task_audience(self, post, *, now=None):
+        """Re-score an open reply task when fresher counts or trending status arrive."""
+        from ctn.pipeline.targeting import audience
+        info=audience(self,post,now=now)
+        if info.get('own'):return None
+        with self.batch_transaction():
+            self._conn.execute("UPDATE post_tasks SET audience=?,priority=jev_score+? WHERE post_id=? "
+                "AND status IN ('queued','waiting_materials')",(info['priority'],info['priority'],post['post_id']))
+        return info
+
+    def request_backlog(self, bucket, *, now=None):
+        """Seconds until the shared request schedule for this bucket is free."""
+        ts=time.time() if now is None else float(now)
+        with self._lock:
+            row=self._conn.execute('SELECT next_at,blocked_until FROM request_slots WHERE bucket=?',(bucket,)).fetchone()
+        return max(0.,(max(row[0],row[1])-ts) if row else 0.)
+
+    def claim_refreshes(self, limit, *, now=None, stale_after=300):
+        ts=time.time() if now is None else float(now)
+        open_task="EXISTS(SELECT 1 FROM post_tasks t WHERE t.post_id=post_refresh.post_id AND t.status IN ('queued','claimed','waiting_materials'))"
+        with self.batch_transaction():
+            self._conn.execute(f"UPDATE post_refresh SET status='dropped' WHERE status='queued' AND due_at<=? AND NOT {open_task}",(ts,))
+            self._conn.execute("UPDATE post_refresh SET status='stale' WHERE status='queued' AND due_at<?",(ts-stale_after,))
+            rows=self._conn.execute("SELECT r.post_id,r.stage FROM post_refresh r JOIN post_tasks t ON t.post_id=r.post_id "
+                "AND t.status IN ('queued','claimed','waiting_materials') WHERE r.status='queued' AND r.due_at<=? "
+                "GROUP BY r.post_id,r.stage ORDER BY MAX(t.priority) DESC,r.due_at LIMIT ?",(ts,max(1,int(limit)))).fetchall()
+            for r in rows:
+                self._conn.execute("UPDATE post_refresh SET status='claimed' WHERE post_id=? AND stage=?",(r['post_id'],r['stage']))
+            return [dict(r) for r in rows]
+
+    def finish_refresh(self, row, counters, *, now=None):
+        """Apply fresh counts: update the mirror, the comment queue and the task's audience score."""
+        ts=time.time() if now is None else float(now)
+        status='done' if counters else 'failed'
+        with self.batch_transaction():
+            self._conn.execute('UPDATE post_refresh SET status=? WHERE post_id=? AND stage=?',(status,row['post_id'],row['stage']))
+            if not counters:return None
+            cur=self._conn.execute('SELECT * FROM observed_posts WHERE post_id=?',(row['post_id'],)).fetchone()
+            if cur is None:return None
+            likes=int(counters.get('likes',cur['likes']) or 0);replies=int(counters.get('replies',cur['replies']) or 0)
+            reposts=int(counters.get('reposts',cur['reposts']) or 0)
+            self._conn.execute('UPDATE observed_posts SET likes=?,replies=?,reposts=?,last_seen_at=MAX(last_seen_at,?) WHERE post_id=?',
+                (likes,replies,reposts,ts,row['post_id']))
+            if replies>int(cur['replies_crawled']):
+                self._conn.execute('INSERT INTO comment_queue(post_id,priority,next_fetch_at) VALUES(?,?,?) '
+                    'ON CONFLICT(post_id) DO UPDATE SET priority=excluded.priority',(row['post_id'],replies-int(cur['replies_crawled']),float(cur['comments_crawled_at'])))
+            record=self.get_observed_post(row['post_id'])
+            return self.refresh_task_audience(record,now=ts)
 
     def claim_post_tasks(self, limit=8, *, now=None, lease_s=120):
         ts=time.time() if now is None else float(now)
@@ -455,8 +657,9 @@ class RuntimeStoreMixin:
             self._conn.execute("UPDATE post_tasks SET status='expired',reason='opportunity_expired' "
                 "WHERE status IN ('queued','claimed') AND expires_at<=?",(ts,))
             self._conn.execute("UPDATE post_tasks SET status='queued' WHERE status='claimed' AND lease_until<=?",(ts,))
+            # Freshness is part of the audience score; waiting longer no longer raises priority.
             rows=self._conn.execute("SELECT * FROM post_tasks WHERE status='queued' AND next_attempt_at<=? "
-                'ORDER BY next_attempt_at,post_id LIMIT ?',(ts,max(1,limit))).fetchall()
+                'ORDER BY priority DESC,next_attempt_at,post_id LIMIT ?',(ts,max(1,limit))).fetchall()
             for r in rows:
                 self._conn.execute("UPDATE post_tasks SET status='claimed',owner=?,lease_until=?,attempts=attempts+1 "
                     'WHERE post_id=? AND version=?',(owner,ts+lease_s,r['post_id'],r['version']))
@@ -555,11 +758,14 @@ class RuntimeStoreMixin:
     def mark_http_sent(self, ident, *, cap):
         return self.try_mark_http_sent(ident,cap=cap)[0]
 
-    def try_mark_http_sent(self, ident, *, cap, now=None):
+    def try_mark_http_sent(self, ident, *, cap, now=None, action=None):
+        """Mark a reserved request as sent; with `action`, record wire_at in the same transaction."""
         ts=time.time() if now is None else float(now)
         with self.batch_transaction():
             row=self._conn.execute('SELECT kind,status,buckets_json FROM request_attempts WHERE id=?',(ident,)).fetchone()
             if not row or row['status']!='reserved': return False,None
+            if action and self._conn.execute("SELECT status FROM action_intents WHERE id=?",(action,)).fetchone()[0]!='sending':
+                return False,'action_no_longer_sending' 
             if self.get_counter('http_'+row['kind'])>=cap: return False,None
             buckets=json.loads(row['buckets_json'])
             due=ts
@@ -572,6 +778,8 @@ class RuntimeStoreMixin:
                 self._conn.execute('INSERT INTO wire_slots VALUES(?,?) ON CONFLICT(bucket) DO UPDATE SET next_at=excluded.next_at',
                     (key,ts+1/rate))
             self._conn.execute("UPDATE request_attempts SET status='sent' WHERE id=?",(ident,))
+            if action:
+                self._conn.execute('UPDATE action_intents SET wire_at=COALESCE(wire_at,?) WHERE id=?',(ts,action))
             self.increment_counter('http_'+row['kind'])
             return True,0.
 

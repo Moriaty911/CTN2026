@@ -2,11 +2,27 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 # Historical constructors remain usable for explicit offline replay only.
 PersonaArchetype = str
+
+
+def _load_cooldown_jitter():
+    import json
+    from pathlib import Path
+    try:
+        policy=json.loads((Path(__file__).resolve().parents[2]/'policies/reply-targeting-v1.json').read_text())
+        return float(policy.get('cooldown_jitter_seconds',0))
+    except (OSError,ValueError):
+        return 0.0
+
+
+# Seconds of extra, per-publication random cooldown on top of a persona's base cooldown.
+COOLDOWN_JITTER_S = _load_cooldown_jitter()
 
 
 @dataclass(frozen=True)
@@ -79,18 +95,29 @@ class AccountState:
         """Return True if the account is temporarily frozen or permanently banned."""
         return self.is_frozen or self.is_banned or self.mode != "active"
 
+    def cooldown_jitter(self) -> float:
+        """Stable per-post jitter so accounts do not publish on a fixed rhythm.
+
+        Derived from the account and its last publication time, so every process computes the
+        same value and the effective cooldown does not change between checks.
+        """
+        if self.last_posted_at <= 0.0 or COOLDOWN_JITTER_S <= 0:
+            return 0.0
+        digest = hashlib.sha256(f"{self.account_id}:{self.last_posted_at:.6f}".encode()).digest()
+        return COOLDOWN_JITTER_S * int.from_bytes(digest[:4], 'big') / 2**32
+
     def is_in_cooldown(self, now: float, cooldown_s: float) -> bool:
-        """Check if the account is currently cooling down."""
+        """Check if the account is currently cooling down (base cooldown plus stable jitter)."""
         if self.last_posted_at <= 0.0:
             return False
-        return (now - self.last_posted_at) < cooldown_s
+        return (now - self.last_posted_at) < cooldown_s + self.cooldown_jitter()
 
     def remaining_cooldown(self, now: float, cooldown_s: float) -> float:
         """Return the seconds remaining before cooldown expires."""
         if self.last_posted_at <= 0.0:
             return 0.0
         elapsed = now - self.last_posted_at
-        return max(0.0, cooldown_s - elapsed)
+        return max(0.0, cooldown_s + self.cooldown_jitter() - elapsed)
 
     def mark_used(self, now: float) -> None:
         """Update last posted timestamp and increment post counter."""

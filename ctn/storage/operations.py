@@ -48,24 +48,41 @@ class OperationsStoreMixin:
         from ctn.rag.corpus import digest
         row=self.get_observed_post(post_id) or {}
         raw=row.get('raw') or {}
-        return digest([post_id,version,corpus_hash,self.policy('background_version'),
-            raw.get('platform_level'),raw.get('author_level'),raw.get('verified')])
+        related=[]
+        for key in ('parent_id','root_post_id','quoted_post_id'):
+            ident=str(row.get(key) or raw.get(key) or '')
+            other=self.get_observed_post(ident) if ident else None
+            related.append([ident,other.get('version') if other else None,other.get('text') if other else None,(other.get('raw') or {}).get('text_complete') if other else None])
+        prof=self.get_bot_profile(row.get('author','')) if row.get('author') else {}
+        return digest([post_id,version,corpus_hash,related,
+            [self.policy(k) for k in ('background_version','trusted_background','platform_levels','capabilities_version')],
+            raw.get('platform_level'),raw.get('author_level'),raw.get('verified'),raw.get('text_complete'),prof.get('verified')])
 
     def wait_for_material(self, task, corpus_hash, reason):
         with self.batch_transaction():
             fingerprint=self.dependency_fingerprint(task['post_id'],task['version'],corpus_hash)
             self._conn.execute('INSERT INTO task_dependencies VALUES(?,?,?) ON CONFLICT(post_id,version) DO UPDATE SET fingerprint=excluded.fingerprint',
                 (task['post_id'],task['version'],fingerprint))
+            row=self.get_observed_post(task['post_id']) or {};raw=row.get('raw') or {}
+            keys={'post:'+task['post_id'],'author:'+row.get('author',''),'corpus','policy'}
+            keys.update('post:'+str(row.get(k) or raw.get(k)) for k in ('parent_id','root_post_id','quoted_post_id') if row.get(k) or raw.get(k))
+            self._conn.execute('DELETE FROM task_dependency_objects WHERE post_id=? AND version=?',(task['post_id'],task['version']))
+            self._conn.executemany('INSERT OR IGNORE INTO task_dependency_objects VALUES(?,?,?)',[(task['post_id'],task['version'],k) for k in keys])
             self.update_post_task(task,'waiting_materials',reason=reason)
+            self._conn.execute('UPDATE post_tasks SET attempts=MAX(0,attempts-1) WHERE post_id=? AND version=?',(task['post_id'],task['version']))
 
     def resume_material_tasks(self, corpus_hash, *, now=None):
         ts=time.time() if now is None else now
         with self.batch_transaction():
+            if self.policy('resume_corpus_hash')!=corpus_hash:
+                self.set_policy('resume_corpus_hash',corpus_hash)
+                self._conn.execute("INSERT OR IGNORE INTO dirty_dependencies VALUES('corpus')")
             self._conn.execute("UPDATE post_tasks SET status='expired',reason='opportunity_expired' WHERE status='waiting_materials' AND expires_at<=?",(ts,))
-            rows=self._conn.execute("SELECT t.post_id,t.version,d.fingerprint FROM post_tasks t JOIN task_dependencies d USING(post_id,version) WHERE t.status='waiting_materials'").fetchall()
+            rows=self._conn.execute("SELECT DISTINCT t.post_id,t.version,d.fingerprint FROM dirty_dependencies k JOIN task_dependency_objects o USING(object_key) JOIN post_tasks t USING(post_id,version) JOIN task_dependencies d USING(post_id,version) WHERE t.status='waiting_materials'").fetchall()
             for row in rows:
                 if row['fingerprint']!=self.dependency_fingerprint(row['post_id'],row['version'],corpus_hash):
-                    self._conn.execute("UPDATE post_tasks SET status='queued',reason='dependency_updated',attempts=0,next_attempt_at=? WHERE post_id=? AND version=?",(ts,row['post_id'],row['version']))
+                    self._conn.execute("UPDATE post_tasks SET status='queued',reason='dependency_updated',next_attempt_at=? WHERE post_id=? AND version=?",(ts,row['post_id'],row['version']))
+            self._conn.execute('DELETE FROM dirty_dependencies')
 
     def save_rag_snapshot(self, snapshot):
         from ctn.rag.corpus import RagSnapshot
@@ -158,18 +175,25 @@ class OperationsStoreMixin:
         return True,'ready'
 
     def report_state_ready(self, *, now=None, automatic=False):
+        """Automatic sends need hybrid mode, shadow off and no recent report 403.
+        Human-approved sends additionally need an operator availability confirmation."""
         ts=time.time() if now is None else now
         if self.is_reporting_suspended(now=ts)[0]: return False,'reporting_suspended'
+        if automatic:
+            from ctn.moderation.decision import automatic_ready
+            return automatic_ready(self,now=ts)
         state=self.policy('report_clearance',{})
         if not state.get('source') or state.get('allowed') is not True or state.get('expires_at',0)<=ts:
             return False,'reporting_state_unknown'
-        if automatic and not state.get('live_source_verified'):
-            return False,'moderation_capability_unavailable'
         return True,'ready'
 
-    def store_report_candidate(self, payload):
+    @staticmethod
+    def report_candidate_id(payload):
         from ctn.rag.corpus import digest
-        ident=digest(payload)
+        return digest([payload['subject_kind'],payload['subject_id'],payload['author'],payload['evidence_hash'],payload['target_version'],payload['policy_version']])
+
+    def store_report_candidate(self, payload):
+        ident=self.report_candidate_id(payload)
         with self.batch_transaction():
             self._conn.execute('INSERT OR IGNORE INTO report_candidates VALUES(?,?,?,?,?,?,?)',
                 (ident,payload['subject_kind'],payload['subject_id'],payload['author'],
@@ -188,7 +212,7 @@ class OperationsStoreMixin:
         return ident
 
     def report_authorization(self, kind, target, meta, *, now=None, sending=False):
-        from ctn.moderation.policy import candidate_payload, automatic_evidence
+        from ctn.moderation.policy import candidate_payload
         ts=time.time() if now is None else now
         mode=self.policy('report_mode','off')
         if mode=='off': return False,'reports_disabled'
@@ -198,7 +222,8 @@ class OperationsStoreMixin:
         current=candidate_payload(self,subject,target,author)
         if not current or current['evidence_hash']!=meta.get('evidence_hash') or current['detail']!=meta.get('detail'):
             return False,'report_evidence_changed'
-        auto=mode=='hybrid' and automatic_evidence(self,current) and self.report_state_ready(now=ts,automatic=True)[0]
+        from ctn.moderation.decision import automatic_authorized
+        auto=mode=='hybrid' and meta.get('decision_action')=='auto' and automatic_authorized(self,kind,target,author,meta,now=ts)
         ready,reason=self.report_state_ready(now=ts,automatic=auto)
         if not ready:return False,reason
         if subject=='account':
@@ -245,6 +270,10 @@ class OperationsStoreMixin:
                 (event['event_id'],r['id'],event['outcome'],event['ruled_at'],event['source'],json.dumps(event)))
             self._conn.execute("UPDATE report_attempts SET status='ruled',outcome=?,ruled_at=? WHERE id=?",
                 (event['outcome'],event['ruled_at'],r['id']))
+            if r['subject_kind']=='post':
+                from ctn.moderation.decision import record_ruling
+                try:record_ruling(self,json.loads(r['payload_json']),event['outcome'])
+                except ValueError:pass
             self._conn.execute('INSERT OR IGNORE INTO moderation_events VALUES(?,?,?,?,?,?,?)',(event['event_id'],event['subject_kind'],str(event['subject_id']),event['outcome'],event['ruled_at'],event['source'],json.dumps(event)))
             # Historical mirror is updated only if it still represents this attempt.
             if r['subject_kind']=='post':

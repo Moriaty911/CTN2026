@@ -102,7 +102,7 @@ class LlmTests(unittest.TestCase):
 
     def test_action_pending_like_and_no_interaction_never_call(self):
         workflows = [worker(specificity=2)[0], worker(side="no", value=0)[0],
-                     worker(side="no", value=2)[0], responder(action="no_interaction", purpose="none")[0],
+                     responder(action="no_interaction", purpose="none")[0],
                      responder(action="needs_review")[0]]
         for workflow in workflows:
             target = record(level=None)

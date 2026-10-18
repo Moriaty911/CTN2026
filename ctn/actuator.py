@@ -68,6 +68,16 @@ class Actuator:
         self._gate.on_clean_interval(ActionGate.READ)
         self._gate.on_clean_interval(ActionGate.WRITE)
 
+    @staticmethod
+    async def _paged_read(getter,*args,limit=50,cursor=None,sort=None):
+        import inspect
+        params=inspect.signature(getter).parameters
+        kwargs={'limit':limit}
+        var_kw=any(p.kind==p.VAR_KEYWORD for p in params.values())
+        if cursor is not None and ('cursor' in params or var_kw):kwargs['cursor']=cursor
+        if sort is not None and ('sort' in params or var_kw):kwargs['sort']=sort
+        return await getter(*args,**kwargs)
+
     # ---- reads ----------------------------------------------------------- #
     async def trending_posts(self, *, limit=50):
         getter = getattr(self._client, 'feed_trending', None)
@@ -79,8 +89,8 @@ class Actuator:
     async def trending(self, *, limit: int = 50) -> list[dict[str, Any]]:
         return await self._read("trending", lambda: self._client.trending(limit=limit), [])
 
-    async def search(self, query: str, *, limit: int = 50) -> list[dict[str, Any]]:
-        return await self._read("search", lambda: self._client.search(query, limit=limit), [])
+    async def search(self, query: str, *, limit: int = 50, cursor: str | None = None, sort: str | None = None) -> list[dict[str, Any]]:
+        return await self._read("search", lambda: self._paged_read(self._client.search,query,limit=limit,cursor=cursor,sort=sort), [])
 
     async def get_post(self, post_id: str) -> dict[str, Any]:
         return await self._read("get_post", lambda: self._client.get_post(post_id), {})
@@ -116,15 +126,31 @@ class Actuator:
 
         return await self._read("get_account_posts", _call, [])
 
-    async def get_feed(self, account: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    async def get_counters(self, post_id: str) -> dict[str, Any]:
+        """Like/reply/repost/view counts for one post (`/posts/{id}/counters`, 300/min route)."""
+        getter = getattr(self._client, "get_counters", None)
+        if getter is None:
+            return {}
+        return await self._read("get_counters", lambda: getter(post_id), {})
+
+    async def get_account_likes(
+        self, target: str, *, limit: int = 50, cursor: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Fetch posts liked by `target` (`/accounts/{id}/likes`); used only to count actions."""
+        getter = getattr(self._client, "get_account_likes", None)
+        if getter is None:
+            return []
+        return await self._read("get_account_likes", lambda: self._paged_read(getter, target, limit=limit, cursor=cursor), [])
+
+    async def get_feed(self, account: str, *, limit: int = 50, cursor: str | None = None) -> list[dict[str, Any]]:
         return await self._read(
-            "get_feed", lambda: self._client.get_feed(account, limit=limit), [], account=account
+            "get_feed", lambda: self._paged_read(self._client.get_feed,account,limit=limit,cursor=cursor), [], account=account
         )
 
-    async def get_mentions(self, account: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    async def get_mentions(self, account: str, *, limit: int = 50, cursor: str | None = None) -> list[dict[str, Any]]:
         return await self._read(
             "get_mentions",
-            lambda: self._client.get_mentions(account, limit=limit),
+            lambda: self._paged_read(self._client.get_mentions,account,limit=limit,cursor=cursor),
             [],
             account=account,
         )
@@ -271,13 +297,13 @@ class Actuator:
                 self.suspended.add(account)
                 if self.store:
                     await asyncio.to_thread(self.store.set_account_banned,account,True)
-            if name=='get_comments':
+            if name in ('get_comments','get_feed','get_mentions','search','get_account_posts'):
                 from .client.base import ReadFailurePage
                 return ReadFailurePage()
             return default
         except PlatformError as exc:
             self._warn(f"read {name} failed: {exc}", status=exc.status)
-            if name=='get_comments':
+            if name in ('get_comments','get_feed','get_mentions','search','get_account_posts'):
                 from .client.base import ReadFailurePage
                 return ReadFailurePage()
             return default
@@ -318,7 +344,7 @@ class Actuator:
             ident, reason = await asyncio.to_thread(self.store.claim_action,action_kind,account,target_id,text,metadata=meta)
             if not ident:
                 return result('blocked',reason)
-            await asyncio.to_thread(self.store.start_action,ident)
+            await asyncio.to_thread(lambda:self.store.start_action(ident,wire_tracked=bool(getattr(self._client,'http_metered',False))))
         async def renew():
             while True:
                 await asyncio.sleep(20)
@@ -347,8 +373,10 @@ class Actuator:
             status='unknown' if exc.retryable or exc.status is None else 'failed'
             detail=str(exc)
             if kind is ActionKind.REPORT and exc.status==403 and self.store:
-                # A denial invalidates clearance; it does not establish a six-hour ban or account suspension.
-                await asyncio.to_thread(self.store.set_policy,'report_clearance',{})
+                # A denial pauses automation and clears manual availability; suspension wording
+                # also starts a local six-hour stop. It never marks the reporting account suspended.
+                from .moderation.decision import record_report_forbidden
+                await asyncio.to_thread(record_report_forbidden,self.store,str(exc))
             response={'error_status':exc.status,'failure_category':'uncertain' if status=='unknown' else 'terminal' if exc.status in (400,404) else 'transient'}
         except (TimeoutError,OSError):
             status,detail='unknown','network response unavailable'
@@ -374,6 +402,10 @@ class Actuator:
             except ValueError:
                 status,detail='unknown','publication confirmation conflicts with saved attribution'
                 await asyncio.to_thread(self.store.finish_action,ident,status,response=response,detail=detail)
+            if status=='unknown':
+                # The store turns an "unknown" that never reached the wire into a definite failure.
+                row=await asyncio.to_thread(self.store.get_action,ident)
+                if row and row['status']=='failed':status,detail='failed',row['detail']
         return result(status,detail,_ms(start),response)
 
     def _warn(self, msg: str, **fields: Any) -> None:

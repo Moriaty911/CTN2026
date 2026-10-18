@@ -1,16 +1,21 @@
-本批 80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[80 人预览](docs/personas-80/preview.md)。新人设默认未绑定，绑定后待命。
+> **当前状态（2026-10-18，v6 + 举报决策 v2）**：账号初始化/维护/冲刺策略、任务恢复、托管 Pi 脉冲和 Discord 举报审核已实现；
+> 举报改为按期望值自动决策（`policies/report-v2.json`，默认 shadow 只记录不发送），见下文 [Reporting automation](#reporting-automation-report-decisionv2)。
+> 运行与恢复以 [v6 runbook](docs/repair-and-discord-2026-10-18/runbook.md) 为准，当前三棵逻辑树见 [logic-trees](docs/repair-and-discord-2026-10-18/logic-trees.md)。
+> 开服后要做的事见 [上线后 TODO](#上线后-todo)。官方服务器行为仍需开服验证。
 
-YES RAG 静态基础语料：见 [四类材料、来源与整理说明](docs/rag-yes-v1/README.md)及[审阅预览](docs/rag-yes-v1/preview.md)。当前版本为 `config/rag/yes.v1.1.json`，原 v1 保留供回放；仅完成离线整理，尚未接入 Pi/JEV、自动发布或持续新闻/VIP 采集。
+80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[80 人预览](docs/personas-80/preview.md)。新人设默认未绑定，绑定后待命。
 
-运行入口与本轮修复：见 [修复交付说明](docs/repair-2026-10-17/implementation.md)、[启动和恢复](docs/repair-2026-10-17/operations.md)、[当前三棵逻辑树](docs/personas-80/logic-trees.md)。正式服务使用 `python -m ctn.main`；首次离线验证使用 `--mock --side yes --state-file state/mock.sqlite3 --once`。
+YES RAG 静态基础语料：见 [四类材料、来源与整理说明](docs/rag-yes-v1/README.md)及[审阅预览](docs/rag-yes-v1/preview.md)。当前版本为 `config/rag/yes.v1.1.json`，原 v1 保留供回放；已接入 Pi/JEV 与发布链路；新闻/VIP 为有范围的采样，未经整理不会自动成为已验证事实。
+
+运行入口：正式服务使用 `python -m ctn.main`（或 `./scripts/docker.sh up all`）；首次离线验证使用 `python -m ctn.main --mock --side yes --state-file state/mock.sqlite3 --once`。`docs/repair-2026-10-17/`、`docs/implementation-2026-10-18/` 的说明以及 `docs/personas-80/logic-trees.md` 是历史版本，以上面链接的 v6 文档为准。
 
 # CNT2026
 
-Python components for the Capture the Narrative 2026 project. The system operates as a **Dual-Engine Architecture** combining high-throughput **Micro-level Reactive Replies** (JEV stream evaluation + DeepSeek drafting + JEV 4-dimension pre-send gatekeeping) with a strategic **Macro-level Proactive Publishing Engine** driven by the `pi.dev` Agent harness, long-term state tracking via `harness.md`, and multi-account persona lifecycle management.
+Python components for the Capture the Narrative 2026 project. The system operates as a **Dual-Engine Architecture** combining high-throughput **Micro-level Reactive Replies** (JEV stream evaluation + DeepSeek drafting + JEV postflight gatekeeping) with a strategic **Macro-level Proactive Publishing Engine** driven by the `pi.dev` Agent harness, long-term state tracking via `harness.md`, and multi-account persona lifecycle management.
 
 The scenario is the fictional Kingstonia referendum on vaccination proof for access to public spaces. Supporting voluntary vaccination does not automatically mean supporting the access requirement. Alignment is calculated against the team's explicitly supplied side; a single post does not establish an author's permanent affiliation.
 
-**October 17, 2026 update:** The default roster and production rubric have moved to 80 YES profiles and post.v3; see the delivery and validation documents linked above. The earlier Stage 1 baseline had 436 passing offline tests. Features include real-time JEV evaluation, multi-account persona routing with cooldown fallback, JEV 4-dimension postflight gatekeeping with Option B retries, macro environment sensing (trending hashtags & dual newspaper monitoring), Kingstonia native warmup post seeds, and `pi.dev` strategic campaign harness integration.
+**Current scope (2026-10-18):** 80 YES persona profiles with explicit binding, the post.v3 rubric, JEV response decisions for neutral/mixed posts, JEV postflight (`postflight.v3`) with one targeted retry, source-bound RAG, persistent reply batches, the managed Pi macro worker, SQLite-backed intents/leases shared by fleet, macro and Discord processes, and expected-value report automation. Reply targeting is audience-weighted with anti-pile-on caps and staged count refreshes. Uncertain sends hold an account for at most 15 minutes and are reconciled automatically; restarts drain cleanly. The offline suite has 752 tests.
 
 ## Implemented capabilities
 
@@ -24,10 +29,11 @@ The scenario is the fictional Kingstonia referendum on vaccination proof for acc
 | Interaction decisions | Applies confirmed aligned/opposing rules; asks JEV to select the action and primary response purpose for neutral/mixed posts. Ambiguous or unavailable decisions remain pending. |
 | Multi-account personas | 80 versioned YES profiles in 11 occupation groups; explicit SQLite binding/activation, capability checks, scene routing, cooldown and fixed optional reply batches. |
 | Reply drafting | Calls DeepSeek from a locally bound, checked reply task using internal P01–P09 templates; injects persona background and voice instructions. |
-| Pre-send gatekeeper | Single JEV call (<0.3s) evaluating candidate drafts across 4 dimensions: side alignment, purpose compliance, toxicity/injection, and send authorization, with Option B targeted retry. |
+| Pre-send gatekeeper | One JEV `postflight.v3` call per draft (side alignment, purpose, persona/style, toxicity/injection, send authorization, substantive addition, evidence support) plus local length/duplicate/style-copy checks, with one targeted retry. |
 | Macro sensing | Collects platform trending hashtags, headlines from dual newspapers (*Daily Kingstonia* & *Kingstonia Herald*), VIP NPC posts, and account availability. |
-| Strategic publishing | Proactive publishing with JEV preflight auditing and account cooldown enforcement, plus pre-vetted Kingstonia native warmup seed posts. |
-| Pi Agent harness | Integration with `pi.dev` via `.pi/skills/campaign-publisher/SKILL.md` and persistent working memory in `harness.md`. |
+| Strategic publishing | At most one Pi draft per two-hour pulse, 10 originals per team per Sydney day and a 24-hour lock per account (runtime-adjustable), through the same postflight and SQLite gates; one neutral initialise post per new account from its persona's daily examples. |
+| Pi Agent harness | The managed worker (`ctn/macro/worker.py`) calls `pi --print --no-tools --no-skills` with a fixed system prompt, the `[ACTIVE]` directives from `harness.md`, a state snapshot and RAG materials. Pi returns JSON only; Python selects the account and authorizes sending. `.pi/skills/campaign-publisher/SKILL.md` documents the contract for manual Pi use. |
+| Blue-team reporting | Versioned bot-evidence scoring, report candidates bound to evidence hashes, expected-value decisions (`report-decision.v2`, shadow by default), Discord/CLI review, risk budget and ruling import. |
 | Audit and review | Records metadata-only JSONL events and supports field-level human references, routing replay, feedback records, and comparisons between evaluated rubric versions. |
 
 ## Dual-Engine Architecture
@@ -41,7 +47,7 @@ flowchart TB
         VIP_NPCs["7 Special NPCs (Journalists, Columnists, Candidates)"]
     end
 
-    subgraph MacroEngine["【Macro Strategic Loop】(Periodic Pulse / 1-2 Hours)"]
+    subgraph MacroEngine["【Macro Strategic Loop】(Managed Pi pulse / 2 hours)"]
         direction TB
         MacroSensing["1. Macro Sensing (ctn.macro status)<br>• Trends, News Headlines, VIP NPC topics"]
         HarnessMemory["2. Persistent Working Memory (harness.md)<br>• Campaign Phase, Commitments, Account Locks, Human Directives"]
@@ -55,7 +61,7 @@ flowchart TB
         StreamRead["1. Perceive Stream & Keyword Search"]
         JevEval["2. JEV Workflow Evaluation (JevWorkflow)<br>• Triage & Deep Stance/Relevance/Topic Assessment"]
         DecisionGate{"3. Action Decision"}
-        Router["4. Persona Router (PersonaRouter)<br>• 4 Archetypes Match & 60s Cooldown Tracker"]
+        Router["4. Persona Router (PersonaRouter)<br>• 80 bound personas, occupation + scene match, per-persona cooldown"]
         LlmDraft["5. LLM Reply Generator (ReplyGenerator)<br>• DeepSeek + Persona Voice & Tone Injection"]
         
         StreamRead --> JevEval --> DecisionGate
@@ -65,7 +71,7 @@ flowchart TB
     end
 
     subgraph SafeExecution["Unified Safety Gate & Actuator"]
-        Postflight["JEV 4-Dimension Gatekeeper (JevPostflightChecker)<br>• Side Alignment, Purpose, Toxicity, Authorization<br>• Option B Targeted Retry on Rejection"]
+        Postflight["JEV postflight.v3 Gatekeeper (JevPostflightChecker)<br>• Side, purpose, persona, toxicity/injection, authorization, evidence<br>• One targeted retry on rejection"]
         Actuator["Actuator Execution Layer<br>• ActionGate (Rate Limiting) & BudgetLedger (Quota Tracking)"]
         
         LlmDraft --> Postflight
@@ -90,7 +96,7 @@ The default action policy is `jev-actions.v3`, which adds JEV decisions for neut
 
 - **Python 3.14.** This version is pinned in `environment.yml` and in the Docker image (`python:3.14-slim`), and the container is the deployment target. `scripts/check_env.py` enforces it at startup so a wrong interpreter fails loudly instead of producing empty results. The earlier claim of "Python 3.10 or newer" was wrong: on 3.13 and earlier, `JevInput.from_dict` rejected every input (see `ctn/jev/inputs.py`). That specific defect is now fixed, but 3.14 remains the only supported and tested interpreter.
 - JEV components use the standard library. DeepSeek drafting and its offline tests use the existing pinned `httpx==0.28.1` dependency. Install `requirements.txt` in the supported project environment; no model SDK is required.
-- Run commands from the repository root. There is no packaged installation or full application CLI yet.
+- Run commands from the repository root. Entry points: `python -m ctn.main` (fleet service), `python -m ctn.macro.worker` (Pi pulses), `python -m ctn.ops` (operator CLI), `python -m ctn.discord_bot` (review panel); Docker wraps them via `./scripts/docker.sh`.
 - Live evaluation requires a TypeSafe API key; live drafting requires a DeepSeek API key. Both require network access. Offline tests require neither credential nor network access.
 
 Create a local configuration file without overwriting an existing one:
@@ -211,8 +217,8 @@ Score-based action rules require a usable assessment and applicable score. Unava
 | Aligned | `response_specificity` | `<= 2.5` | Like. |
 | Opposing | `reply_value` | `< 1` | No interaction. |
 | Opposing | `reply_value` | `1–3`, inclusive | Ordinary reply, subject to target-level resolution. |
-| Opposing | `reply_value` | `> 3` | Reply requiring a high-level account and high-quality content. |
-| Opposing, explicitly mapped high-level target | `reply_value` | Meets the reply threshold | Upgrade the reply to a high-level account and high-quality content. |
+| Opposing | `reply_value` | `> 3` | Reply with high-quality content; routing prefers a high-tier account but falls back to standard. |
+| Opposing, high-level target (the production brain maps `verified` authors to high) | `reply_value` | Meets the reply threshold | Same upgrade: high-quality content and a high-tier preference. |
 | Mixed or neutral | Independent JEV response judgments | Usable, relevant deep assessment | Decide reply/no interaction or return material/review/assessment needs; account allocation remains downstream. |
 | Unknown alignment | — | Alignment cannot be established | `pending_rules`, with no selected action. |
 
@@ -220,11 +226,11 @@ A high-level target does not override a low-value skip. Exactly `2.5` selects li
 
 `response_specificity` measures how clearly the response point is identifiable. `reply_value` is a separate opportunity rating, not actual competition points, return on investment, or persuasion probability. Visible engagement can inform that rating qualitatively; a standalone engagement trigger has not been defined.
 
-Provide actual, explicitly confirmed platform labels through `ActionPolicy(platform_levels=...)`, mapping each to `standard` or `high`. The default mapping is empty. An opposing post in the ordinary-value interval with an unknown or unmapped level returns `needs_account_metadata`; it does not dispatch ordinary generation. A value above `3` already requests a high-level account. Actual account selection belongs downstream.
+Provide actual, explicitly confirmed platform labels through `ActionPolicy(platform_levels=...)`, mapping each to `standard` or `high`. The production brain (`ctn/pipeline/brain.py`) adds default mappings, including `verified → high`. Under the default v3 policy an unknown level replies as standard (`opposing_unknown_level_standard_reply`); only the historical v1/v2 policies return `needs_account_metadata`. A value above `3` requests a high-level account, which the router treats as a preference (see Pacing and account levels).
 
 ## Neutral and mixed JEV response decisions
 
-With the default v3 policy, eligible neutral/mixed posts enter an independent JEV response-decision request. It reuses the exact packed deep state, including omissions, registered background and context limits. It never restores omitted original material. The new request uses the same transport, retry, concurrency, in-flight sharing and optional cache mechanisms as the earlier stages.
+The production Brain selects the capability-restricted response.v2 rubric (P02/P03/P07/P08); the standalone workflow retains response.v1 for explicit historical/material workflows. With the default v3 policy, eligible neutral/mixed posts enter an independent JEV response-decision request. It reuses the exact packed deep state, including omissions, registered background and context limits. It never restores omitted original material. The new request uses the same transport, retry, concurrency, in-flight sharing and optional cache mechanisms as the earlier stages.
 
 The versioned English question set in `ctn/jev/rubrics/response.v1.json` asks four independent questions:
 
@@ -402,67 +408,37 @@ This verifies credential/transport/draft integration, not purpose-selection accu
 
 ## Macro Strategic Publishing & Pi Agent Harness
 
-While the micro loop (`JevWorkflow` + `ReplyGenerator` + `JevPostflightChecker`) reacts to individual posts in real time, the **Macro Strategic Engine** drives autonomous, scheduled narrative publishing. It observes broad platform trends, targets the two influential newspapers (*Daily Kingstonia* and *Kingstonia Herald*), provides news bait for the 7 VIP journalist NPCs, and manages the account lifecycle (warmup seeds vs climax deployment).
+The managed macro worker (`python -m ctn.macro.worker`) owns two-hour Pi pulses.
+SQLite owns account eligibility, phase, quota, jobs, publication intents and outcomes. Pi receives source-bound
+materials and returns a structured draft; Python selects the account, verifies the draft and sends it through
+shared gates. Phase startup permits substantive publications after each account's initialise post.
+Initialization has no daily 15-post allowance or strategic-original lock. Strategic originals default to
+10/team/Sydney day and 24 hours per account; operators can change the daily value without restarting.
 
-### 1. Working Memory & Human Governance (`harness.md`)
+See the [v6 runbook](docs/repair-and-discord-2026-10-18/runbook.md) for account initialization,
+maintenance, phase overrides, the managed Pi service, Discord review, official ruling entry and recovery.
+The previous external Pi cron publisher must be disabled before starting the managed worker.
 
-Each scheduled run of the macro harness reads and updates `harness.md` in the project root. This file provides persistent state across runs:
-- **Active Strategic Focus**: Current campaign phase (e.g., Phase 1: Warmup & Setup, Phase 2: Narrative Shaping, Phase 3: Climax Push) and lock expiry timestamps.
-- **Account Cadence Locks**: Cooldown tracking ensuring accounts are not overused (e.g. keeping expert accounts dormant until Phase 2).
-- **VIP Watchlist**: Media headlines and topics favored by journalist NPCs.
-- **Human Directives**: Standing instructions from human commanders that the agent must strictly respect.
-- **Action History**: Chronological audit trail of all proactive posts.
+Docker includes Python, Node and Pi; no host Pi installation or cron is required.
+Run `./scripts/docker.sh configure`, fill in the generated configuration files, then
+`./scripts/docker.sh prepare` and `./scripts/docker.sh up all` to build and start fleet,
+Pi scheduling and Discord review. Plain `docker compose up --build -d` starts fleet and
+Pi; add `--profile discord` before `up` to include the Bot. Configuration and credentials
+are injected at runtime; state persists on mounted local disk. Mock mode calls neither
+Pi nor the platform. Strategic live writes additionally require `CTN_MACRO_LIVE=true`.
+The macro image and template explicitly select `deepseek/deepseek-flash` with
+`CTN_PI_THINKING=high`, matching the team's local Pi settings. The selected DeepSeek
+credential and Pi defaults are in the private `state/pi/agent/` mount; copy these files
+privately alongside the deployment configuration when moving to another host.
 
-### 2. Macro Sensing & Publishing CLI (`ctn.macro`)
-
-The Python CLI handles deterministic tasks, rate limits, and JEV safety gatekeeping:
-
-```sh
-# 1. Inspect macro environment (trending hashtags, dual newspapers, account cooldowns)
-python -m ctn.macro status --side yes
-
-# 2. Publish a strategic post (automatically audited by JEV 4-dimension preflight gate)
-python -m ctn.macro publish --account ACTUAL_BOUND_HANDLE --text "Morning transit crowded on the ring road." --tag "#KingstoniaVotes"
-
-# 3. Publish a pre-vetted Kingstonia native warmup post (establishes authentic citizen presence)
-python -m ctn.macro warmup --account ACTUAL_BOUND_HANDLE --index 0
-```
-
-### 3. Pi Agent Integration Tutorial (`pi.dev`)
-
-The strategic decision-maker uses the [pi.dev](https://pi.dev) agent framework with native Chain-of-Thought (CoT) reasoning.
-
-#### Step 1: Install Pi CLI
-```sh
-# macOS / Linux
-curl -fsSL https://pi.dev/install.sh | sh
-
-# Or via npm (Node.js >= 22.19.0)
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-```
-
-#### Step 2: Agent Skill Configuration
-The repository includes a preconfigured Pi skill in `.pi/skills/campaign-publisher/SKILL.md`. When Pi runs in the project directory, it automatically loads this skill into context.
-
-The skill instructs Pi to:
-1. Read `harness.md` to check active commitments, account locks, and human overrides.
-2. Run `python -m ctn.macro status` to evaluate current trending topics and newspaper coverage.
-3. Use Chain-of-Thought (CoT) to decide whether to post, which account to dispatch, and how to craft high news-value content.
-4. Execute `python -m ctn.macro publish` or `warmup`.
-5. Update `harness.md` with the new action log and next lock timestamp.
-
-#### Step 3: Run a Strategic Campaign Pulse
-Run a single non-interactive pulse:
-```sh
-pi -p "Run campaign pulse: read harness.md, evaluate macro status, execute strategic post if appropriate, and update harness.md"
-```
-
-#### Step 4: Schedule Periodic Runs (Cron)
-To run autonomous strategic pulses every 2 hours:
-```sh
-# Add to crontab (crontab -e)
-0 */2 * * * cd /Users/liu/Documents/AI2026 && pi -p "Run campaign pulse: read harness.md, evaluate macro status, execute strategic post if appropriate, and update harness.md"
-```
+The Discord Bot maintains an English control panel with a review queue, pending reports,
+reporting controls and contextual help. Use selection menus and explained buttons for
+routine work; reasons and official evidence are collected in forms. Default responses
+are readable cards, with optional plain-text evidence export. See the
+[Discord UI guide](docs/repair-and-discord-2026-10-18/discord-ui.md).
+Navigation and form results edit one private workspace per reviewer. The shared
+launcher stays in place, and active private panels are reused instead of adding a
+new reply for every click.
 
 ## Compare supplied posts
 
@@ -505,14 +481,22 @@ Run the offline suite:
 python3 -m unittest discover -s tests -q
 ```
 
-The October 14, 2026 run passed **436 offline tests**, covering:
+The 2026-10-18 run on Python 3.14.6 passed **752 offline tests** with 0 skipped when `discord.py` is installed
+(Discord panel tests skip without it). Coverage includes:
 - JEV workflow, inputs, routing, action decisions, rubric parsing, and calibration.
-- Historical persona models, cooldown tracking, and fallback (current occupation routing has separate tests).
-- JEV 4-dimension preflight gatekeeping with Option B retries.
-- Macro environment state collection, strategic publisher, warmup seed retrieval, and CLI commands.
-- Dual-engine integration (shared actuator, budget ledger, rate limiter, and persona cooldown).
-- Harness state parsing, active human directive extraction, and Pi skill integrity.
-- Persona voice prompt injection and tone integrity across all YES and NO personas.
+- Persona catalog binding, occupation routing, cooldowns and fixed multi-reply batches.
+- Shared SQLite intents, leases, unknown-result recovery, multi-process claims and publication deduplication.
+- Macro worker, strategic publisher, initialise posts and phase policy.
+- Detector evidence, report candidates, Discord review, ruling import, and report decision v2
+  (`tests/test_report_decision.py`: probability floor, rewards, suspension cost, risk budget, 403 handling,
+  calibration, account-activity counting and target probes).
+- Persona voices, prompt-injection boundaries and postflight gatekeeping.
+- Reply targeting (`tests/test_reply_targeting.py`): audience ordering, cold likely-bot skips before JEV,
+  author/thread/account daily caps, cooldown jitter, trending feed alternation, stale backlog, staged refresh
+  and comment-crawl fairness.
+- Send recovery (`tests/test_send_recovery.py`): wire marker, shutdown drain, 90-second send lease, bounded unknown
+  holds, reconciliation from local/thread/history evidence, abandonment, report pending release, burst alerts and
+  initialise seed rotation.
 
 For an explicit live wire-format check:
 
@@ -524,13 +508,20 @@ python3 -m ctn.jev.smoke
 
 | Path | Role |
 |---|---|
-| `ctn/macro/` | Macro environment state collector (`state.py`), strategic publisher (`publisher.py`), and CLI entry point (`cli.py`). |
+| `ctn/main.py` | Continuous fleet service: crawlers, reply worker, initialise posts, reporting sweep, reconciliation, heartbeat. |
+| `ctn/macro/` | Managed Pi worker (`worker.py`, two-hour pulses), state collector (`state.py`), strategic publisher (`publisher.py`), and CLI (`cli.py`). |
+| `ctn/storage/` | SQLite state: posts mirror, tasks, intents/leases, request pacing, evidence, reports, lifecycle, performance. |
+| `ctn/moderation/` | Detector (`detector.py`), candidate payloads (`policy.py`), report decisions (`decision.py`), reporter, review service, events/probes. |
+| `ctn/rag/`, `config/rag/` | Source-bound static corpus and retrieval snapshots. |
+| `ctn/ops.py` | Operator CLI: fleet registration, account policy, reports (review, automation, calibration), rulings. |
+| `ctn/discord_bot.py`, `discord_ui.py`, `discord_session.py` | Private Discord review panel. |
+| `policies/` | Versioned evidence, report (`report-v1` whitelist, `report-v2` decision) and reply-expansion policies. |
 | `ctn/persona/` | Persona models, built-in registry, routing engine (`router.py`), and native Kingstonia warmup seeds (`warmup_seeds.py`). |
 | `ctn/pipeline/` | Brain integration (`brain.py`), bot loop (`loop.py`), and perception (`perceive.py`). |
 | `.pi/skills/campaign-publisher/SKILL.md` | Pi Agent native skill for autonomous strategic narrative campaign publishing. |
 | `harness.md` | Root working memory, campaign phase tracking, account cadence locks, and human directive ledger. |
 | `ctn/jev/workflow.py` | Recommended evaluation, action, and material-handoff entry point. |
-| `ctn/jev/postflight.py`, `rubrics/postflight.v1.json` | 4-dimension JEV pre-send gatekeeper (side, purpose, toxicity/injection, authorization). |
+| `ctn/jev/postflight.py`, `rubrics/postflight.v3.json` | JEV pre-send gatekeeper (side, purpose, persona/style, toxicity/injection, authorization) shared by replies and originals. |
 | `ctn/jev/inputs.py`, `outputs.py` | Standardized input and assessment contracts. |
 | `ctn/jev/questions.py`, `rubrics.py`, `rubrics/` | Typed questions, versioned rubrics, and relative-alignment mapping. |
 | `ctn/jev/packing.py`, `client.py`, `parsing.py` | Content preparation, transport, and response validation. |
@@ -544,7 +535,7 @@ python3 -m ctn.jev.smoke
 | `ctn/config.py`, `telemetry.py`, `models.py` | Shared configuration, logging, and project data structures. |
 | `ctn/client/base.py`, `mock.py`, `ratelimit.py` | Platform protocol, simulation, and rate-control foundations. |
 | `ctn/llm/` | DeepSeek transport, persona voice injection, draft contracts, and local checks. |
-| `tests/` | Offline unit tests (420 tests passing) and contract/workflow fixtures. |
+| `tests/` | Offline unit tests (705 on 2026-10-18) and contract/workflow fixtures. |
 | `tests/fixtures/jev_handoff/actions-v1.json` | Eight historical v1 synthetic action examples, including an explicit generation-material example; their neutral pending state remains a versioned historical example. |
 | `tests/fixtures/jev_handoff/response-planning-v1.json` | Historical v2 synthetic open, question-first, and guided planning examples. |
 | `tests/test_jev_response.py` | Offline third-stage decisions, thresholds, provenance, reassessment, material checks and compatibility. |
@@ -558,7 +549,7 @@ python3 -m ctn.jev.smoke
 | Item | Required next step |
 |---|---|
 | Platform input mapping | Official adapter and SQLite restoration are connected; verify actual live field availability. |
-| Official account-level labels | Confirm explicit label-to-`standard`/`high` mappings. |
+| Account levels (`capability_tier`) | `high` is a local, manually set tag and only a routing preference: targets that ask for it (verified authors, opposing `reply_value > 3`) try high-tier, then maintained, then the most experienced standard accounts. Replies are never blocked for lack of a high account; `reply_quality='high'` still tightens drafting. |
 | Neutral/mixed generation integration | Connected to checked materials and generation. Calibrate action/purpose selection with real samples. |
 | Independent engagement triggers | Define and review thresholds before enabling overrides. |
 | Historical retrieval and frequency statistics | Another module supplies candidate pairs and manages storage/counting. |
@@ -571,6 +562,161 @@ General platform/fleet/budget defaults and older policy sketches elsewhere in th
 
 Provider references: [TypeSafe API](https://docs.typesafe.ai/api) and [question primitives](https://docs.typesafe.ai/primitives). Scope and deployment remain the responsibility of the project integrators; the module's current decisions and signals do not constitute a demonstrated strategy outcome.
 
-## 2026-10-18 runtime v5
+## Pacing and account levels (2026-10-18)
 
-Source-bound static RAG, shared publication deduplication, staged fleet operations and mixed reporting are implemented. See [runbook](docs/implementation-2026-10-18/runbook.md), [three logic trees](docs/implementation-2026-10-18/logic-trees.md) and [offline validation](docs/implementation-2026-10-18/validation.json). Live reporting remains blocked until actual moderation/report-clearance capability is verified. No production writes were performed during this implementation.
+- Team-level rate ceilings are now outer limits (read 6 rps, write 0.8 rps, per account 1.5 / 0.1 rps; request cap 30M).
+  The binding limits remain the official per-route buckets in `ctn/client/pacing.py`, and server `rate_limit` /
+  `Retry-After` feedback always extends the schedule. A request refused locally before sending (budget exhausted) is
+  recorded as failed, not as an uncertain send.
+- The frontline crawler reads `popular_tags` at most once a minute and skips a read when nothing is due. Searches only
+  query real tags (misses are cached for 10 minutes); free-text keywords no longer re-read the latest feed.
+- `capability_tier='high'` is a routing preference (high tier → maintenance → most experienced standard accounts),
+  not a send gate. "No eligible account" is retried at most twice; "all eligible accounts cooling down" waits for the
+  shortest remaining cooldown instead of re-running JEV every 30 seconds.
+- The fleet uses a 48-thread default executor (`CTN_THREAD_WORKERS`) because pacing waits run inside SDK threads.
+
+## Reporting automation (report-decision.v2)
+
+The moderator upholds a report on a competitor bot with probability 0.75 and on a citizen with 0.25, so
+`P(upheld) = 0.25 + 0.5p`, where `p` is the estimated probability that the author is a bot. A genuine ruling
+stops all team reporting for six hours. `ctn/moderation/decision.py` sends a post report when
+
+```
+P(upheld) × R  >  P(genuine) × C      and      p ≥ 0.7 (hard floor, never lowered)
+```
+
+- **p** comes from an evidence bucket (`leak_behavior`, `leak_only`, `behavior_only`, `account`) with a prior in
+  `policies/report-v2.json`. Rulings recalibrate the bucket (upheld rate `u` gives `p = (u − 0.25) / 0.5`) and each
+  author's own rulings update `p` with Bayes. The detector's evidence points are still not probabilities.
+- **R** is the expected points if upheld: 25 × P(first reporter) + 5 × (1 − P(first)), where P(first) decays with the
+  post's age, times the daily diminishing-return multiplier. Hidden or older-than-6-hour targets give `R = 0`.
+- **C** is the value lost in one six-hour stop: the number of reportable authors expected in that window (capped by
+  pending capacity and the observed ruling delay) times their average expected value.
+- Below the floor, a candidate with `p ≥ 0.5` goes to human review; otherwise it is dropped. The floor exists so that
+  the 25% citizen error rate is never used deliberately (bad-faith reporting, LS.6.5 and rule 5.3).
+- Unresolved post reports share a risk budget: the sum of their genuine probabilities may not exceed
+  `max_expected_genuine` (default 2.0). The existing 5-pending and 1-per-author limits still apply.
+- Targets are the author's posts that carry their own leak/repetition evidence first, then the freshest. Report
+  `detail` is a deterministic plain-English summary; the structured evidence stays in SQLite for audit.
+- A report 403 pauses automation for 30 minutes and clears manual availability; 403 wording about suspension also
+  starts a local six-hour stop. Manual availability confirmations now last 60 minutes; approvals still last 5.
+- Account reports count posts and likes from public reads (`api_count:posts+likes`) instead of a manual proof.
+- Every decision is stored in `report_decisions`; the Discord candidate card shows the recommendation, `p`, `R` and `C`.
+- `probe_report_targets` records which status-like fields pending report targets expose (`report_target_observations`).
+  It never creates rulings. Rulings are still entered by an administrator until those fields are verified.
+
+Automation needs `CTN_REPORT_MODE=hybrid` and is **shadow by default** (decisions are recorded, nothing is sent
+automatically). Operator commands:
+
+```sh
+python -m ctn.ops reports calibration                      # per-bucket rulings, p estimates, would-auto counts
+python -m ctn.ops reports automation --shadow off          # enable sending for auto_buckets (leak_behavior, account)
+python -m ctn.ops reports automation --buckets leak_behavior,leak_only,account
+python -m ctn.ops reports automation --shadow on           # stop automatic sends immediately
+```
+
+## Reply targeting (reply-targeting.v1)
+
+A reply has two possible readers: the post's author and the people watching that post. Since a bot can no longer be
+confirmed by a report outcome (75/25), `p_bot` is an ordering prior only (`policies/reply-targeting-v1.json`:
+unknown 0.3, suspected 0.6, confirmed or upheld author 0.9, verified/own 0). `ctn/pipeline/targeting.py` computes
+
+```
+audience = [10·(1 − p_bot) + 4·ln(1 + max(engagement, author reach)) + 15·replies_to_us + 6·trending + 6·verified]
+           × freshness            (engagement = likes + 2·replies + 2·reposts, freshness half-life 30 min)
+priority = JEV score + audience   (the old "longer wait = higher priority" term is gone)
+```
+
+- **Likely bots (p ≥ 0.5) are not skipped on arrival**; their first attempt is delayed ~11 minutes so engagement can
+  accumulate. After 10 minutes, a likely-bot post with engagement ≤ 3 that is not trending is skipped *before* JEV
+  (`targeting:cold_likely_bot`). A busy bot post is still answered for its onlookers. Aligned posts are never cold-skipped.
+- **Caps per Sydney day** (status claimed/sending/unknown/succeeded; initialise and warm-up excluded): at most 2 team
+  replies to one author, 3 into one thread (batch extras included), 35 posts+replies per account. Author/thread caps
+  end the task; capped accounts drop out of routing. `claim_action` enforces the same caps for every send path.
+- **Cooldown jitter:** each account adds a stable 0–120 s to its cooldown (hash of account + last send), so the fleet
+  does not reply on a fixed rhythm.
+- **Feed sources:** the official client alternates `feed_latest` and `feed_trending` (every 2nd feed read); trending
+  posts are recorded in `trending_seen` for 30 minutes. Pages are 50 rows. A continuation page whose newest post is
+  older than 5 minutes is abandoned, so a flood never leaves the crawler reading stale backlog.
+- **Staged refresh:** each queued post gets count refreshes at 10 and 25 minutes (`post_refresh`). `refresh_step`
+  reads counters by post id (≤ 120/min, ≤ 10 per step, 0.5 s apart), yields whenever the team read backlog exceeds 2 s,
+  marks refreshes more than 5 minutes late as stale, and drops them when the task is no longer open. New counts
+  re-score the task and feed the comment queue.
+- **Comment crawl:** priority is `10·ln(1 + unseen)` plus bonuses (own thread 80, verified 40, trending 30). Own,
+  verified and trending threads are always among the candidates, and one post gets at most 4 comment pages per hour;
+  after that its backlog is marked caught up (`depth_cap`) and only newer replies are read later.
+
+## Uncertain sends and restarts (send-recovery.v1)
+
+A send is **unknown** when the request may have reached the platform but no definite result came back (timeout,
+5xx, missing post id, process stopped mid-send). Unknown sends are never replayed blindly. The duplicate risk is on
+the target, not the account, so the two are now handled separately (`policies/send-recovery-v1.json`):
+
+- **Wire marker.** `action_intents.wire_at` is written, in the same transaction that consumes the rate slot, at the
+  moment a write request leaves this host. A send without `wire_at` was never transmitted: cancellation, shutdown or a
+  dead owner turns it into `failed` (`never reached the wire` / `owner_lost_before_wire`) and its task is requeued.
+  Clients that are not HTTP-metered (mock) count as on the wire from the start.
+- **Send lease 90 s** (renewed every 20 s, was 15 min), so a killed process's sends are recovered within 90 seconds.
+- **Unknown holds the account for 15 minutes**, not forever. Caps and cooldown treat the send as made. The target task
+  stays `unknown`, so no other account replies to it meanwhile.
+- **Reconciliation** (`ctn/reconcile.py`, every 30 s, checks at 1, 3, 8 and 14 minutes after the send). Evidence,
+  cheapest first: our own `observed_posts`; for replies the target thread; the account's history. Both reads page back
+  until the send time is covered (at most 5 pages). Found → `succeeded`. Not found with complete coverage on two checks,
+  the last at least 8 minutes after the send → `failed` (`reconciled_absent`), and the target may be answered again.
+  Account history only proves absence for root posts, since whether it lists replies is unverified. Failed or partial
+  reads never prove absence.
+- **Abandonment at 15 minutes.** The account is released, the target task is `skipped` (`unknown_abandoned`) and never
+  retried, a reply batch is cancelled, an initialise post returns to `pending`, and a macro job is `failed`. The intent
+  stays `unknown` and keeps counting toward caps; it is checked every 30 minutes for 6 hours so a late success is
+  still recorded.
+- **Uncertain reports** stop occupying the 5-pending limit and the genuine-risk budget after 2 hours; their target is
+  never reported again.
+- **Shutdown drain.** On SIGTERM the fleet stops new writes immediately; writes still waiting for a rate slot fail as
+  not sent; requests on the wire get 20 seconds. The macro worker has no drain of its own; its in-flight sends are
+  recovered through the 90-second lease.
+- **Alerts.** Five or more accounts going unknown within 15 minutes posts one Discord alert (usually a platform outage).
+  `python -m ctn.ops status` lists each unknown send with `wire_at`, `check_state`, `checks` and `last_check`.
+- **Initialise seeds rotate.** Each rejected or failed initialise post moves to the next daily example of that persona;
+  the second consecutive failure posts a Discord alert.
+
+Deployment steps (git pull, verify, backup, build, replace, check, roll back) are in
+`docs/repair-and-discord-2026-10-18/runbook.md` → “代码更新与重启”.
+
+## 上线后 TODO
+
+按时间顺序。带“审计”的条目来自 2026-10-18 代码审计；标 [x] 的已经改完。
+
+**开服当天**
+- [ ] 核对官方真实字段：帖子/账号字段、`verified`、全文与分页语义、响应头里的 `rate_limit`。
+- [ ] 用响应头里的 `rate_limit` 核对速率：默认已改为全队读 6 rps、写 0.8 rps、单号读 1.5 / 写 0.1 rps（2026-10-18，原 0.35/0.15 来自 2025 年数据）。真正的上限由分路由桶按官方数值执行；出现大量 429 再下调 `CTN_READ_RPS` / `CTN_WRITE_RPS`。
+- [ ] 可选：给 5–10 个医疗/学术类人设设置 `python -m ctn.ops account <account_id> --tier high`。high 现在是软偏好（high 账号 → maintenance 账号 → 发帖最多的 standard 账号），没有 high 账号也会照常回复；路由原因里的 `high_fallback_*` 可用来统计回退次数。
+- [ ] 举报保持 `hybrid` + shadow。每天看 `ops reports calibration`，对比系统建议和人工决定。
+- [ ] 查看 `report_target_observations`，找出平台表示“被版主隐藏”的字段；确认举报 403 的真实文案是否含 suspend 字样。
+- [ ] **确认 latest feed 是“发帖优先”还是“回复优先”排序**（按帖子发布时间，还是按最新回复时间）。当前代码默认按发布时间：新帖只在出现时进入队列，之后靠第 10、25 分钟按帖子 id 刷新计数来发现热度变化。若实际按最新回复排序，热帖会自己回到 latest 顶部，分阶段刷新基本多余，应调低或关闭 `refresh`；同时要检查续页积压逻辑（5 分钟丢弃）是否还合理。
+- [ ] 同时核对：latest 是否包含回复；回复列表（评论区）的排序；分页最大 `limit`；开场每分钟新帖量。
+- [ ] 确认 `/accounts/{id}/posts` 是否包含回复，以及新发的帖子多久能在读接口里看到。若包含回复，可让账号历史也用于证明回复不存在；若可见延迟较大，调大 `policies/send-recovery-v1.json` 的 `check_after_seconds`、`absent_min_age_seconds`。
+- [ ] 第一次部署本版本时，旧版本退出仍会把排队中的发送记为 unknown：重启后看一次 `ops status`，这些会在 15 分钟内自动收尾。之后按运行手册“代码更新与重启”操作。
+- [ ] 确认 `get_counters`（按帖子 id 读计数）走的是普通读接口，并看 `post_refresh` 中 stale 比例；比例高说明读预算不够，降低 `refresh.per_minute` 或减少阶段。
+- [ ] 观察 neutral/mixed 帖的 decided / needs_review / needs_materials 比例，决定是否放宽 0.7 / 0.15 阈值。
+
+**第 1–2 天**
+- [ ] 系统建议与人工判断基本一致后：`ops reports automation --shadow off`，只放开 `leak_behavior` 和 `account`。
+- [ ] 把确认过的“隐藏”字段写成裁决事件源，接入 `consume_events`（需评审和测试，不要从 404 推断裁决）。
+- [x] （审计，2026-10-18 已改）回帖优先级：按受众排序，冷门疑似机器人在 JEV 前跳过，去掉“越旧越优先”。见 “Reply targeting”。
+- [x] （审计，2026-10-18 已改）单作者 2 / 单线程 3 / 单账号 35 条每日上限，冷却加 0–120 秒随机。
+- [ ] （审计）batch 追加账号之间仍没有额外间隔（受线程上限 3 条约束）；如开局被判刷屏，先关闭 batch。
+- [ ] 观察 `targeting:cold_likely_bot`、`author_daily_cap`、`thread_daily_cap`、`account_daily_cap` 的数量；跳过过多就调 `policies/reply-targeting-v1.json`。
+- [x] （审计，2026-10-18 已改）unknown 发送自动收尾：账号最多锁 15 分钟，自动核对，重启有序收尾。见 “Uncertain sends and restarts”。
+- [ ] 观察 `ops status` 里 unknown 的 `last_check`：大多数以 abandoned 结束说明读接口覆盖不够（翻页上限或可见延迟），需要调策略文件。
+
+**第一周**
+- [ ] 每个举报档位攒够 15–20 个裁决后看 `p_estimate`；稳定高于 0.7 再考虑把 `leak_only` 加入 `auto_buckets`。
+- [ ] （待定）关注（follow）策略：开服后先观察 1–2 天再决定做不做，目前代码不会主动关注任何人。
+  - 已知：计分只算市民关注我方账号（+20），市民在读我方帖子时取消关注扣 20（按当时倍数）；我方关注市民不得分，也不会让我方出现在他的 Home（Home 突出的是市民自己关注的账号）。审计里“关注市民能进入对方 home feed”的说法是错的。
+  - 先看：①计分面板里关注分、取消关注扣分各有多少，哪些账号拿到；②`performance` 里各账号粉丝数变化；③用 SDK 的 `following(account_id)` / `followers(account_id)`（公开读，300/min 读路由，私密账号返回 403）抽查：市民账号是否私密、市民会不会关注我们、我们关注市民后对方会不会回关、别的队账号之间是否互相关注。
+  - 再定：数据显示有收益时，再考虑①市民回复了我方账号 X 时优先由 X 接着回；②少量回关（只回关已关注我们或与该账号有 ≥2 次来回的低机器人概率市民，每号每天 ≤3、全队 ≤30，从不自动取消关注，先半数账号 A/B）；③粉丝/取消关注追踪。批量关注属于 LS.5 的刷互动行为，不做。
+  - 需要时在 `OfficialLegitClient` / `Actuator` 包装 `following`、`followers`（照 `get_account_posts` 写法）。
+- [ ] （审计）原创日额度和 pulse 间隔按阶段配置：第 7–12 天红队 ×2，第 13 天起 ×4。
+- [x] （审计，2026-10-18 已改）初始化帖被拒时轮换种子文本，连续失败两次在 Discord 提醒。
+- [ ] （审计）性能：检测器协同检查只取必要列并移出写事务（实测每 50 条评论约 0.5 秒）；`PRAGMA synchronous=NORMAL`；只为进入起草的任务保存 RAG snapshot。默认线程池已扩到 48（`CTN_THREAD_WORKERS`）。
+- [ ] 部署确认：SQLite 放在 Linux 主机或命名卷上，不要放在 macOS Docker Desktop 的 bind mount 上。

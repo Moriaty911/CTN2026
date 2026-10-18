@@ -67,9 +67,10 @@ class ActionTests(unittest.TestCase):
         for level in (None, "unmapped"):
             flow, _, _ = assessed(side="no", value=2, level=level)
             decision = POLICY.decide(flow)
-            self.assertEqual(decision.status, "needs_account_metadata")
+            self.assertEqual(decision.status, "decided")
             self.assertEqual(decision.action, "reply")
-            self.assertEqual(decision.required_account_level, "unknown")
+            self.assertEqual(decision.target_level_class,"unknown")
+            self.assertEqual(decision.required_account_level, "standard")
             self.assertEqual(decision.minimum_account_level, "standard")
         flow, _, _ = assessed(side="no", value=4, level=None)
         self.assertEqual(POLICY.decide(flow).required_account_level, "high")

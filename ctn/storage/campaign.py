@@ -77,8 +77,6 @@ class CampaignStoreMixin(PerformanceStoreMixin):
             if not persona_ids or len(set(persona_ids))!=len(persona_ids): raise ValueError('select unique personas')
             if any(p not in profiles or p not in bindings for p in persona_ids): raise ValueError('all selected personas must be in the active catalog and bound')
             if mode=='active':
-                if self.policy('phase','warmup')=='warmup' and any(profiles[p]['occupation_group'] in ('medical_public_health','law_policy') for p in persona_ids):
-                    raise ValueError('professional personas remain on standby during warmup')
                 current={r[0] for r in self._conn.execute("SELECT b.persona_id FROM persona_bindings b JOIN account_states a ON a.account_id=b.account_id WHERE a.mode='active'")}
                 if len(current | set(persona_ids)) > max_active: raise ValueError('active persona limit exceeded')
                 if any(self.get_account_state(bindings[p]).is_frozen or self.get_account_state(bindings[p]).is_banned for p in persona_ids):
@@ -108,8 +106,6 @@ class CampaignStoreMixin(PerformanceStoreMixin):
         if not any(p['persona_id']==binding[0] and p['version']==meta.get('persona_version') for p in catalog['personas']):
             return False,'persona_version_inactive'
         profile=json.loads(profile[0])
-        if self.policy('phase','warmup')=='warmup' and profile['occupation_group'] in ('medical_public_health','law_policy'):
-            return False,'professional_persona_warmup'
         return True,'ready'
 
     def catalog_write_ready(self,account,meta):
@@ -121,8 +117,6 @@ class CampaignStoreMixin(PerformanceStoreMixin):
             "JOIN persona_catalogs c ON c.hash=? JOIN json_each(c.body_json,'$.personas') p "
             "ON json_extract(p.value,'$.persona_id')=b.persona_id WHERE b.account_id=?",(active,account)).fetchone()
         if not row:return False,'persona_unbound'
-        if self.policy('phase','warmup')=='warmup' and row[0] in ('medical_public_health','law_policy'):
-            return False,'professional_persona_warmup'
         return True,'ready'
 
     def create_reply_batch(self, target, version, plan, slots, *, expires_at, now=None):
@@ -199,7 +193,7 @@ class CampaignStoreMixin(PerformanceStoreMixin):
         self._update_batch_task(batch,reason)
 
     def _complete_batch(self, batch):
-        pending=self._conn.execute("SELECT 1 FROM reply_slots WHERE batch_id=? AND status NOT IN ('succeeded','failed','cancelled') LIMIT 1",(batch,)).fetchone()
+        pending=self._conn.execute("SELECT 1 FROM reply_slots WHERE batch_id=? AND status NOT IN ('succeeded','failed','cancelled','abandoned') LIMIT 1",(batch,)).fetchone()
         if not pending: self._conn.execute("UPDATE reply_batches SET status='completed' WHERE id=? AND status='active'",(batch,))
         self._update_batch_task(batch,'batch_progress')
 
@@ -212,11 +206,13 @@ class CampaignStoreMixin(PerformanceStoreMixin):
         else:status='skipped'
         self._conn.execute('UPDATE post_tasks SET status=?,reason=? WHERE post_id=? AND version=?',(status,reason,row['target_id'],row['target_version']))
 
-    def _expire_reply_batches(self, ts):
-        for b in self._conn.execute("SELECT * FROM reply_batches WHERE status IN ('active','paused')").fetchall():
-            p=self.get_observed_post(b['target_id'])
-            if b['expires_at']<=ts or not p or p['version']!=b['target_version']:
-                self._cancel_batch(b['id'],'opportunity_expired' if b['expires_at']<=ts else 'target_edited')
+    def _expire_reply_batches(self, ts, *, target_id=None):
+        # Expiry is indexed; an ingest only checks the edited target's batches.
+        rows=self._conn.execute("SELECT id FROM reply_batches WHERE status IN ('active','paused') AND expires_at<=?",(ts,)).fetchall()
+        for b in rows:self._cancel_batch(b['id'],'opportunity_expired')
+        if target_id is not None:
+            rows=self._conn.execute("SELECT b.id FROM reply_batches b LEFT JOIN observed_posts p ON p.post_id=b.target_id WHERE b.target_id=? AND b.status IN ('active','paused') AND (p.post_id IS NULL OR p.version<>b.target_version)",(target_id,)).fetchall()
+            for b in rows:self._cancel_batch(b['id'],'target_edited')
 
     def reply_slot_ready(self, account, target, meta, *, sending=False):
         batch=meta.get('reply_batch_id');index=meta.get('reply_slot')
@@ -261,12 +257,21 @@ class CampaignStoreMixin(PerformanceStoreMixin):
                 self._complete_batch(batch)
             return True
 
-    def start_action(self, ident):
+    def start_action(self, ident, **kwargs):
         with self.batch_transaction():
-            changed=super().start_action(ident)
+            changed=super().start_action(ident, **kwargs)
             if changed:
                 self._conn.execute("UPDATE reply_slots SET status='sending' WHERE action_id=? AND status='claimed'",(ident,))
             return changed
+
+    def abandon_unknown(self, ident, ts):
+        super().abandon_unknown(ident, ts)
+        row=self._conn.execute("SELECT batch_id,slot FROM reply_slots WHERE action_id=? AND status='unknown'",(ident,)).fetchone()
+        if row:
+            # The batch's later slots depend on an outcome we will never know; stop the batch.
+            self._conn.execute("UPDATE reply_slots SET status='abandoned',reason='unknown_abandoned',lease_until=0 WHERE batch_id=? AND slot=?",(row['batch_id'],row['slot']))
+            self._cancel_batch(row['batch_id'],'unknown_abandoned')
+            self._complete_batch(row['batch_id'])
 
     def recover_actions(self, *, now=None):
         with self.batch_transaction():

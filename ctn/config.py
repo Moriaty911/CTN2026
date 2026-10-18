@@ -133,15 +133,20 @@ class RateConfig:
     window. They therefore get independent token buckets, and the team-level and
     per-account buckets are independent too.
 
-    Defaults are deliberately below the 2025 observed per-team average
-    (~0.61 req/s across all teams over four weeks) so we have headroom to
-    accelerate when the platform tolerates it.
+    The 2026 platform publishes per-route, per-minute team limits (SDK README); those
+    are enforced per route by client/pacing.py. These team-level values are only
+    outer ceilings and were raised on 2026-10-18 from the 2025-derived 0.35/0.15 rps,
+    which throttled the crawler far below the official limits.
     """
 
-    read_rps: float = 0.35          # team-level reads
-    write_rps: float = 0.15         # team-level writes (posts/replies/likes/...)
-    per_account_read_rps: float = 0.05
-    per_account_write_rps: float = 0.02
+    # Team-level ceilings only. The binding limits are the official per-route buckets in
+    # client/pacing.py (feeds 10/min, tag posts 10/min, other reads 300/min per route,
+    # post/reply/repost 3/min, likes/follows 30/min, reports 3/min), and server
+    # rate_limit/Retry-After feedback always extends the schedule.
+    read_rps: float = 6.0           # team-level reads across all routes
+    write_rps: float = 0.8          # team-level writes (posts/replies/likes/reports)
+    per_account_read_rps: float = 1.5
+    per_account_write_rps: float = 0.1
     # Burst capacity, in seconds' worth of tokens.
     burst_s: float = 20.0
     # Multiplier applied to every bucket when the platform returns 429.
@@ -158,7 +163,7 @@ class BudgetConfig:
     discovering the ceiling by getting rate-limited.
     """
 
-    total_requests: int = 700_000       # rough 2-week allocation, tune per organisers
+    total_requests: int = 30_000_000    # safety cap only; the platform publishes per-minute limits, not a total
     read_share: float = 0.75            # fraction of budget reserved for reading
     warn_at: float = 0.80               # start shedding low-value reads at 80%
 
@@ -398,13 +403,13 @@ class Settings:
                 primary_accounts=_env_int("CTN_PRIMARY_ACCOUNTS", 1),
             ),
             rate=RateConfig(
-                read_rps=_env_float("CTN_READ_RPS", 0.35),
-                write_rps=_env_float("CTN_WRITE_RPS", 0.15),
-                per_account_read_rps=_env_float("CTN_ACCT_READ_RPS", 0.05),
-                per_account_write_rps=_env_float("CTN_ACCT_WRITE_RPS", 0.02),
+                read_rps=_env_float("CTN_READ_RPS", 6.0),
+                write_rps=_env_float("CTN_WRITE_RPS", 0.8),
+                per_account_read_rps=_env_float("CTN_ACCT_READ_RPS", 1.5),
+                per_account_write_rps=_env_float("CTN_ACCT_WRITE_RPS", 0.1),
             ),
             budget=BudgetConfig(
-                total_requests=_env_int("CTN_TOTAL_REQUESTS", 700_000),
+                total_requests=_env_int("CTN_TOTAL_REQUESTS", 30_000_000),
                 read_share=_env_float("CTN_READ_SHARE", 0.75),
             ),
             jev=JevConfig.load(env_file),
@@ -481,9 +486,9 @@ class Settings:
             problems.append("TYPESAFE_API_KEY missing; Jev calls will be skipped")
         if self.side is Side.UNASSIGNED:
             problems.append("CTN_SIDE not set (yes/no); the bot loop will only observe")
-        if self.rate.read_rps + self.rate.write_rps > 1.0:
+        if self.rate.read_rps > 10 or self.rate.write_rps > 1.2:
             problems.append(
-                "team read+write rate exceeds 1 req/s; 2025 per-team average was "
-                "~0.61 req/s - expect throttling"
+                "team rate ceilings exceed the sum of official per-route limits "
+                "(writes ~36/min); per-route buckets still apply, but check the values"
             )
         return problems

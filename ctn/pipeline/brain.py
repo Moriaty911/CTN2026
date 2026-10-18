@@ -124,7 +124,7 @@ class JevLlmBrain:
         postflight: JevPostflightChecker | None = None,
         options: DraftOptions | None = None,
         information_gap: str = DEFAULT_INFORMATION_GAP,
-        allied_reply_every_n: int = 3,
+        allied_reply_every_n: int = 1,
         allied_reply_hourly_cap: int = 3,
         trusted_background: tuple = (),
         corpus=None,
@@ -132,11 +132,16 @@ class JevLlmBrain:
         if side not in (Side.YES, Side.NO):
             raise ValueError("JevLlmBrain needs an assigned side (yes/no)")
         self.workflow = workflow
+        from ..jev import JevEvaluator
+        from ..jev.rubrics import load_rubric
+        if type(getattr(workflow,"evaluator",None)) is JevEvaluator:
+            workflow.evaluator.response_questions=load_rubric("response",version="v2")
         self._ensure_action_policy_levels()
         self.generator = generator
         self.side = side
         self.router = router if router is not None else PersonaRouter(default_side=side.value)
         self.postflight = postflight if postflight is not None else JevPostflightChecker(workflow.evaluator.client)
+        self.router.store.set_policy('capabilities_version','reply-production.v2:P01,P02,P03,P07,P08')
         self.options = options or DraftOptions(language="en", max_reply_chars=280)
         self.corpus=corpus
         self.information_gap = information_gap
@@ -177,11 +182,7 @@ class JevLlmBrain:
             level_map = dict(policy.platform_levels)
             if candidate in level_map:
                 return candidate
-            if candidate.lower()=='unknown':return 'unknown'
-            target_grade = "high" if candidate.lower() in _HIGH_LEVEL_SYNONYMS else "standard"
-            for label, grade in policy.platform_levels:
-                if grade == target_grade:
-                    return label
+            if candidate.lower() in level_map:return candidate.lower()
         return candidate
 
     # ---- input mapping --------------------------------------------------- #
@@ -202,12 +203,12 @@ class JevLlmBrain:
         if post.created_at>0: payload['post']['created_at']=iso(post.created_at)
         parent_id=str(post.raw.get('parent_id') or '')
         payload['post']['kind']='reply' if parent_id else 'original'
-        payload['post']['text_complete']=True
+        payload['post']['text_complete']=post.raw.get('text_complete', True)
         if parent_id: payload['post']['parent_id']=parent_id
         parent=self.router.store.get_observed_post(parent_id) if parent_id else None
         payload['conversation']={'status':'available' if parent else ('partial' if parent_id else 'not_applicable'),
             'items':([{'role':'parent','post_id':parent_id,'text':parent['text'],
-                'source':{'kind':'platform','observed_at':iso(parent['last_seen_at'])},'text_complete':True}] if parent else [])}
+                'source':{'kind':'platform','observed_at':iso(parent['last_seen_at'])},'text_complete':parent['raw'].get('text_complete',True)}] if parent else [])}
         with self.router.store._lock:
             rows=self.router.store._conn.execute("SELECT * FROM interaction_log WHERE target_post_id=? "
                 "AND action IN ('reply','like','repost') ORDER BY created_at DESC LIMIT 20",(post.post_id,)).fetchall()
@@ -238,6 +239,8 @@ class JevLlmBrain:
         claim_kind = str(_get_val(answers.get("claim_kind")) or "").lower()
         text_low = post_text.lower()
 
+        if func == "question":
+            return "P02"
         if func == "venting":
             return "P08"
         if func == "concern" or any(marker in text_low for marker in _CONCERN_MARKERS):
@@ -280,7 +283,7 @@ class JevLlmBrain:
             return MaterialBrief(active_purpose, focus_span, support=(MaterialUse(support_span, use_kind),))
         return MaterialBrief("P08", focus_span, information_gap=self.information_gap)
 
-    def think(self, post: Post, *, commit_state: bool = False) -> BrainVerdict:
+    def think(self, post: Post, *, commit_state: bool = False, assessment=None) -> BrainVerdict:
         if commit_state: raise ValueError("planning cannot commit execution state")
         # Tier-1 Input Language Gate: Drop heavy/pure non-Latin bait before spending JEV calls
         lang_ok, lang_reason = check_incoming_post_language(post.text)
@@ -292,7 +295,7 @@ class JevLlmBrain:
             )
 
         payload = self.payload_for(post)
-        package = self.workflow.evaluate(payload)
+        package = assessment if assessment is not None else self.workflow.evaluate(payload)
         data = package.to_dict()
         action = data["action_decision"]
         rel_stance = data["flow"].get("relative_stance")
@@ -301,6 +304,7 @@ class JevLlmBrain:
             "language_gate": lang_reason,
             "flow_status": data["flow"]["status"],
             "action_status": action["status"],
+            "needs": action.get("needs",[]),
             "action": action.get("action"),
             "relative_stance": rel_stance,
             "target_author": post.author,
@@ -334,7 +338,7 @@ class JevLlmBrain:
             )
             detail["allied_reply_gate"] = gate_reason
             if not can_reply_allied:
-                # Downgrade throttled allied replies to a cost-free LIKE
+                # A like uses its own route budget; it does not imply scoring credit.
                 detail["purpose"] = "like_downgrade"
                 detail["state_committed"] = False
                 return BrainVerdict(
@@ -371,6 +375,8 @@ class JevLlmBrain:
 
         # If all eligible accounts are cooling down, pause reply to prevent spamming
         if routing.in_cooldown:
+            detail["cooldown_remaining_s"] = round(self.router.get_state(routing.account_id).remaining_cooldown(
+                time.time(), routing.persona.cooldown_s), 1)
             return BrainVerdict(
                 ActionKind.NONE,
                 reason=f"account_cooldown:{routing.account_id}",
@@ -413,6 +419,7 @@ class JevLlmBrain:
         references=self.router.store.publication_references()
         if snapshot:references += [s['text'] for s in snapshot.to_dict()['styles']]
         if too_close(draft.reply,references):pv1=PostflightVerdict(False,'near_duplicate_or_style_copy')
+        self.router.store.record_quality(routing.account_id,post.post_id,pv1.can_send,pv1.reason,'primary')
         if pv1.can_send:
             self._batch_materials(detail,draft,data,post)
             final_purpose = draft.prompt_type or active_purpose
@@ -444,6 +451,7 @@ class JevLlmBrain:
         detail["postflight_retry"] = pv2.to_dict()
 
         if too_close(draft_retry.reply,references):pv2=PostflightVerdict(False,'near_duplicate_or_style_copy')
+        self.router.store.record_quality(routing.account_id,post.post_id,pv2.can_send,pv2.reason,'primary')
         if pv2.can_send:
             self._batch_materials(detail,draft_retry,data,post)
             final_purpose = draft_retry.prompt_type or active_purpose
@@ -454,12 +462,21 @@ class JevLlmBrain:
         # Abort reply after failed retry to protect account safety and write quota
         return BrainVerdict(ActionKind.NONE, reason=f"postflight_rejected:{pv2.reason}", prompt_type=draft.prompt_type, detail=detail)
 
+    @staticmethod
+    def _disposition(verdict,error):
+        if verdict.action is not ActionKind.NONE:return 'execute'
+        status=verdict.detail.get('flow_status')
+        action_status=verdict.detail.get('action_status')
+        if status=='needs_context' or action_status in ('needs_materials','needs_review','needs_account_metadata') or verdict.reason.startswith(('needs_materials:','llm:needs_materials','llm:needs_review','unsupported_purpose:')):return 'wait'
+        if error or status in ('failed','deferred') or action_status in ('needs_assessment','needs_jev_assessment') or verdict.reason.startswith(('account_cooldown:','all_accounts_disabled','llm:')):return 'retry'
+        return 'skip'
+
     def _batch_materials(self,detail,draft,data,post):
         """Only an approved primary draft can propose a persistent batch."""
         frozen=getattr(draft,'frozen_material_json','')
         if not frozen or not self.router.registry.catalog_hash:return
         expansion=expansion_decision(data,material_ready=True)
-        requested=self.router.rng.randint(REPLY_POLICY['extra_count_min'],REPLY_POLICY['extra_count_max']) if expansion['allowed'] else 0
+        requested=REPLY_POLICY['extra_count_max'] if expansion['allowed'] else 0
         extras=self.router.additional_candidates(data,post.text,detail['selected_account'],requested,
             purpose=draft.prompt_type,materials=json.loads(frozen)['materials'])
         detail['reply_batch_plan']={
@@ -490,6 +507,7 @@ class JevLlmBrain:
             from ..jev.postflight import PostflightVerdict
             refs=self.router.store.publication_references()
             if too_close(draft.reply,refs):verdict=PostflightVerdict(False,'near_duplicate_publication')
+            self.router.store.record_quality(persona.account_id,primary['post_id'],verdict.can_send,verdict.reason,'additional')
             if verdict.can_send:
                 decision=json.loads(json.dumps(primary))
                 decision.update(decision_id=uuid.uuid4().hex[:12],account=persona.account_id,
@@ -502,8 +520,23 @@ class JevLlmBrain:
             feedback=verdict.reason
         return None,'additional_postflight:'+feedback
 
-    async def athink(self, post: Post, *, commit_state: bool = False) -> BrainVerdict:
-        return await asyncio.to_thread(self.think, post, commit_state=commit_state)
+    def refresh_registered_background(self):
+        from ..jev import BackgroundReference,JevPacker
+        data=self.router.store.policy('trusted_background',None)
+        if data is None:return
+        refs=tuple(BackgroundReference(**r) for r in data)
+        if refs==self.trusted_background:return
+        packer=self.workflow.evaluator.packer
+        self.workflow.evaluator.packer=JevPacker(model=packer.model,limits=packer.limits,
+            preflight=packer.preflight,forbidden_values=packer._forbidden_values,verified_references=refs)
+        self.trusted_background=refs
+
+    async def assess(self, post: Post):
+        if not check_incoming_post_language(post.text)[0]:return None
+        return await asyncio.to_thread(self.workflow.evaluate,self.payload_for(post))
+
+    async def athink(self, post: Post, *, commit_state: bool = False, assessment=None) -> BrainVerdict:
+        return await asyncio.to_thread(self.think, post, commit_state=commit_state,assessment=assessment)
 
     def commit_decision(self, decision: Decision, *, account: str | None = None) -> None:
         """Legacy API: accounting belongs to Actuator's atomic success transaction."""
@@ -516,10 +549,11 @@ class JevLlmBrain:
         *,
         account: str = "",
         commit_state: bool = False,
+        assessment=None,
     ) -> Decision:
         """Same return type as `pipeline.decide.decide`, so the loop can swap them."""
         try:
-            verdict = await self.athink(post, commit_state=commit_state)
+            verdict = await self.athink(post, commit_state=commit_state,assessment=assessment)
             error = ""
         except Exception as exc:  # one bad post must never kill a cycle
             verdict = BrainVerdict(reason="brain_error")
@@ -542,4 +576,6 @@ class JevLlmBrain:
             action=verdict.action,
             text=verdict.text,
             root_post_id=root_post_id,
+            disposition=self._disposition(verdict,error),
+            needs=tuple(verdict.detail.get("needs",())),
         )

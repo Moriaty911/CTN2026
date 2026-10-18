@@ -113,18 +113,18 @@ class CrawlerTests(unittest.IsolatedAsyncioTestCase):
         self.store.register_verified_accounts(["mayor"], status="verified_npc")
         self.store.upsert_observed_post(post("plain", replies=12, author="citizen_9"), now=1.0)
         self.store.upsert_observed_post(post("vip", replies=3, author="mayor"), now=1.0)
-        # VIP: 3*10 + 50 = 80  vs plain: 12*10 = 120 -> plain first
+        # Unseen replies count logarithmically: VIP 10*ln(4)+40 ≈ 54 beats plain 10*ln(13) ≈ 26.
         self.client.comment_rows["plain"] = [
             post(f"pc{i}", author=f"u{i}", created_at=100.0 + i * 100) for i in range(4)
         ]
         crawler = CommentCrawler(self.actuator, self.store, page_size=4, cooldown_s=30.0)
 
         r1 = await crawler.step(now=100.0)
-        self.assertEqual(r1.post_id, "plain")
-        self.assertFalse(r1.done)                       # full page, 8 replies still unseen
-        # plain is cooling down, so the next step moves on to the VIP thread
+        self.assertEqual(r1.post_id, "vip")
+        # VIP is cooling down, so the next step takes the big thread
         r2 = await crawler.step(now=105.0)
-        self.assertEqual(r2.post_id, "vip")
+        self.assertEqual(r2.post_id, "plain")
+        self.assertFalse(r2.done)                       # full page, 8 replies still unseen
         # after cooldown the big thread is picked up again
         r3 = await crawler.step(now=200.0)
         self.assertEqual(r3.post_id, "plain")

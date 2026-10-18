@@ -76,6 +76,8 @@ class StrategicPublisher:
         target_text: str = "",
         bypass_jev: bool = False,
         rag_snapshot_id: str = "",
+        macro_job_id: str = "",
+        macro_owner: str = "",
     ) -> dict[str, Any]:
         """Publish a proactive post after cooldown and unified Layer-1 + Layer-2 verification."""
         now = time.time()
@@ -104,7 +106,7 @@ class StrategicPublisher:
             return {"ok":False,"status":"blocked","reason":"side_mismatch"}
         if state.mode != 'active':
             return {"ok":False,"status":"blocked","reason":"account_"+state.mode}
-        if state.original_locked_until > now:
+        if purpose not in ('warmup','initialise') and state.original_locked_until > now:
             return {"ok":False,"status":"blocked","reason":"original_locked"}
         if state.is_banned:
             return {
@@ -150,7 +152,7 @@ class StrategicPublisher:
             }
 
         approved_materials=None
-        if purpose!='warmup':
+        if purpose not in ('warmup','initialise'):
             from ctn.rag.corpus import Corpus
             if rag_snapshot_id:
                 try:snapshot=self.router.store.load_rag_snapshot(rag_snapshot_id)
@@ -182,10 +184,11 @@ class StrategicPublisher:
                 assigned_side=self.side,
                 intended_purpose=resolved_purpose,
                 persona_profile=persona_profile,
-                strict_alignment=(purpose != 'warmup'),
+                strict_alignment=(purpose not in ('warmup','initialise')),
                 approved_materials=approved_materials,
             )
             postflight_dict = verdict.to_dict()
+            self.router.store.record_quality(account_id,'proactive_publish',verdict.can_send,verdict.reason,'initialise' if purpose in ('warmup','initialise') else 'original')
             if not verdict.can_send:
                 return {
                     "ok": False,
@@ -203,11 +206,11 @@ class StrategicPublisher:
             'source':'supplied_macro_input','background_version':self.router.store.policy('background_version')}
         material_version='macro-input.v1:'+hashlib.sha256(json.dumps(material_context,
             sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
-        res = await self.actuator.post(account_id, post_text,context={"engine":"macro",
+        res = await self.actuator.post(account_id, post_text,context={"engine":"macro","macro_job_id":macro_job_id,"macro_owner":macro_owner,
             **self.router.context_for(persona),'prompt_version':'pi-campaign.v3',
             'material_version':material_version,'material_context':material_context,
             'topic':branch or purpose,
-            "purpose":("warmup" if purpose=="warmup" else active_key),"rag_snapshot_id":rag_snapshot_id,"assigned_side":self.side,"cooldown_s":persona.cooldown_s,"draft_expires_at":now+300})
+            "purpose":("initialise" if purpose in ("warmup","initialise") else active_key),"rag_snapshot_id":rag_snapshot_id,"assigned_side":self.side,"cooldown_s":persona.cooldown_s,"draft_expires_at":now+300})
         if res.ok:
             normalized = re.sub(r"\s+", " ", post_text.lower())
             self._recent_normalized_posts.add(normalized)
@@ -242,6 +245,8 @@ class StrategicPublisher:
         target_text: str = "",
         bypass_jev: bool = False,
         rag_snapshot_id: str = "",
+        macro_job_id: str = "",
+        macro_owner: str = "",
     ) -> dict[str, Any]:
         """Synchronous wrapper for publish."""
         return asyncio.run(
@@ -253,5 +258,7 @@ class StrategicPublisher:
                 branch=branch,
                 target_text=target_text,
                 bypass_jev=bypass_jev,
+                rag_snapshot_id=rag_snapshot_id,
+                macro_job_id=macro_job_id,macro_owner=macro_owner,
             )
         )

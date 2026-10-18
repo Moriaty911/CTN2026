@@ -1,0 +1,55 @@
+{
+  "checked_at": "2026-10-18T08:56:09.327417+00:00",
+  "passed": true,
+  "probe": [
+    {
+      "stage": "gateway",
+      "connected": true,
+      "bot_name": "cnt2026#5981"
+    },
+    {
+      "stage": "channel",
+      "guild_name": "CNT2026",
+      "channel_name": "常规",
+      "required_permissions": {
+        "view_channel": true,
+        "send_messages": true,
+        "embed_links": true,
+        "attach_files": true,
+        "read_message_history": true
+      }
+    },
+    {
+      "stage": "result",
+      "passed": true,
+      "commands": [
+        "report",
+        "reporting",
+        "reports",
+        "ruling"
+      ],
+      "administrator_config_valid": true,
+      "channel_messages_sent": 0,
+      "competition_actions": 0
+    }
+  ],
+  "runtime": {
+    "connected": true,
+    "heartbeat_age_seconds": 7.2,
+    "report_mode": "off",
+    "action_intents": 0,
+    "outbox_messages": 0
+  },
+  "running_services": {
+    "discord-review": {
+      "state": "running",
+      "health": "healthy"
+    }
+  },
+  "shared_database_created": true,
+  "sqlite_version": 6,
+  "test_channel_messages_sent": 0,
+  "competition_actions_performed": false,
+  "credentials_recorded": false,
+  "remaining_manual_check": "Run /reports in the configured Discord channel; interactive review requires a real candidate."
+}

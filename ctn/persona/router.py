@@ -103,15 +103,17 @@ class PersonaRouter:
         requirements=data.get('action_decision') or {}
         high='high' in (requirements.get('required_account_level'),requirements.get('minimum_account_level'))
         bindings=self.store.persona_bindings()
+        from ctn.pipeline.targeting import accounts_at_daily_cap
+        capped=accounts_at_daily_cap(self.store,[p.account_id for p in candidates],now=now)
         available=[];cooling=[]
         for p in candidates:
+            if p.account_id in capped:continue
             state=states.get(p.account_id)
-            if state is None or state.is_disabled() or (high and state.capability_tier!='high'):continue
+            # capability_tier is a soft preference applied in route(), never an eligibility filter.
+            if state is None or state.is_disabled():continue
             if not self.allow_unbound and not bindings.get(p.persona_id)==p.account_id:continue
             if self.store.policy('require_warmup',False):
-                with self.store._lock:
-                    warm=self.store._conn.execute('SELECT warmed_at FROM account_readiness WHERE account_id=?',(p.account_id,)).fetchone()
-                if not warm or not warm[0]:continue
+                if not self.store.account_initialise_ready(p.account_id,now=now):continue
             if state.is_in_cooldown(now,p.cooldown_s):cooling.append((p,state))
             else:available.append((p,state))
         return available,cooling
@@ -121,6 +123,10 @@ class PersonaRouter:
         side=(side or self.default_side).lower()
         available,cooling=self._eligible(data,side,now)
         tags=scenario_tags(data,post_text);preferred=preferred_group(data)
+        requirements=data.get('action_decision') or {}
+        high_note=''
+        if available and 'high' in (requirements.get('required_account_level'),requirements.get('minimum_account_level')):
+            available,high_note=self._prefer_high(available)
         if not available:
             if not cooling:raise ValueError('no_bound_active_capable_accounts')
             p,state=min(cooling,key=lambda pair:pair[1].remaining_cooldown(now,pair[0].cooldown_s))
@@ -137,9 +143,26 @@ class PersonaRouter:
                 groups=general or groups
             group=self.rng.choice(sorted(groups));pool=[pair for pair in available if pair[0].occupation_group==group]
             score=best;reason='scenario_tag_match' if best else 'general_clarification_fallback'
+        maintained=[pair for pair in pool if (self.store.lifecycle(pair[0].account_id) or {}).get('maintenance')]
+        if maintained and (prompt_type in ('P02','P07') or self.store.effective_phase(now=now)=='climax'):pool=maintained
         least=min(s.last_posted_at for _,s in pool)
         p,state=self.rng.choice([pair for pair in pool if pair[1].last_posted_at==least])
+        if high_note:reason=high_note+':'+reason
         return RoutingDecision(p.account_id,p,group,float(score),reason,preferred is not None and preferred!=group)
+
+    def _prefer_high(self,available,*,history_pool=5):
+        """High-value targets prefer high-tier, then maintained, then experienced standard accounts."""
+        tier=[pair for pair in available if pair[1].capability_tier=='high']
+        if tier:return tier,'high_tier'
+        maintained=[pair for pair in available if (self.store.lifecycle(pair[0].account_id) or {}).get('maintenance')]
+        if maintained:return maintained,'high_fallback_maintenance'
+        counts=self.store.publication_counts([pair[0].account_id for pair in available])
+        experienced=sorted((pair for pair in available if counts.get(pair[0].account_id,0)>0),
+                           key=lambda pair:-counts[pair[0].account_id])
+        if experienced:
+            cutoff=counts[experienced[min(history_pool,len(experienced))-1][0].account_id]
+            return [pair for pair in experienced if counts[pair[0].account_id]>=cutoff],'high_fallback_standard'
+        return available,'high_fallback_standard'
 
     def additional_candidates(self,data,post_text,primary_account,count,*,rng=None,now=None,purpose=None,materials=None):
         rng=rng or self.rng;now=time.time() if now is None else now

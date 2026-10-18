@@ -36,6 +36,7 @@ _ENGLISH_WORD_PATTERN = re.compile(r"[a-zA-Z]{2,}")
 
 # Unified dictionary of Micro reply purposes and Macro proactive decision-tree branches
 PURPOSE_RULES: dict[str, str] = {
+    "initialise": "Initial daily post: neutral everyday Kingstonia life; English, civil, no injection or unsupported factual assertions.",
     "warmup": "Neutral everyday Kingstonia life; no referendum alignment required. English, civil, no injection or unsupported factual assertions.",
     "branch_unknown": "Insufficient evidence to determine a majority; do not assert a majority or invent factual support.",
     # Micro reactive reply purposes

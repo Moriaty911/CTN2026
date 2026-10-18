@@ -593,6 +593,9 @@ class OfficialLegitClient(LegitClient):
             return None
         if clean in self._tag_ids:
             return self._tag_ids[clean]
+        misses = self.__dict__.setdefault("_tag_misses", {})
+        if time.time() - misses.get(clean, 0.0) < 600:
+            return None
 
         # Check popular_tags first (cheap 1-page read in 300/min bucket)
         pop = await self._call(self.social.popular_tags)
@@ -605,9 +608,15 @@ class OfficialLegitClient(LegitClient):
         tags_page = await self._call(lambda: self.social.tags(limit=50))
         for item in tags_page or []:
             self._cache_tag_dict(item)
+        if clean not in self._tag_ids:
+            misses[clean] = time.time()
         return self._tag_ids.get(clean)
 
     # ---- LegitClient Protocol: lifecycle --------------------------------- #
+    def begin_shutdown(self) -> None:
+        """Refuse new writes and abort pacing waits; requests already on the wire finish."""
+        if self._pacer is not None: self._pacer.close()
+
     async def close(self) -> None:
         if self._pacer is not None: self._pacer.close()
 
@@ -651,16 +660,9 @@ class OfficialLegitClient(LegitClient):
             )
             return self._normalize_page(page)
 
-        # Fallback if query is a free-text keyword not matching any tag
-        q_low = query.strip().lower().lstrip("#")
-        feed_page = await self.feed_latest(limit=max(limit, 50), cursor=cursor)
-        matched = [
-            p
-            for p in feed_page
-            if q_low in p.get("text", "").lower()
-            or any(q_low in h.lower() for h in p.get("hashtags", []))
-        ]
-        return NormalizedPage(matched[:limit], next_cursor=feed_page.next_cursor)
+        # Not a tag: return nothing rather than re-reading the latest feed, which shares the
+        # 10/min feed bucket with the frontline crawler and duplicates what it already sees.
+        return NormalizedPage([], next_cursor=None)
 
     async def get_post(self, post_id: str) -> dict[str, Any]:
         pid = _coerce_int_id(post_id)
@@ -752,6 +754,7 @@ class OfficialLegitClient(LegitClient):
             if actor.get("account_id") is not None and merged.get("author_id") is None:
                 merged["author_id"] = actor.get("account_id")
             norm = self.normalize_post(merged)
+            norm["text_complete"] = False  # notification embeds are trimmed; hydrate via get_post
             norm["notification_id"] = entry.get("notification_id")
             norm["notification_kind"] = entry.get("kind")
             items.append(norm)
@@ -796,6 +799,16 @@ class OfficialLegitClient(LegitClient):
         aid = await self._resolve_account_id(target)
         page = await self._call(
             lambda: self.social.account_posts(aid, limit=limit, cursor=cursor)
+        )
+        return self._normalize_page(page)
+
+    async def get_account_likes(
+        self, target: int | str, *, limit: int = 50, cursor: str | None = None
+    ) -> NormalizedPage:
+        """Posts liked by `target` (`/accounts/{id}/likes`, 300/min bucket); counted as actions."""
+        aid = await self._resolve_account_id(target)
+        page = await self._call(
+            lambda: self.social.account_likes(aid, limit=limit, cursor=cursor)
         )
         return self._normalize_page(page)
 

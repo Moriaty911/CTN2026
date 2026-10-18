@@ -20,7 +20,7 @@ from .models import Side
 from .persona import PersonaRouter,PersonaRegistry
 from .pipeline.brain import JevLlmBrain
 from .pipeline.loop import BotLoop
-from .moderation.events import UnavailableModerationSource,consume_events
+from .moderation.events import UnavailableModerationSource,consume_events,probe_report_targets
 from .ratelimit import build_gate,build_ledger
 from .storage import StateStore
 from .telemetry import Telemetry
@@ -35,8 +35,13 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
     if settings.side.value and settings.side.value!=registry.catalog['side']:
         raise ValueError('assigned side conflicts with persona catalog')
     os.umask(0o077)
+    # Platform pacing waits inside SDK worker threads; JEV, DeepSeek and SQLite share the same
+    # default executor. The stock size (CPU count + 4) starves on small hosts once rates are raised.
+    from concurrent.futures import ThreadPoolExecutor
+    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=int(os.environ.get('CTN_THREAD_WORKERS','48')),thread_name_prefix='ctn'))
     store=StateStore(settings.database_path(state_file))
     store.bind_data_source("mock" if mode=="mock" else "real")
+    store.set_policy('phase_auto',True)
     if settings.side in (Side.YES,Side.NO): store.bind_campaign_side(settings.side.value)
     router=PersonaRouter(registry=registry,default_side=settings.side.value,store=store)
     store.seed_campaign_policy(router.registry.list_all())
@@ -71,7 +76,7 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         jev=JevClient(settings.jev);llm=DeepSeekClient(settings.llm)
         refs=tuple(BackgroundReference(**r) for r in store.policy('trusted_background',[]))
         workflow=JevWorkflow(jev,evaluator=JevEvaluator(
-            jev,packer=JevPacker(verified_references=refs),
+            jev,packer=JevPacker(model=settings.jev.model,verified_references=refs),
             post_questions=load_rubric("post",version=ACTIVE_POST_VERSION)))
         brain=JevLlmBrain(workflow,ReplyGenerator(workflow,llm),side=settings.side,router=router,
             postflight=JevPostflightChecker(jev),trusted_background=refs,corpus=corpus)
@@ -90,11 +95,15 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         runtime=store.runtime_metrics()
         counts=runtime["tasks"]
         now=time.time()
+        import shutil
+        disk=shutil.disk_usage(settings.state_dir)
         payload={**runtime,'alive':running,'timestamp':now,'mode':mode,'workers':progress,'error':error,
             'tasks':counts,
             'side':settings.side.value,'report_mode':settings.report_mode,'active_accounts':sum(not s.is_disabled() for s in store.account_states_for(store.persona_bindings().values()).values()),
+            'phase':store.effective_phase(),'disk_free_bytes':disk.free,'disk_warning':disk.free/disk.total<0.1,
             'rag_version':corpus.data['corpus_version'],'moderation_capability':'unavailable',
             'auto_reports_effective':settings.report_mode=='hybrid' and store.report_state_ready(automatic=True)[0],
+            'report_automation':store.report_state_ready(automatic=True)[1],
             'report_block_reason':store.report_state_ready(automatic=settings.report_mode=='hybrid')[1],
             'business_stalled':bool((counts.get('queued',0) or runtime['reply_slots'].get('pending',0)) and process_replies and
                 now-(store.get_counter('business_progress_ms')/1000 or started_at)>300),
@@ -123,15 +132,24 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             try: await asyncio.wait_for(stop.wait(),timeout=max(.01,interval-(time.monotonic()-start)))
             except asyncio.TimeoutError: pass
     async def state_step():
+        await asyncio.to_thread(store.refresh_report_reviews)
+        await asyncio.to_thread(store.set_policy,'phase',store.effective_phase())
         await asyncio.to_thread(store.recover_actions)
         await consume_events(store,source)
+        if mode!='mock':await probe_report_targets(store,actuator)
         # Reconciliation has its own worker; it cannot stall the heartbeat.
     tasks=[]
     stopper=None
     async def shutdown_after_signal():
         await stop.wait()
+        # Drain: writes still waiting for a rate slot are abandoned as definitely-not-sent;
+        # requests already on the wire get the drain window to return.
+        drain=getattr(client,'begin_shutdown',None)
+        if drain: drain()
+        telemetry.info('shutdown drain started')
         if tasks:
-            _,pending=await asyncio.wait(tasks,timeout=20)
+            from .storage.runtime import SEND_RECOVERY
+            _,pending=await asyncio.wait(tasks,timeout=float(SEND_RECOVERY['shutdown_drain_seconds']))
             for task in pending: task.cancel()
     try:
         # Official verified status is separate from detector suspicion. The read is metered.
@@ -151,9 +169,11 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         if process_replies: tasks.append(asyncio.create_task(worker('reply',loop.process_pending,1)))
         if brain is not None:
             from .warmup import warmup_step
-            tasks.append(asyncio.create_task(worker('warmup',lambda:warmup_step(actuator,router,brain.postflight),30)))
+            tasks.append(asyncio.create_task(worker('initialise',lambda:warmup_step(actuator,router,brain.postflight),30)))
         tasks.append(asyncio.create_task(worker('performance',performance.step,30)))
-        if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),60)))
+        from .pipeline.refresh import refresh_step
+        tasks.append(asyncio.create_task(worker('refresh',lambda:refresh_step(actuator,store),5)))
+        if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),30)))
         stopper=asyncio.create_task(shutdown_after_signal())
         await asyncio.gather(*tasks)
     except asyncio.CancelledError:

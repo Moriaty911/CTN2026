@@ -92,14 +92,14 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(output["action_decision"]["required_account_level"], "high")
                 self.assertEqual(output["generation_task"]["reply_quality"], "high")
 
-    def test_unknown_level_does_not_dispatch_standard_generation(self):
+    def test_unknown_level_allows_standard_generation_and_preserves_unknown(self):
         workflow, _ = worker(side="no", value=2, action_policy=ActionPolicy())
         data = record()
         output = workflow.evaluate(data, brief=clarification(data)).to_dict()
-        self.assertEqual(output["action_decision"]["status"], "needs_account_metadata")
-        self.assertEqual(output["material_check"]["status"], "ready")
-        self.assertIsNone(output["generation_task"])
-        self.assertIn("platform_level_mapping", output["generation_needs"])
+        self.assertEqual(output['action_decision']['status'],'decided')
+        self.assertEqual(output['action_decision']['target_level_class'],'unknown')
+        self.assertEqual(output['action_decision']['required_account_level'],'standard')
+        self.assertIsNotNone(output['generation_task'])
 
     def test_no_brief_and_missing_material_preserve_reply_without_fabricating_task(self):
         workflow, _ = worker()

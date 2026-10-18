@@ -19,7 +19,7 @@ def load_rubric(name: Literal["post", "comparison", "response", "postflight"], *
     """Load a named baseline explicitly; never enables service calls or actions."""
     if type(name) is not str or name not in {"post", "comparison", "response", "postflight"}:
         raise QuestionValidationError("name", "enum", "unsupported rubric")
-    versions = {"post": {"v1", "v2", "v3"}, "postflight": {"v1", "v2", "v3"}}
+    versions = {"post": {"v1", "v2", "v3"}, "postflight": {"v1", "v2", "v3"}, "response": {"v1", "v2"}}
     if type(version) is not str or version not in versions.get(name, {"v1"}):
         raise QuestionValidationError("version", "enum", "unsupported rubric version")
     return QuestionSet.load(Path(__file__).with_name("rubrics") / f"{name}.{version}.json")

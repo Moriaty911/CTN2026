@@ -183,7 +183,7 @@ class BotLoop:
     def _restore_decision(data):
         return Decision(decision_id=data['decision_id'],post_id=data['post_id'],tier=Tier(data['tier']),
             account=data['account'],scores=JevAnswers(**data['scores']),rationale=data['rationale'],
-            action=ActionKind(data['action']),text=data.get('text',''),root_post_id=data.get('root_post_id',''))
+            action=ActionKind(data['action']),text=data.get('text',''),root_post_id=data.get('root_post_id',''),disposition=data.get('disposition','auto'),needs=tuple(data.get('needs',())))
 
     async def process_pending(self,report=None):
         from .perceive import post_from_dict
@@ -191,7 +191,10 @@ class BotLoop:
         report=report or CycleReport(cycle=self.cycle)
         async with self._processing_lock:
             self.refresh_accounts()
+            if isinstance(self.brain,JevLlmBrain):self.brain.refresh_registered_background()
             corpus_hash=getattr(getattr(self.brain,'corpus',None),'hash','')
+            from .context import hydrate_waiting_context
+            await hydrate_waiting_context(self.actuator,self.store)
             await asyncio.to_thread(self.store.resume_material_tasks,corpus_hash)
             await run_reply_batches(self,report,self.max_actions_per_cycle)
             tasks=await asyncio.to_thread(self.store.claim_post_tasks,self.max_evaluations_per_cycle)
@@ -202,25 +205,9 @@ class BotLoop:
                     await asyncio.to_thread(self.store.renew_post_tasks,tasks)
             lease=asyncio.create_task(renew())
             try:
-                async def evaluate(task):
-                    row=await asyncio.to_thread(self.store.get_observed_post,task['post_id'])
-                    if not row or row['author'] in self._own:
-                        return task,None
-                    if task['draft_json'] and time.time()-task['draft_at']<=300:
-                        saved=self._restore_decision(json.loads(task['draft_json']))
-                        mode='simulated' if self.actuator.dry_run else 'live'
-                        if saved.scores.raw.get('planning_mode',mode)==mode:return task,saved
-                    task['draft_at']=time.time()
-                    post=post_from_dict(row)
-                    if self.brain:
-                        decision=await self.brain.decide(post,commit_state=False)
-                        decision.scores.raw['planning_mode']='simulated' if self.actuator.dry_run else 'live'
-                        task['draft_at']=decision.scores.raw.get('draft_created_at',time.time())
-                        return task,decision
-                    return task,decide(post,side=self.side,keywords=self.keywords,rng=self._rng)
-                evaluated=await asyncio.gather(*(evaluate(t) for t in tasks))
+                from .scheduling import ordered_evaluations
                 executed=len(report.results)
-                for task,decision in evaluated:
+                async for task,decision in ordered_evaluations(self,tasks):
                     if not await asyncio.to_thread(self.store.post_task_send_ready,task):
                         await asyncio.to_thread(self.store.update_post_task,task,'expired',reason='expired_or_superseded_before_send')
                         continue
@@ -228,16 +215,22 @@ class BotLoop:
                         await asyncio.to_thread(self.store.update_post_task,task,'skipped',reason='own_or_missing_post');continue
                     report.decisions.append(decision)
                     if decision.action is ActionKind.NONE:
-                        if decision.rationale.startswith(('needs_materials:','llm:needs_materials','jev:needs_account_metadata','jev:needs_context')):
+                        if decision.disposition=='wait' or decision.rationale.startswith(('needs_materials:','llm:needs_materials','jev:needs_account_metadata','jev:needs_context')):
                             await asyncio.to_thread(self.store.wait_for_material,task,corpus_hash,decision.rationale)
                             continue
-                        transient=not decision.scores.ok or decision.rationale.startswith((
+                        transient=decision.disposition=='retry' or not decision.scores.ok or decision.rationale.startswith((
                             'account_cooldown:','all_accounts_disabled','needs_materials:','jev:failed','jev:needs','llm:','brain_error'))
                         blocked_material=decision.rationale.startswith(('needs_materials:','llm:needs_materials','llm:needs_review'))
-                        if transient and task['attempts']>=2 and not decision.rationale.startswith(('account_cooldown:','all_accounts_disabled')):
+                        cooling=decision.rationale.startswith('account_cooldown:')
+                        # Only "every eligible account is cooling down" waits without an attempt cap;
+                        # "no eligible account" is retried twice, then dropped instead of re-running JEV until expiry.
+                        if transient and task['attempts']>=2 and not cooling:
                             transient=False
+                        delay=300 if blocked_material else 30
+                        if cooling:
+                            delay=min(300.,max(5.,float(decision.scores.raw.get('cooldown_remaining_s') or 30)))
                         await asyncio.to_thread(self.store.update_post_task,task,'queued' if transient else 'skipped',
-                            reason=decision.rationale,delay=(300 if blocked_material else 30) if transient else 0)
+                            reason=decision.rationale,delay=delay if transient else 0)
                         continue
                     if decision.action is ActionKind.REPLY and await plan_reply_batch(self,task,decision):
                         continue
@@ -262,7 +255,7 @@ class BotLoop:
                     elif result.status in ('unknown','simulated'): status=result.status
                     elif result.detail in ('action_succeeded','action_unknown','action_sending','action_claimed'):
                         status='unknown' if result.detail!='action_succeeded' else 'succeeded'
-                    elif result.response.get('failure_category')=='terminal' or result.detail in ('target_edited','duplicate_publication','near_duplicate_publication','rag_snapshot_withdrawn','draft_or_opportunity_expired'):
+                    elif result.response.get('failure_category')=='terminal' or result.detail in ('target_edited','duplicate_publication','near_duplicate_publication','rag_snapshot_withdrawn','draft_or_opportunity_expired','author_daily_cap','thread_daily_cap'):
                         status='skipped'
                     else: status='queued'
                     await asyncio.to_thread(self.store.update_post_task,task,status,reason=result.detail,

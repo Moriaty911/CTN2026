@@ -18,6 +18,7 @@ a bot and filing reports belongs to the detector/reporter stage.
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Sequence
@@ -143,21 +144,34 @@ class FrontlineCrawler:
         feed_account: str,
         accounts: Sequence[str] = (),
         keywords: Sequence[str] = DEFAULT_KEYWORDS,
-        feed_limit: int = 30,
+        feed_limit: int | None = None,
         aux_every: int = 10,
         min_feed_interval_s: float | None = None,
         audit_suspects: bool = True,
         detector: BotDetector | None = None,
+        trending_interval_s: float = 60.0,
+        trending_feed_every: int | None = None,
+        search_sort: str | None = None,
     ) -> None:
+        from .targeting import POLICY as TARGETING
         self.actuator = actuator
         self.store = store
         self.feed_account = feed_account
+        # popular_tags refreshes about once a minute; reading it more often wastes read budget.
+        self.trending_interval_s = max(0.0, float(trending_interval_s))
+        self._last_trending_at: float | None = None
         self.accounts = [str(a).strip() for a in accounts if str(a).strip()]
         self.keywords = [str(k).strip() for k in keywords if str(k).strip()]
-        self.feed_limit = feed_limit
+        self.feed_limit = int(feed_limit or TARGETING['feed']['page_limit'])
+        self.backlog_max_age_s = float(TARGETING['feed']['backlog_max_age_seconds'])
         self.aux_every = max(2, aux_every)
+        is_official = actuator._client.__class__.__name__ == "OfficialLegitClient"
+        # Every Nth feed read takes the ranked (trending) feed: what citizens actually see, with fresh counts.
+        self.trending_feed_every = int(trending_feed_every if trending_feed_every is not None else
+                                       (TARGETING['feed']['trending_every'] if is_official else 0))
+        self.search_sort = search_sort if search_sort is not None else ('trending' if is_official else None)
+        self._feed_reads = 0
         if min_feed_interval_s is None:
-            is_official = actuator._client.__class__.__name__ == "OfficialLegitClient"
             self.min_feed_interval_s = 6.5 if is_official else 0.0
         else:
             self.min_feed_interval_s = max(0.0, float(min_feed_interval_s))
@@ -179,13 +193,19 @@ class FrontlineCrawler:
         )
         if self.tick % self.aux_every != 0 and feed_ready:
             self._last_feed_at = now
+            self._feed_reads += 1
+            if self.trending_feed_every and self._feed_reads % self.trending_feed_every == 0:
+                return "feed_trending"
             return "feed"
 
         self._aux_idx += 1
         queries = self.keywords + self.trending[:2]
-        # Every 3rd aux tick refreshes trending; the others rotate through search queries
-        # (unless the 10/min search bucket is also on cooldown, in which case we read mentions/trending).
-        if self._aux_idx % 3 == 0 or not queries:
+        trending_ready = (self._last_trending_at is None
+                          or now - self._last_trending_at >= self.trending_interval_s)
+        # Every 3rd aux tick refreshes trending when it is due; the others rotate through
+        # search queries, then per-account notifications.
+        if (self._aux_idx % 3 == 0 or not queries) and trending_ready:
+            self._last_trending_at = now
             return "trending"
 
         search_ready = (
@@ -193,7 +213,7 @@ class FrontlineCrawler:
             or self._last_search_at is None
             or (now - self._last_search_at) >= self.min_feed_interval_s
         )
-        if search_ready:
+        if search_ready and queries:
             query = queries[self._search_idx % len(queries)]
             self._search_idx += 1
             self._last_search_at = now
@@ -204,24 +224,64 @@ class FrontlineCrawler:
             acct = active_accounts[self._mention_idx % len(active_accounts)]
             self._mention_idx += 1
             return f"mentions:{acct}"
-        return "trending"
+        if trending_ready:
+            self._last_trending_at = now
+            return "trending"
+        return "idle"
 
     async def step(self, *, now: float | None = None) -> FrontlineReport:
         self.tick += 1
         ts = time.time() if now is None else float(now)
         report = FrontlineReport(tick=self.tick, source=self._choose_source(ts))
 
+        if report.source == "idle":
+            return report
         if report.source == "trending":
             rows = await self.actuator.trending(limit=10)
             self.trending = [str(r["hashtag"]) for r in rows if isinstance(r, dict) and r.get("hashtag")]
             return report
+        if report.source == "feed_trending":
+            rows = await self.actuator.trending_posts(limit=self.feed_limit)
+            if getattr(rows,'read_failed',False):return report
+            from .targeting import mark_trending
+            await asyncio.to_thread(mark_trending,self.store,[r.get('post_id') for r in rows if isinstance(r,dict)],ts)
+            return await self._ingest_page(report,rows,ts)
+        key='crawl:'+report.source
+        state=self.store.policy(key,{})
+        # Alternate a fresh head with continuation pages so a backlog never hides new posts.
+        cursor=state.get('cursor') if state.get('continue_next') else None
         if report.source == "feed":
-            rows = await self.actuator.get_feed(self.feed_account, limit=self.feed_limit)
+            rows = await self.actuator.get_feed(self.feed_account, limit=self.feed_limit,cursor=cursor)
         elif report.source.startswith("mentions:"):
             acct = report.source.split(":", 1)[1]
-            rows = await self.actuator.get_mentions(acct, limit=self.feed_limit)
+            rows = await self.actuator.get_mentions(acct, limit=self.feed_limit,cursor=cursor)
         else:
-            rows = await self.actuator.search(report.source.split(":", 1)[1], limit=self.feed_limit)
+            rows = await self.actuator.search(report.source.split(":", 1)[1], limit=self.feed_limit,cursor=cursor,sort=self.search_sort)
+        if getattr(rows,'read_failed',False):return report
+        next_cursor=getattr(rows,'next_cursor',None)
+        ids={str(row.get('post_id','')) for row in rows if isinstance(row,dict)}
+        if cursor:
+            if state.get('stop_at') in ids:next_cursor=None
+            # In a posting flood the backlog can never be caught up: give it up once it is stale.
+            stamps=[float(r.get('created_at') or 0) for r in rows if isinstance(r,dict) and r.get('created_at')]
+            if stamps and max(stamps)<ts-self.backlog_max_age_s:next_cursor=None
+            state={'cursor':next_cursor,'continue_next':False,'head':state.get('head'),'stop_at':state.get('stop_at')}
+        else:
+            previous=state.get('head')
+            backlog=state.get('cursor') or (next_cursor if previous not in ids else None)
+            state={'cursor':backlog,'continue_next':bool(backlog),'head':str(rows[0].get('post_id','')) if rows else previous,'stop_at':state.get('stop_at') if state.get('cursor') else previous}
+        self.store.set_policy(key,state)
+        return await self._ingest_page(report,rows,ts)
+
+    async def _ingest_page(self, report, rows, ts):
+        hydrated=[]
+        for row in rows:
+            if row.get('text_complete') is False:
+                full=await self.actuator.get_post(str(row.get('post_id','')))
+                if full and full.get('post_id'):
+                    row={**row,**full,'text_complete':full.get('text_complete',True)}
+            hydrated.append(row)
+        rows=hydrated
 
         suspect_authors: list[str] = []
         def ingest_rows():
@@ -296,13 +356,30 @@ class CommentCrawler:
         self._throttles_seen = actuator.throttles
 
     def _priority(self, rec: dict[str, Any]) -> float:
-        score = UNSEEN_REPLY_WEIGHT * float(rec.get("unseen_replies", 0))
+        # Logarithmic in unseen replies so one exploding thread cannot starve the rest.
+        from .targeting import POLICY as TARGETING, is_trending
+        bonus = TARGETING['comments']
+        score = UNSEEN_REPLY_WEIGHT * math.log1p(float(rec.get("unseen_replies", 0)))
         status = self.store.get_bot_profile(str(rec.get("author", "")))["status"]
         if status == "verified_npc":
-            score += VIP_BONUS
+            score += bonus['verified_bonus']
         elif status == "own_bot":
-            score += OWN_POST_BONUS
+            score += bonus['own_thread_bonus']
+        if is_trending(self.store, str(rec.get('post_id', ''))):
+            score += bonus['trending_bonus']
         return score
+
+    def _depth_exhausted(self, pid: str, now: float) -> bool:
+        """Read at most N pages per thread per hour; beyond that the thread's backlog is given up."""
+        from .targeting import POLICY as TARGETING
+        key = 'cpages:' + pid
+        state = self.store.policy(key, {}) or {}
+        hour = int(now // 3600)
+        pages = int(state.get('n', 0)) if state.get('hour') == hour else 0
+        if pages >= TARGETING['comments']['pages_per_post_per_hour']:
+            return True
+        self.store.set_policy(key, {'hour': hour, 'n': pages + 1})
+        return False
 
     def _burst_authors(self, posts: list[Post]) -> set[str]:
         """Authors who replied to the same thread within a short window (>= N distinct authors)."""
@@ -337,6 +414,11 @@ class CommentCrawler:
         total_replies = int(target["replies"])
         cursor = str(target.get("comment_cursor") or "").strip() or None
         report = CommentReport(post_id=pid)
+        if self._depth_exhausted(pid, ts):
+            # Mark caught up; new replies re-queue the thread and the next hour gets a fresh allowance.
+            self.store.update_comment_crawl_state(pid, replies_crawled=total_replies, comment_cursor='', now=ts)
+            report.skipped = 'depth_cap'
+            return report
 
         rows = await self.actuator.get_comments(pid, limit=self.page_size, cursor=cursor)
         next_cursor = getattr(rows, "next_cursor", None)
