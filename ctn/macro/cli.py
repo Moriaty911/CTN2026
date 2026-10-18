@@ -152,6 +152,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
         branch=args.branch,
         target_text=args.target_text,
         bypass_jev=bypass_jev,
+        rag_snapshot_id=args.rag_snapshot,
     )
 
     if result.get("ok"):
@@ -213,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     sub_pub.add_argument("--text", required=True, help="Post content to publish")
     sub_pub.add_argument("--tag", default="", help="Optional comma-separated hashtags")
     sub_pub.add_argument("--purpose", default="P01", help="Strategic purpose code")
+    sub_pub.add_argument("--rag-snapshot",default="",help="ID from ctn.rag query; required for live strategic posts")
     sub_pub.add_argument(
         "--branch",
         default="",

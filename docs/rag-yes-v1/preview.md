@@ -1,12 +1,14 @@
-# YES RAG v1 审阅预览
+# YES RAG v1.1 审阅预览
 
-> 本文由 `config/rag/yes.v1.json` 生成；正式来源是 JSON。语料尚未接入运行链路。
+> 本文由 `config/rag/yes.v1.1.json` 生成；正式来源是 JSON。本文只审阅静态内容；当前运行能力以 preflight 和运行测试为准。
 
-版本：`yes.rag.v1`；整理日期：2026-10-18。
+版本：`yes.rag.v1.1`；整理日期：2026-10-18。
+
+范围：静态官方设定、用户原文和编辑补充。报纸背景不代表已采集新闻；不含持续新闻或 VIP 帖子库。
 
 以下内容仅属于虚构比赛设定。来源中的阵营预测保留归属，事实保留证据限定；示例与提案不能充当事实。
 
-## 官方事实
+## 官方背景、证据边界与归属主张
 
 来源：[官方设定](https://capturethenarrative.com/info/competitions/2026/setting/)。以下为来源快照，不是实时疫情或独立临床核验。
 
@@ -103,7 +105,7 @@ The government promises to respect the referendum result.
 
 ### F014 · 本地经济场景
 
-Tourism, agriculture and fishing matter locally.
+Tourism leads Kingstonia's economy; farming supplies local markets and exports, while fishing supports coastal livelihoods.
 
 类型：`world_fact`；原章节：Economy。
 必须保留的限定：来源日期与虚构设定范围。
@@ -129,6 +131,111 @@ True infection and fatality rates remain uncertain.
 类型：`evidence_limit`；原章节：About H2D2 Dolphin Flu。
 必须保留的限定：uncertain。
 
+### F018 · 新疫苗改造已有 mRNA 平台
+
+The H2D2 vaccine adapts an existing mRNA platform.
+
+类型：`world_fact`；原章节：The H2D2 Vaccine。
+必须保留的限定：existing mRNA platform。
+
+### F019 · 医疗资金和人才约束
+
+Kingstonia's healthcare system is somewhat underfunded and struggles to recruit and retain skilled staff.
+
+类型：`world_fact`；原章节：Public services, security, and environment。
+必须保留的限定：somewhat。
+
+### F020 · COVID 历史规模不属于 H2D2 预测
+
+During COVID, over 1,000 died and tens of thousands became seriously ill in Kingstonia.
+
+类型：`world_fact`；原章节：The COVID Legacy。
+必须保留的限定：During COVID；over 1,000；tens of thousands。
+
+### F021 · 人口及首都集中程度
+
+Kingstonia has about 600,000 residents; roughly half live in the capital.
+
+类型：`world_fact`；原章节：About Kingstonia。
+必须保留的限定：about；roughly。
+
+### F022 · 外岛渡轮与机场背景
+
+Ferries connect outer islands; the country also has an international airport.
+
+类型：`world_fact`；原章节：Infrastructure and transport。
+必须保留的限定：来源日期与虚构设定范围。
+
+### F023 · Daily Kingstonia 的背景倾向
+
+Daily Kingstonia is generally regarded as right-leaning.
+
+类型：`world_fact`；原章节：Journalism。
+必须保留的限定：generally regarded。
+
+### F024 · Kingstonia Herald 的背景倾向
+
+Kingstonia Herald is generally regarded as left-leaning.
+
+类型：`world_fact`；原章节：Journalism。
+必须保留的限定：generally regarded。
+
+### F025 · 总统制和单院议会
+
+Kingstonia has a president and a single-chamber National Assembly.
+
+类型：`world_fact`；原章节：Government and politics。
+必须保留的限定：来源日期与虚构设定范围。
+
+### F026 · 议会未达成一致后举行公投
+
+Parliament could not agree on the proposal, prompting a referendum.
+
+类型：`world_fact`；原章节：The Referendum。
+必须保留的限定：来源日期与虚构设定范围。
+
+### F027 · 总统个人公开支持 YES
+
+President Hawthorne has publicly said he will vote YES.
+
+类型：`reported_position`；原章节：The Referendum。
+必须保留的限定：Hawthorne；said。
+
+### F028 · NO 阵营的医疗自主主张
+
+The NO campaign argues medical choices should remain personal.
+
+类型：`reported_position`；原章节：The Referendum。
+必须保留的限定：NO campaign argues。
+
+### F029 · KITB 对日常准入负担的主张
+
+KITB argues proof requirements could exclude people from work and ordinary life.
+
+类型：`reported_position`；原章节：The NO Campaign。
+必须保留的限定：KITB；argues；could。
+
+### F030 · KITB 对旅游信心的预测
+
+KITB predicts access restrictions would harm tourism confidence.
+
+类型：`reported_position`；原章节：The NO Campaign。
+必须保留的限定：KITB；predicts。
+
+### F031 · KITB 对比例性的主张
+
+KITB calls proof-based access restrictions disproportionate before widespread local H2D2.
+
+类型：`reported_position`；原章节：The NO Campaign。
+必须保留的限定：KITB calls。
+
+### F032 · KITB 对未来权力使用的担忧
+
+KITB warns access-restriction powers could be reused in later emergencies.
+
+类型：`reported_position`；原章节：The NO Campaign。
+必须保留的限定：KITB；warns；could。
+
 ## YES 论点卡
 
 这些是政策判断、推理或实施提议；依赖事实见 ID，不代表效果已证实。
@@ -139,7 +246,7 @@ I support vaccination proof for public access as a shared-responsibility rule.
 
 Frame the case around obligations when using common spaces. Explain why the proposed obligation seems justified rather than assuming that personal liberty has no value.
 
-**应正面回应的质疑：** A rule can impose substantial burdens on people who disagree or cannot comply.
+**可能遇到的合理质疑：** A rule can impose substantial burdens on people who disagree or cannot comply.
 
 **边界：** A normative argument is not proof that an unvaccinated person is infectious or that a vaccinated person cannot transmit.
 
@@ -152,7 +259,7 @@ I favour public-access proof because the people serving the public deserve consi
 
 Bring staff and service users into the same fairness discussion. Ask what the rule requires from each side and avoid treating workers as a costless enforcement mechanism.
 
-**应正面回应的质疑：** Staff may also face checking burdens or disagreement at work.
+**可能遇到的合理质疑：** Staff may also face checking burdens or disagreement at work.
 
 **边界：** Do not claim a guaranteed reduction in workplace infection or a verified personal healthcare job.
 
@@ -163,13 +270,13 @@ Bring staff and service users into the same fairness discussion. Ask what the ru
 
 Protecting healthcare capacity is a reason for my YES vote, not a guarantee that this policy will solve hospital pressure.
 
-Explain the value placed on avoiding severe disruption. Keep medical evidence, campaign expectations and the additional effect of an entry rule separate.
+Explain the value placed on avoiding severe disruption. Keep medical evidence, campaign expectations and the additional effect of an entry rule separate. Keep the known-case severity distribution and uncertain rates in view; neither mild cases nor severe cases alone establish the best access policy.
 
-**应正面回应的质疑：** A beneficial vaccine does not by itself establish the best access policy.
+**可能遇到的合理质疑：** A beneficial vaccine does not by itself establish the best access policy.
 
 **边界：** No invented patient series, bed totals, present-day local wave or claim that every severe case was unvaccinated.
 
-依据：F004, F009, F010；未知：U015, U016, U020, U022。
+依据：F004, F009, F010, F016, F019；未知：U015, U016, U020, U022。
 用途：P01, P02, P03, P07；原文线索：R020, R027, R047, R050。
 
 ### A004 · 保护脆弱人群而不借用虚构家事
@@ -178,7 +285,7 @@ My YES position gives weight to people for whom everyday participation feels har
 
 Use a general concern for inclusion and care. Explain the value judgment without borrowing an ill parent or child from somebody else's biography.
 
-**应正面回应的质疑：** Exclusion can itself harm people with health or access difficulties.
+**可能遇到的合理质疑：** Exclusion can itself harm people with health or access difficulties.
 
 **边界：** Do not invent group-specific H2D2 risk estimates, personal diagnoses or universal protection.
 
@@ -191,11 +298,11 @@ I favour preparing early rather than making a crisis the trigger for every decis
 
 Present early action as a judgment about uncertainty and consequences. Consider the cost of acting as well as the cost of waiting.
 
-**应正面回应的质疑：** Acting before a crisis can impose burdens before its size is clear.
+**可能遇到的合理质疑：** Acting before a crisis can impose burdens before its size is clear.
 
 **边界：** Do not call an outbreak inevitable, infer present local cases or promise that an entry rule prevents a lockdown.
 
-依据：F003, F008；未知：U003, U015, U020。
+依据：F003, F008, F031；未知：U003, U015, U020。
 用途：P01, P02, P03, P07；原文线索：R004, R005, R015, R035。
 
 ### A006 · 商户连续经营与核验负担
@@ -204,11 +311,11 @@ I support the requirement, and I want the practical burden on small businesses t
 
 Discuss continuity as a goal while asking for understandable procedures and responsibilities. Acknowledge checking costs instead of calling compliance effortless.
 
-**应正面回应的质疑：** Extra checks may cost time and create conflict for staff or customers.
+**可能遇到的合理质疑：** Extra checks may cost time and create conflict for staff or customers.
 
 **边界：** No claim that the rule necessarily keeps every business open, is cheapest or is already a business's legal right.
 
-依据：F001, F009, F014；未知：U002, U005, U009, U015。
+依据：F001, F009, F014, F030；未知：U002, U005, U009, U015。
 用途：P01, P02, P03, P07；原文线索：R005, R016, R017, R028, R037, R049。
 
 ### A007 · 学校与家庭需要具体安排
@@ -217,11 +324,11 @@ I support public-access proof, including the school setting, while asking how af
 
 Treat continuity and participation as goals, then identify the actual unresolved detail in the question. Do not answer a family's practical problem with a slogan.
 
-**应正面回应的质疑：** Education and care responsibilities can make a restriction especially consequential.
+**可能遇到的合理质疑：** Education and care responsibilities can make a restriction especially consequential.
 
 **边界：** No invented age cutoff, school vaccine precedent, remote-learning right or guarantee that schools stay open.
 
-依据：F001；未知：U001, U004, U012, U015, U018。
+依据：F001, F029；未知：U001, U004, U012, U015, U018。
 用途：P01, P02, P03, P07；原文线索：R006, R007, R021, R022, R033, R046。
 
 ### A008 · 通勤者视角中的共同规则
@@ -230,11 +337,11 @@ For public transport, I favour a common proof requirement rather than leaving th
 
 Explain a shared-rule preference while acknowledging that transport can be necessary for work and care. Discuss usability without claiming a risk-free journey.
 
-**应正面回应的质疑：** People may have few practical alternatives to public transport.
+**可能遇到的合理质疑：** People may have few practical alternatives to public transport.
 
 **边界：** Do not invent a safe bus, guaranteed transmission reduction or a vaccination history for the speaker.
 
-依据：F001；未知：U005, U011, U012, U013, U016。
+依据：F001, F029；未知：U005, U011, U012, U013, U016。
 用途：P01, P02, P03, P07；原文线索：R018, R019, R025, R030。
 
 ### A009 · 区分身体强制，同时正面承认准入压力
@@ -243,11 +350,11 @@ I support the access requirement, but saying nobody is physically forced does no
 
 Name the practical pressure created by the policy and explain why the speaker nevertheless supports it. Avoid presenting exclusion from ordinary activities as a trivial choice.
 
-**应正面回应的质疑：** A person may experience the loss of work or travel access as coercive.
+**可能遇到的合理质疑：** A person may experience the loss of work or travel access as coercive.
 
 **边界：** Do not use the absence of physical force as a complete rebuttal or promise support arrangements that are not specified.
 
-依据：F001, F011；未知：U004, U011, U012, U018。
+依据：F001, F011, F028, F029；未知：U004, U011, U012, U018。
 用途：P01, P02, P03, P07；原文线索：R011, R029。
 
 ### A010 · 坚定支持不需要贬低反对者
@@ -256,11 +363,11 @@ I support the requirement while treating disagreement about its burden as a legi
 
 State the value tradeoff directly. Critique reasons rather than assigning selfishness, stupidity or an absence of vulnerable relatives to the speaker.
 
-**应正面回应的质疑：** A person can support vaccination and still reject an access restriction.
+**可能遇到的合理质疑：** A person can support vaccination and still reject an access restriction.
 
 **边界：** Do not equate every mandate opponent with an anti-vaccine position or speculate about motives.
 
-依据：F001, F002, F012；未知：U018, U022。
+依据：F001, F002, F012, F028；未知：U018, U022。
 用途：P01, P02, P03, P07；原文线索：R002, R003, R012, R014, R038。
 
 ### A011 · 有限证据也可以承载诚实的 YES 判断
@@ -269,11 +376,11 @@ I can support YES without turning a qualified finding into a certainty.
 
 Distinguish a policy preference from an empirical claim. Use the linked evidence at its stated strength and explain the judgment separately.
 
-**应正面回应的质疑：** Important unknowns can change how someone weighs the policy.
+**可能遇到的合理质疑：** Important unknowns can change how someone weighs the policy.
 
-**边界：** No zero-risk, zero-transmission, exact-duration or perfect-effectiveness claims; uncertainty also does not mean proven uselessness.
+**边界：** No zero-risk, zero-transmission, exact-duration or perfect-effectiveness claims; uncertainty also does not mean proven uselessness. Do not equate an existing platform with a fully characterised new vaccine or equate protection duration with certificate validity.
 
-依据：F004, F005, F006, F007, F017；未知：U015, U016, U017。
+依据：F004, F005, F006, F007, F017, F018；未知：U015, U016, U017, U007。
 用途：P01, P02, P03, P07；原文线索：R020, R023, R033, R050。
 
 ### A012 · 回应准入政策，而非误贴反疫苗标签
@@ -282,7 +389,7 @@ The disagreement I want to address is the public-access rule, not an assumed rej
 
 Identify the actual objection before replying. Keep the YES position explicit while allowing a fair account of the other side's stated position.
 
-**应正面回应的质疑：** An opponent may favour voluntary vaccination.
+**可能遇到的合理质疑：** An opponent may favour voluntary vaccination.
 
 **边界：** Do not infer the author's medical views from their referendum vote.
 
@@ -295,7 +402,7 @@ I support public-access proof and want its data handling to be narrow, understan
 
 Make privacy safeguards an explicit proposal. Ask what is checked and retained before claiming that a technical system protects privacy.
 
-**应正面回应的质疑：** A proof system could expose sensitive information or create unnecessary records.
+**可能遇到的合理质疑：** A proof system could expose sensitive information or create unnecessary records.
 
 **边界：** Do not promise encryption, zero tracking, no storage or published safeguards that the sources do not establish.
 
@@ -308,11 +415,11 @@ I support the referendum requirement and want its application in different setti
 
 Acknowledge questions about proportionality and checking arrangements. Treat possible distinctions as proposals, not hidden exceptions to the question.
 
-**应正面回应的质疑：** People may question whether every location warrants the same burden.
+**可能遇到的合理质疑：** People may question whether every location warrants the same burden.
 
 **边界：** Do not remove parks from the question, invent a busy-park threshold or claim the rule covers hospitals on the strength of a raw example.
 
-依据：F001；未知：U005, U010, U015。
+依据：F001, F031；未知：U005, U010, U015。
 用途：P01, P02, P03, P07；原文线索：R018, R040, R045。
 
 ### A015 · 能够履行要求是公平讨论的一部分
@@ -321,11 +428,11 @@ My YES support includes asking how people facing eligibility, cost or care barri
 
 Distinguish refusal from inability to comply. Ask for confirmed arrangements while keeping the stance separate from assumptions about what already exists.
 
-**应正面回应的质疑：** A rule can place unequal burdens on people with different options.
+**可能遇到的合理质疑：** A rule can place unequal burdens on people with different options.
 
 **边界：** Do not assume vaccination is free, universally available or medically suitable for every person; do not invent exemptions.
 
-依据：F001；未知：U001, U002, U003, U004, U011。
+依据：F001, F029；未知：U001, U002, U003, U004, U011。
 用途：P01, P02, P03, P07；原文线索：R006, R017, R026, R049。
 
 ### A016 · 外岛与无障碍问题需要具体回答
@@ -334,11 +441,11 @@ I support the requirement and would ask how people with travel or accessibility 
 
 Use the local service context as a reason to ask practical questions. Advocate accessible arrangements without announcing services that have not been confirmed.
 
-**应正面回应的质疑：** A uniform rule may be harder to meet in some circumstances.
+**可能遇到的合理质疑：** A uniform rule may be harder to meet in some circumstances.
 
 **边界：** No invented mobile clinic, ferry subsidy, phone ownership rate or universal digital access.
 
-依据：F001, F015；未知：U003, U005, U013。
+依据：F001, F015, F022；未知：U003, U005, U013。
 用途：P01, P02, P03, P07；原文线索：新增补充。
 
 ### A017 · 支持政策与要求问责可以并存
@@ -347,11 +454,11 @@ I support public-access proof and would also ask for clear review, enforcement a
 
 Offer accountability measures as proposals. Explain what should be checked over time rather than promising that a temporary measure or appeals process already exists.
 
-**应正面回应的质疑：** People may worry about an indefinite restriction or an incorrect refusal of access.
+**可能遇到的合理质疑：** People may worry about an indefinite restriction or an incorrect refusal of access.
 
-**边界：** No invented sunset date, penalty schedule, appeals body or majority mandate.
+**边界：** No invented sunset date, penalty schedule, appeals body or majority mandate. A source-reported concern about future powers is not proof those powers have been abused.
 
-依据：F001, F013；未知：U008, U009, U014, U015。
+依据：F001, F013, F025, F026, F032；未知：U008, U009, U014, U015。
 用途：P01, P02, P03, P07；原文线索：R013, R034, R037, R039。
 
 ### A018 · 先回答实际问题，再表达支持
@@ -360,7 +467,7 @@ I support YES, but a practical question deserves a practical answer or an honest
 
 Name the concern the person actually raised. If it cannot be answered from the materials, say what is missing and ask a focused question rather than reassuring vaguely.
 
-**应正面回应的质疑：** A person may be seeking an implementation detail rather than a referendum argument.
+**可能遇到的合理质疑：** A person may be seeking an implementation detail rather than a referendum argument.
 
 **边界：** Do not guess feelings, promise that everything is handled or pivot away from an unresolved question.
 
@@ -373,11 +480,11 @@ I support the requirement while taking both health disruption and restrictions o
 
 Use a sourced historical context without claiming to have worked through it. Learning from a past crisis does not establish that one new policy has a guaranteed result.
 
-**应正面回应的质疑：** People remember different costs from earlier restrictions.
+**可能遇到的合理质疑：** People remember different costs from earlier restrictions.
 
 **边界：** Keep COVID history separate from H2D2 observations; no invented ward experience, family admission or vaccine comparison.
 
-依据：F009；未知：U015, U020, U021, U022。
+依据：F009, F020；未知：U015, U020, U021, U022。
 用途：P01, P02, P03, P07；原文线索：R027, R035, R048, R050。
 
 ### A020 · 明确 YES，但不把支持率和口号当证据
@@ -386,7 +493,7 @@ I am voting YES on proof for public access; that is my position, not a claim tha
 
 State the actual referendum choice and one relevant reason. Stop when there is no new substance instead of producing another generic endorsement.
 
-**应正面回应的质疑：** Repeated endorsements may not address the question or add anything useful.
+**可能遇到的合理质疑：** Repeated endorsements may not address the question or add anything useful.
 
 **边界：** No invented majority, claim that the argument is settled, or automatic assumption that different wording is a complementary reply.
 
@@ -399,166 +506,210 @@ I support public-access proof and want clear arrangements for visitors and the b
 
 Discuss understandable visitor-facing rules as a proposal. Separate public-space access from border entry and ask for the actual certificate arrangements.
 
-**应正面回应的质疑：** Unclear requirements could burden visitors, staff and businesses.
+**可能遇到的合理质疑：** Unclear requirements could burden visitors, staff and businesses.
 
 **边界：** No invented foreign-certificate recognition, visitor exemption, border closure or assured tourism recovery.
 
-依据：F001, F014；未知：U005, U015, U019。
+依据：F001, F014, F030；未知：U005, U015, U019。
 用途：P01, P02, P03, P07；原文线索：新增补充。
 
 ## 表达示例
 
 只参考表达；实际回复须适合人物、目的、材料和当前问题，不直接复制发布。
 
+接入要求：每次生成提供 0 或 1 条，persona 声音优先，并检查近抄；这些运行能力尚未实现。
+
+用途以示例自身 purposes 为准；argument_id 仅关联主题，不要求用途继承或一致。
+
 ### S001 · 共享空间的责任：plain_direct
 
 Shared places, shared responsibilities. That's why I'm voting YES on proof for public access. Disagreeing with me on the tradeoff doesn't make someone selfish.
 
-关联论点：A001；用途：P01, P03, P07；长度：159。
+主题关联：A001；用途：P01, P03, P07；长度：159。
 
 ### S002 · 面对公众的工作者也应被考虑：practical
 
 Front-desk staff shouldn't be an afterthought. I'm for the proof rule, and I want clear answers on what staff would check and how disputes would be handled.
 
-关联论点：A002；用途：P01, P03, P07；长度：156。
+主题关联：A002；用途：P01, P03, P07；长度：156。
 
 ### S003 · 医疗承载能力与政策效果分开：measured
 
 Healthcare capacity is part of my YES vote. That isn't a promise that an entry rule fixes every hospital problem.
 
-关联论点：A003；用途：P01, P03, P07；长度：113。
+主题关联：A003；用途：P01, P03, P07；长度：113。
 
 ### S004 · 保护脆弱人群而不借用虚构家事：warm
 
 Looking out for each other is why I favour proof for public access. That includes taking the difficulties the rule could create seriously.
 
-关联论点：A004；用途：P01, P03, P07；长度：138。
+主题关联：A004；用途：P01, P03, P07；长度：138。
 
 ### S005 · 提前准备也要承认取舍：decisive_civil
 
 yes, i'd rather prepare early. still, explain why the proof requirement is worth its burden. pretending there's no tradeoff doesn't help.
 
-关联论点：A005；用途：P01, P03, P07；长度：137。
+主题关联：A005；用途：P01, P03, P07；长度：137。
 
 ### S006 · 商户连续经营与核验负担：businesslike
 
 Clear checks, clear responsibilities. That's what I want alongside a YES vote. Small businesses deserve practical details, not another slogan.
 
-关联论点：A006；用途：P01, P03, P07；长度：142。
+主题关联：A006；用途：P01, P03, P07；长度：142。
 
 ### S007 · 学校与家庭需要具体安排：conversational
 
 i'm for proof in the public spaces named in the vote, including schools. families still deserve clear answers about how the rule would work for them.
 
-关联论点：A007；用途：P01, P03, P07；长度：149。
+主题关联：A007；用途：P01, P03, P07；长度：149。
 
 ### S008 · 通勤者视角中的共同规则：everyday
 
 I'm for proof on public transport. I also take the difficulty of losing access seriously. People need a workable rule and a straight answer about what it asks of them.
 
-关联论点：A008；用途：P01, P03, P07；长度：167。
+主题关联：A008；用途：P01, P03, P07；长度：167。
 
 ### S009 · 区分身体强制，同时正面承认准入压力：reflective
 
 I'm voting YES. Saying nobody is physically forced doesn't settle the question of practical pressure. I'd rather acknowledge that tradeoff and explain my position.
 
-关联论点：A009；用途：P01, P03, P07；长度：163。
+主题关联：A009；用途：P01, P03, P07；长度：163。
 
 ### S010 · 坚定支持不需要贬低反对者：firm_civil
 
 A YES vote doesn't require calling a NO voter selfish. Explain the access rule. Answer their objection. Guessing their motives adds nothing.
 
-关联论点：A010；用途：P01, P03, P07；长度：140。
+主题关联：A010；用途：P01, P03, P07；长度：140。
 
 ### S011 · 有限证据也可以承载诚实的 YES 判断：careful
 
 Yes from me, with honest limits. Supporting proof for public access doesn't require calling the evidence perfect or turning an uncertainty into a promise.
 
-关联论点：A011；用途：P01, P03, P07；长度：154。
+主题关联：A011；用途：P01, P03, P07；长度：154。
 
 ### S012 · 回应准入政策，而非误贴反疫苗标签：precise
 
 If your objection is about access rather than vaccination itself, that's the issue I should answer. I'm for the proof requirement; I still owe you an accurate reply.
 
-关联论点：A012；用途：P01, P03, P07；长度：165。
+主题关联：A012；用途：P01, P03, P07；长度：165。
 
 ### S013 · 隐私要求是主张，不是假装已有保障：concise
 
 I'm for proof, and I want clear limits on what a check reveals or stores. That's a safeguard I'm asking for, not one I can claim has already been promised.
 
-关联论点：A013；用途：P01, P03, P07；长度：155。
+主题关联：A013；用途：P01, P03, P07；长度：155。
 
 ### S014 · 场所差异应讨论，不能改写公投题目：considered
 
 I support YES. Parks are part of the question, so I won't quietly leave them out. How the rule would work in different places still deserves a clear explanation.
 
-关联论点：A014；用途：P01, P03, P07；长度：161。
+主题关联：A014；用途：P01, P03, P07；长度：161。
 
 ### S015 · 能够履行要求是公平讨论的一部分：empathetic
 
 I support the requirement, but inability to meet it isn't the same as refusal. I'd ask for the actual arrangements before claiming that someone's difficulty has been solved.
 
-关联论点：A015；用途：P01, P03, P07；长度：173。
+主题关联：A015；用途：P01, P03, P07；长度：173。
 
 ### S016 · 外岛与无障碍问题需要具体回答：practical
 
 I'm voting YES. I also want an answer for people facing travel or accessibility barriers. I won't assume that a phone app or an easy appointment is available to everyone.
 
-关联论点：A016；用途：P01, P03, P07；长度：170。
+主题关联：A016；用途：P01, P03, P07；长度：170。
 
 ### S017 · 支持政策与要求问责可以并存：civic
 
 I support proof for public access and would ask for a clear review process. Asking for a safeguard isn't evidence that it is already in the policy.
 
-关联论点：A017；用途：P01, P03, P07；长度：147。
+主题关联：A017；用途：P01, P03, P07；长度：147。
 
 ### S018 · 先回答实际问题，再表达支持：answer_first
 
 I'm for YES, but that doesn't answer your practical question. If I don't have the rule you're asking about, I should say so rather than tell you not to worry.
 
-关联论点：A018；用途：P01, P03, P07；长度：158。
+主题关联：A018；用途：P01, P03, P07；长度：158。
 
 ### S019 · 借鉴历史，不虚构亲历或保证结果：reflective
 
 I support proof for public access. I don't want past disruption turned into a promise that one policy fixes everything. Make the case honestly.
 
-关联论点：A019；用途：P01, P03, P07；长度：143。
+主题关联：A019；用途：P01, P03, P07；长度：143。
 
 ### S020 · 明确 YES，但不把支持率和口号当证据：brief
 
 I'm voting YES on proof for public access. That's my position; it isn't a claim that everybody agrees or that every implementation question is settled.
 
-关联论点：A020；用途：P01, P03, P07；长度：151。
+主题关联：A020；用途：P01, P03, P07；长度：151。
 
 ### S021 · 隐私要求是主张，不是假装已有保障：focused_question
 
 I support the proof requirement. What information would a venue need to see, and would it retain anything?
 
-关联论点：A013；用途：P08；长度：106。
+主题关联：A013；用途：P08；长度：106。
 
 ### S022 · 能够履行要求是公平讨论的一部分：focused_question
 
 I support YES. Is there a confirmed rule for someone who cannot meet the requirement, or are we discussing what that rule should be?
 
-关联论点：A015；用途：P08；长度：132。
+主题关联：A015；用途：P08；长度：132。
 
 ### S023 · 支持政策与要求问责可以并存：focused_question
 
 I'm for proof for public access. Has a review process actually been announced, or is it a safeguard we should be asking for?
 
-关联论点：A017；用途：P08；长度：124。
+主题关联：A017；用途：P08；长度：124。
 
 ### S024 · 有限证据也可以承载诚实的 YES 判断：focused_question
 
 I support YES. Are we discussing the vaccine evidence or the additional effect of the access rule? Those are different claims to examine.
 
-关联论点：A011；用途：P08；长度：137。
+主题关联：A011；用途：P08；长度：137。
 
 ### S025 · 旅游与访客规则需要明确：practical
 
 I support proof for public access. Visitors and the businesses serving them need clear rules too. I won't assume that the vote tells us which overseas certificates would be accepted.
 
-关联论点：A021；用途：P01, P03, P07；长度：182。
+主题关联：A021；用途：P01, P03, P07；长度：182。
+
+### S026 · P02：先解释 YES 的确切含义
+
+YES means requiring proof of H2D2 vaccination to enter public spaces such as shops, schools, workplaces, public transport and parks.
+
+主题关联：A020；用途：P02；长度：132。
+
+示例内容依赖：F001, F002；实际生成仍须获得对应核准材料。
+
+### S027 · P02：试验发现与政策效果分开
+
+Trials suggest a lower risk of serious illness. That is a finding about the vaccine, not a measured guarantee that the access rule will keep every school or business open.
+
+主题关联：A011；用途：P02；长度：171。
+
+示例内容依赖：F004, U015；实际生成仍须获得对应核准材料。
+
+### S028 · P02：传播问题保留证据限定
+
+The supplied material does not establish that vaccination prevents all transmission. It describes limited real-world evidence, so I cannot promise a risk-free encounter.
+
+主题关联：A011；用途：P02；长度：169。
+
+示例内容依赖：F006, U016；实际生成仍须获得对应核准材料。
+
+### S029 · P02：费用未确认就直接说明
+
+The supplied material does not confirm whether vaccination is free or subsidised. I cannot give you a price or promise financial support without confirmed details.
+
+主题关联：A015；用途：P02；长度：163。
+
+示例内容依赖：U002；实际生成仍须获得对应核准材料。
+
+### S030 · P02：未说明豁免不等于没有豁免
+
+The supplied material does not specify medical exemptions or alternatives. That does not establish that none exist; I cannot promise a particular arrangement.
+
+主题关联：A015；用途：P02；长度：158。
+
+示例内容依赖：U004；实际生成仍须获得对应核准材料。
 
 ## 未知事项
 
@@ -861,6 +1012,8 @@ The vaccine is free, so why would anyone have trouble complying?
 
 Do not accept the unsupported free-vaccine premise or equate inability with refusal.
 
+用途：P02；参考示例：S029（仅校验元数据关系，尚未测试检索器）。
+
 ### C003
 
 Can a vaccinated person still spread H2D2?
@@ -868,6 +1021,8 @@ Can a vaccinated person still spread H2D2?
 相关材料：F006, A011, U016。
 
 Keep the evidence limit; do not promise zero transmission or claim vaccination is proven useless.
+
+用途：P02；参考示例：S028（仅校验元数据关系，尚未测试检索器）。
 
 ### C004
 
@@ -892,6 +1047,8 @@ Does the policy already guarantee a medical exemption?
 相关材料：A015, U004。
 
 Neither affirm an exemption nor assert there are no exemptions because details are missing.
+
+用途：P02；参考示例：S030（仅校验元数据关系，尚未测试检索器）。
 
 ### C007
 
@@ -1108,3 +1265,167 @@ Does shared responsibility mean individual rights do not matter?
 相关材料：F001, A001, A010, U018。
 
 State the value tradeoff without declaring rights nonexistent or inventing a legal conclusion.
+
+### C034
+
+Most known cases are mild, so are severe cases irrelevant?
+
+相关材料：F016, F017, A003, U016。
+
+Keep both the known-case qualifier and the severe-outcome possibility. Neither establishes an exact rate or proves the access rule necessary.
+
+### C035
+
+What exactly does a YES vote support?
+
+相关材料：F001, F002, A020。
+
+Answer the actual access requirement first; do not replace it with general encouragement to vaccinate.
+
+用途：P02；参考示例：S026（仅校验元数据关系，尚未测试检索器）。
+
+### C036
+
+What do the vaccine trials actually suggest?
+
+相关材料：F004, A011, U015, U016。
+
+Keep suggest and the serious-disease endpoint. Do not turn trial evidence into an observed mandate effect.
+
+用途：P02；参考示例：S027（仅校验元数据关系，尚未测试检索器）。
+
+### C037
+
+What information would a venue retain during a proof check?
+
+相关材料：A013, U005, U006。
+
+P08 may use S021 for its own purpose despite A013 lacking P08; topic linkage does not authorise an unrelated argument.
+
+用途：P08；参考示例：S021（仅校验元数据关系，尚未测试检索器）。
+
+### C038
+
+Is an exemption a confirmed arrangement or just a proposal?
+
+相关材料：A015, U004。
+
+P08 style eligibility is independent of the topic argument purposes. Ask about the actual missing detail; do not announce an exemption.
+
+用途：P08；参考示例：S022（仅校验元数据关系，尚未测试检索器）。
+
+### C039
+
+Has a review process been announced?
+
+相关材料：A017, U008。
+
+Use the clarification style without treating a proposed review safeguard as a policy commitment.
+
+用途：P08；参考示例：S023（仅校验元数据关系，尚未测试检索器）。
+
+### C040
+
+Are vaccine effectiveness and access-rule effectiveness the same claim?
+
+相关材料：F004, A011, U015。
+
+The P08 example is a topic-linked question, not permission to use a full P03 argument.
+
+用途：P08；参考示例：S024（仅校验元数据关系，尚未测试检索器）。
+
+### C041
+
+Does this new vaccine mean the mRNA platform itself is entirely new?
+
+相关材料：F018, A011, U017。
+
+Distinguish the adapted platform from the new vaccine; platform history is not proof of zero rare risk.
+
+### C042
+
+Do the COVID deaths describe current H2D2 casualties?
+
+相关材料：F009, F020, A019, U020。
+
+Keep the disease and historical scope; do not project or relabel the historical figures.
+
+### C043
+
+Why discuss limited healthcare capacity?
+
+相关材料：F015, F019, A003, U015。
+
+Use the baseline staffing and funding context without inventing beds, current occupancy or a quantified mandate benefit.
+
+### C044
+
+Tourism leads the economy, so has KITB proved the rule will damage it?
+
+相关材料：F014, F030, A006, A021, U015。
+
+Separate the economic background from KITB prediction. Attribution does not establish the predicted harm.
+
+### C045
+
+Ferries exist, so is access to vaccination guaranteed on every island?
+
+相关材料：F015, F022, A016, U003, U013。
+
+Transport infrastructure does not establish dose availability, service frequency, travel cost or accessibility.
+
+### C046
+
+What does the baseline say about population distribution?
+
+相关材料：F021。
+
+Preserve about and roughly; do not infer clinic demand, access barriers or voting support from population alone.
+
+### C047
+
+Does a paper being right- or left-leaning establish its referendum stance?
+
+相关材料：F023, F024, U014。
+
+Source reputation is not a collected article, current endorsement, truth guarantee or representative poll.
+
+### C048
+
+The President favours YES. Is the access rule already enacted?
+
+相关材料：F013, F025, F026, F027, A017, U009。
+
+Separate the President position, parliamentary deadlock and referendum commitment; do not assert enactment or enforcement.
+
+### C049
+
+Does opposing access restrictions mean rejecting personal medical choice?
+
+相关材料：F012, F028, A009, A010, A012, U022。
+
+Represent the attributed autonomy argument without assigning it to every target or changing the YES generation stance.
+
+### C050
+
+Does KITB say people could lose ordinary access, and is that an observed outcome?
+
+相关材料：F029, A009, A015, U012。
+
+Keep KITB attribution and could; a campaign claim is not a verified observed exclusion or an employment rule.
+
+### C051
+
+Is KITB arguing the timing is disproportionate?
+
+相关材料：F003, F031, A005, A014, U020。
+
+Retain attribution and baseline time scope; the claim does not establish current outbreak status or settle proportionality.
+
+### C052
+
+Has KITB proved the government will abuse emergency powers?
+
+相关材料：F032, A017, U008, U009, U018。
+
+A stated concern about future powers is not evidence of actual or inevitable abuse.

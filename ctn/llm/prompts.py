@@ -41,6 +41,7 @@ def build_messages(
     persona: Persona | None = None,
     retry_feedback: str | None = None,
     previous_replies: list | None = None,
+    rag: dict | None = None,
 ):
     purpose = materials["prompt_type"]
     if purpose not in PURPOSE_PROMPTS or materials["schema_version"] != "jev-generation-material.v1":
@@ -70,6 +71,13 @@ def build_messages(
     observations = {key: materials[key] for key in (
         "target", "focus", "support", "secondary", "evaluated_materials", "comparison_materials",
         "information_gap", "comments", "sample_scope", "human_verifications")}
+    if rag:
+        system += ("\nCampaign items retain their explicit kind: official_fact, attributed_claim, argument or unknown. "
+            "Arguments are policy judgments, not established outcomes. Unknown provisions must remain unknown. "
+            "Style is a voice reference only: do not copy; persona voice takes priority.")
+        # Evidence already lives in evaluated_materials. Never restore an omitted record from the full snapshot.
+        observations['rag_identity']={k:rag[k] for k in ('corpus_hash','corpus_version','retrieval_version')}
+        observations['style_reference']=[s for s in rag['styles'] if purpose in s['purposes']][:1]
     observations["selected_purpose"] = purpose
     observations["reply_quality"] = materials["action_decision"]["reply_quality"]
     if persona is not None and persona.profile:

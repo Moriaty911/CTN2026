@@ -86,3 +86,6 @@ docs/*
 *.jpeg
 README.md
 agent.md
+
+# Reference-only nested SDK clone
+pypi-capturethenarrative/

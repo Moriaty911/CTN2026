@@ -137,8 +137,9 @@ class CampaignStoreMixin(PerformanceStoreMixin):
                     'persona_id':slot['persona_id'],'persona_version':slot['persona_version'],
                     'catalog_hash':plan['catalog_hash']})
                 if not ready:raise ValueError(reason)
-            previous=self._conn.execute('SELECT id FROM reply_batches WHERE target_id=?',(target,)).fetchone()
-            if previous: return previous[0],False
+            self._expire_reply_batches(ts)
+            previous=self._conn.execute('SELECT id FROM reply_batches WHERE target_id=? AND target_version=?',(target,version)).fetchone()
+            if previous:return previous[0],False
             if self._conn.execute("SELECT 1 FROM action_intents WHERE kind='reply' AND target_id=? AND status!='failed' LIMIT 1",(target,)).fetchone():
                 return None,False
             if self.has_replied_to_post(target): return None,False

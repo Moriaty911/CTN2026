@@ -191,6 +191,8 @@ class BotLoop:
         report=report or CycleReport(cycle=self.cycle)
         async with self._processing_lock:
             self.refresh_accounts()
+            corpus_hash=getattr(getattr(self.brain,'corpus',None),'hash','')
+            await asyncio.to_thread(self.store.resume_material_tasks,corpus_hash)
             await run_reply_batches(self,report,self.max_actions_per_cycle)
             tasks=await asyncio.to_thread(self.store.claim_post_tasks,self.max_evaluations_per_cycle)
             if not tasks: return report
@@ -226,10 +228,16 @@ class BotLoop:
                         await asyncio.to_thread(self.store.update_post_task,task,'skipped',reason='own_or_missing_post');continue
                     report.decisions.append(decision)
                     if decision.action is ActionKind.NONE:
+                        if decision.rationale.startswith(('needs_materials:','llm:needs_materials','jev:needs_account_metadata','jev:needs_context')):
+                            await asyncio.to_thread(self.store.wait_for_material,task,corpus_hash,decision.rationale)
+                            continue
                         transient=not decision.scores.ok or decision.rationale.startswith((
                             'account_cooldown:','all_accounts_disabled','needs_materials:','jev:failed','jev:needs','llm:','brain_error'))
+                        blocked_material=decision.rationale.startswith(('needs_materials:','llm:needs_materials','llm:needs_review'))
+                        if transient and task['attempts']>=2 and not decision.rationale.startswith(('account_cooldown:','all_accounts_disabled')):
+                            transient=False
                         await asyncio.to_thread(self.store.update_post_task,task,'queued' if transient else 'skipped',
-                            reason=decision.rationale,delay=30 if transient else 0)
+                            reason=decision.rationale,delay=(300 if blocked_material else 30) if transient else 0)
                         continue
                     if decision.action is ActionKind.REPLY and await plan_reply_batch(self,task,decision):
                         continue
@@ -254,6 +262,8 @@ class BotLoop:
                     elif result.status in ('unknown','simulated'): status=result.status
                     elif result.detail in ('action_succeeded','action_unknown','action_sending','action_claimed'):
                         status='unknown' if result.detail!='action_succeeded' else 'succeeded'
+                    elif result.response.get('failure_category')=='terminal' or result.detail in ('target_edited','duplicate_publication','near_duplicate_publication','rag_snapshot_withdrawn','draft_or_opportunity_expired'):
+                        status='skipped'
                     else: status='queued'
                     await asyncio.to_thread(self.store.update_post_task,task,status,reason=result.detail,
                         delay=30,draft=draft if status=='queued' else None,draft_at=task['draft_at'])
@@ -397,7 +407,7 @@ class BotLoop:
                     'target_stance':d.scores.raw.get('relative_stance',''),'purpose':d.scores.raw.get('purpose',''),
                     'allied_hourly_cap': self.brain.allied_reply_hourly_cap if self.brain else 3,
                     **{k:d.scores.raw[k] for k in ('target_version','draft_expires_at','opportunity_expires_at','required_account_level',
-                        'persona_id','persona_version','occupation_group','catalog_hash','cooldown_s','voice_style','topic',
+                        'persona_id','persona_version','occupation_group','catalog_hash','cooldown_s','voice_style','topic','rag_snapshot_id',
                         'reply_batch_id','reply_slot','slot_owner','prompt_version','material_version','post_rubric_version') if k in d.scores.raw}},
             )
         if d.action is ActionKind.POST:

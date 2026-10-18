@@ -28,8 +28,8 @@ def actor(client,store,*,dry=False):
 
 def evidence(store,author='enemy',pid='p'):
     store.upsert_observed_post({'post_id':pid,'author':author,'text':'Synthetic evidence text','created_at':time.time()})
-    store.add_weighted_evidence(author,'leak',50,{'post_id':pid},evidence_key='leak:'+pid)
-    store.add_weighted_evidence(author,'repetition',35,{'post_id':pid},evidence_key='repeat:'+pid)
+    store.add_weighted_evidence(author,'leak',50,{'post_id':pid,'version':1},evidence_key='leak:'+pid)
+    store.add_weighted_evidence(author,'repetition',35,{'post_id':pid,'version':1},evidence_key='repeat:'+pid)
 
 def parallel_increment(path,iterations):
     store=StateStore(path)
@@ -71,7 +71,7 @@ class TransactionsTests(unittest.TestCase):
                 conn.execute("INSERT INTO account_states VALUES('a',123,4)")
             with patch.object(StateStore,'migrate_runtime',side_effect=RuntimeError('migration fault')):
                 with self.assertRaises(RuntimeError): StateStore(path)
-            backup=Path(str(path)+'.before-v4.bak')
+            backup=Path(str(path)+'.before-v5.bak')
             with closing(sqlite3.connect(backup)) as conn, conn:
                 self.assertEqual(conn.execute('SELECT post_count FROM account_states').fetchone()[0],4)
                 self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],0)
@@ -79,7 +79,7 @@ class TransactionsTests(unittest.TestCase):
             backup.rename(Path(td)/'recovery.db')
             store=StateStore(path);self.addCleanup(store.close)
             self.assertEqual(store.get_account_state('a').post_count,4)
-            self.assertEqual(store._conn.execute('PRAGMA user_version').fetchone()[0],4)
+            self.assertEqual(store._conn.execute('PRAGMA user_version').fetchone()[0],5)
             self.assertEqual(path.stat().st_mode&0o777,0o600)
 
     def test_two_process_increments_and_claims(self):
@@ -209,6 +209,8 @@ class RulingTests(unittest.IsolatedAsyncioTestCase):
         reporter=BlueTeamReporter(self.a,self.store,accounts=['a'],enabled=True)
         self.assertEqual((await reporter.sweep_and_report()).submitted_count,0)
         reporter.event_source=self.source
+        from tests.runtime_helpers import approve_synthetic_reports
+        approve_synthetic_reports(self.store)
         self.assertEqual((await reporter.sweep_and_report()).submitted_count,1)
         self.assertEqual(self.store.get_bot_profile('enemy')['upheld_strikes'],0)
         self.assertEqual((await reporter.sweep_and_report()).submitted_count,0)
@@ -225,15 +227,23 @@ class RulingTests(unittest.IsolatedAsyncioTestCase):
     async def test_pending_cap_is_atomic_and_both_paths(self):
         evidence(self.store,'enemy','p2')
         self.platform.posts['p2']=MockPost('p2','enemy','synthetic second',time.time())
-        context={'target_author':'enemy','detail':'concrete synthetic evidence'}
-        one,two=await asyncio.gather(self.a.report('a','p',detail='concrete',context=context),
-            self.a.report('b','p2',detail='concrete',context=context))
+        from tests.runtime_helpers import approve_synthetic_reports
+        from ctn.moderation.policy import candidate_payload
+        approve_synthetic_reports(self.store)
+        payload=candidate_payload(self.store,'post','p','enemy')
+        candidate=self.store.store_report_candidate(payload)
+        approval=self.store.approve_report(candidate)
+        context={'target_author':'enemy','detail':payload['detail'],'evidence_hash':payload['evidence_hash'],'candidate_id':candidate,'approval_id':approval}
+        one,two=await asyncio.gather(self.a.report('a','p',detail=payload['detail'],context=context),
+            self.a.report('b','p2',detail=payload['detail'],context=context))
         self.assertEqual(sum(r.ok for r in (one,two)),1)
         successful=one if one.ok else two
         self.store.apply_moderation_event({'event_id':'upheld','subject_kind':'post','subject_id':successful.target_id,
             'outcome':'upheld','ruled_at':time.time()+5,'source':'synthetic'})
         reporter=BlueTeamReporter(self.a,self.store,accounts=['a'],enabled=True,event_source=self.source)
         self.assertIsNone(await reporter.report_account_candidate('enemy',confirmed_action_count=99))
+        self.store.record_confirmed_activity('enemy',100,observed_at=time.time(),source='synthetic platform activity')
+        approve_synthetic_reports(self.store)
         result=await reporter.report_account_candidate('enemy',confirmed_action_count=100)
         self.assertTrue(result.ok)
 
@@ -261,7 +271,7 @@ class AdditionalFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_claim_expiry_and_crash_during_send_have_different_recovery(self):
         unsent,_=self.store.claim_action('reply','a','p','reply',now=100)
-        sending,_=self.store.claim_action('reply','b','q','reply',now=100)
+        sending,_=self.store.claim_action('reply','b','q','A different response',now=100)
         self.store.start_action(sending)
         self.store.recover_actions(now=1100)
         states={r['id']:r['status'] for r in self.store.list_actions()}

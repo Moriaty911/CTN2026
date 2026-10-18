@@ -64,7 +64,7 @@ class ReplyGenerator:
                 "need_count": len(result.needs), "execution_authorized": False})
         return result
 
-    def generate(self, handoff: HandoffPackage, brief: MaterialBrief, comparison=None, options=None, *, persona: Persona | None = None, retry_feedback: str | None = None):
+    def generate(self, handoff: HandoffPackage, brief: MaterialBrief, comparison=None, options=None, *, persona: Persona | None = None, retry_feedback: str | None = None, rag_snapshot=None):
         """Recheck locally without JEV calls. No implicit generation on evaluate()."""
         options = DraftOptions() if options is None else options
         if type(options) is not DraftOptions or type(brief) is not MaterialBrief:
@@ -123,10 +123,16 @@ class ReplyGenerator:
             frozen = {"version":"ctn-frozen-reply.v1", "materials":material,
                       'prompt_version':PROMPT_VERSION,
                       "parent_request_id":base.parent_request_id}
+            if rag_snapshot is not None:
+                campaign=material['evaluated_materials']['content'].get('campaign_materials')
+                if not campaign or campaign['snapshot_id']!=rag_snapshot.snapshot_id:
+                    return finish('needs_review','rag_snapshot_mismatch')
+                frozen['rag_snapshot']=rag_snapshot.to_dict()
+                base=replace(base,rag_snapshot_id=rag_snapshot.snapshot_id)
             frozen["fingerprint"] = hashlib.sha256(json.dumps(frozen,sort_keys=True,
                 ensure_ascii=False,allow_nan=False,separators=(',',':')).encode()).hexdigest()
             base=replace(base,frozen_material_json=json.dumps(frozen,ensure_ascii=False,allow_nan=False))
-            messages = build_messages(material, options, max_chars, persona=persona, retry_feedback=retry_feedback)
+            messages = build_messages(material, options, max_chars, persona=persona, retry_feedback=retry_feedback, rag=frozen.get("rag_snapshot"))
         except (ValueError, KeyError, TypeError, IndexError, WorkflowValidationError):
             return finish("needs_review", "invalid_handoff_binding")
         return self._call(messages,base,max_chars)
@@ -139,7 +145,7 @@ class ReplyGenerator:
         try:
             frozen=_strict_json(frozen_json)
             fingerprint=frozen.pop('fingerprint')
-            if (set(frozen)!={'version','materials','parent_request_id','prompt_version'} or
+            if (set(frozen)-{'rag_snapshot'}!={'version','materials','parent_request_id','prompt_version'} or
                 frozen['version']!='ctn-frozen-reply.v1' or
                 frozen['prompt_version']!=PROMPT_VERSION or
                 hashlib.sha256(json.dumps(frozen,sort_keys=True,ensure_ascii=False,
@@ -152,7 +158,7 @@ class ReplyGenerator:
                 raise ValueError('invalid scope')
             if self.checker._has_secret(frozen_json):raise ValueError('sensitive snapshot')
             messages=build_messages(material,options,max_chars,persona=persona,
-                retry_feedback=retry_feedback,previous_replies=previous_replies)
+                retry_feedback=retry_feedback,previous_replies=previous_replies,rag=frozen.get("rag_snapshot"))
             base=replace(base,target_post_id=material['target']['post_id'],prompt_type=material['prompt_type'],
                 parent_request_id=frozen['parent_request_id'],frozen_material_json=frozen_json)
         except (ValueError,TypeError,KeyError,IndexError):

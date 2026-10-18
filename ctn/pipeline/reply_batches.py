@@ -40,6 +40,8 @@ async def run_reply_batches(loop,report,limit):
             plan=json.loads(slot['plan_json'])
             if plan.get('prompt_version',PROMPT_VERSION)!=PROMPT_VERSION:
                 await asyncio.to_thread(loop.store.defer_reply_slot,slot,'prompt_version_mismatch',cancel=True);continue
+            if plan.get('rag_snapshot_id'):
+                await asyncio.to_thread(loop.store.load_rag_snapshot,plan['rag_snapshot_id'])
             persona=loop.brain.router.registry.get(slot['account_id'])
             if (not persona or persona.persona_id!=slot['persona_id'] or persona.version!=slot['persona_version']
                 or loop.brain.router.registry.catalog_hash!=slot['catalog_hash']):
@@ -71,10 +73,12 @@ async def run_reply_batches(loop,report,limit):
             if result.ok:loop._remember(decision,result)
             if not result.action_id:
                 terminal=result.detail in ('target_edited','draft_or_opportunity_expired','persona_catalog_mismatch',
-                    'account_disabled','account_level_required','invalid_reply_slot')
+                    'account_disabled','account_level_required','invalid_reply_slot','duplicate_publication','near_duplicate_publication','rag_snapshot_withdrawn')
                 await asyncio.to_thread(loop.store.defer_reply_slot,slot,result.detail,cancel=terminal)
         except AuthError:
-            raise
+            loop.actuator.suspended.add(slot['account_id'])
+            await asyncio.to_thread(loop.store.set_account_frozen,slot['account_id'],True)
+            await asyncio.to_thread(loop.store.defer_reply_slot,slot,'authentication_failed',cancel=True)
         except (KeyError,TypeError,ValueError):
             await asyncio.to_thread(loop.store.defer_reply_slot,slot,'invalid_saved_batch_context',cancel=True)
         except Exception as exc:

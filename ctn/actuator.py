@@ -271,9 +271,15 @@ class Actuator:
                 self.suspended.add(account)
                 if self.store:
                     await asyncio.to_thread(self.store.set_account_banned,account,True)
+            if name=='get_comments':
+                from .client.base import ReadFailurePage
+                return ReadFailurePage()
             return default
         except PlatformError as exc:
             self._warn(f"read {name} failed: {exc}", status=exc.status)
+            if name=='get_comments':
+                from .client.base import ReadFailurePage
+                return ReadFailurePage()
             return default
 
     async def _write(
@@ -327,6 +333,7 @@ class Actuator:
         except AuthError:
             if self.store:
                 await asyncio.to_thread(self.store.finish_action,ident,'failed',detail='authentication failed')
+                await asyncio.to_thread(self.store.set_account_frozen,account,True)
             raise
         except AccountSuspended:
             self.suspended.add(account)
@@ -335,9 +342,14 @@ class Actuator:
             status,detail='failed','account suspended'
         except Throttled:
             status,detail='failed','throttled'
+            response={'error_status':429,'failure_category':'transient'}
         except PlatformError as exc:
             status='unknown' if exc.retryable or exc.status is None else 'failed'
             detail=str(exc)
+            if kind is ActionKind.REPORT and exc.status==403 and self.store:
+                # A denial invalidates clearance; it does not establish a six-hour ban or account suspension.
+                await asyncio.to_thread(self.store.set_policy,'report_clearance',{})
+            response={'error_status':exc.status,'failure_category':'uncertain' if status=='unknown' else 'terminal' if exc.status in (400,404) else 'transient'}
         except (TimeoutError,OSError):
             status,detail='unknown','network response unavailable'
         except asyncio.CancelledError:

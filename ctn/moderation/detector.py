@@ -11,7 +11,7 @@ from ..jev.postflight import check_incoming_post_language
 from ..models import Post
 from ..storage import StateStore
 
-# Explicit LLM / prompt-injection / template failure patterns that genuine NPCs never emit.
+# Candidate leakage patterns. Context and independent evidence are still required.
 _AI_LEAK_RE = re.compile(
     r"^\s*(?:as (?:an ai(?: language model| assistant)?|a large language model)\s*[,;:]"
     r"|i (?:am|['’]m) an ai\b(?!\s+(?:researcher|engineer|developer|artist|teacher|student)\b))",
@@ -116,11 +116,11 @@ class BotDetector:
 
     @staticmethod
     def _unquoted(text):
-        # Conservative: quoted examples and discussions of AI are not self-disclosure.
-        text='\n'.join(line for line in text.splitlines() if not line.lstrip().startswith(('>','```')))
+        text=re.sub(r'```[\s\S]*?(?:```|$)', '', text)
+        text='\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('>'))
         text=re.sub(r'"[^"\n]*"|“[^”\n]*”|`[^`]*`', '', text)
-        if re.search(r'\b(quote|quoting|example|said|wrote|prompt injection|discussing ai)\b',text,re.I):
-            return ''
+        # Explicit examples without quote marks: exempt just that local clause.
+        text=re.sub(r'(?im)^\s*(?:example|quoted text|prompt injection example)\s*:[^\n]*', '', text)
         return text
 
     def inspect_post(self,post,*,record_observation=False,now=None):

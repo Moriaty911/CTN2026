@@ -42,7 +42,7 @@ Inspect `python -m ctn.ops performance --group-by occupation_group --format mark
 1. [ACTIVE] All generated posts, reasoning outputs, and updates to `harness.md` must be written strictly in English.
 2. [ACTIVE] During Phase 1, do not spam aggressive `#MandateNow` political slogans; prioritize warm, everyday local grounding and constructive discussion.
 3. [ACTIVE] After publishing an original post, lock that account from proactive original posting for at least 24 hours to prevent consecutive single-account spamming.
-4. [ACTIVE] Keep daily proactive write budget consumption under 10 posts to preserve quota for the final referendum push.
+4. [ACTIVE] Keep strategic original posts at or below 10 per Sydney day. Python owns warmup under a separate 15-per-day allowance; both share platform request limits. Do not schedule Pi warmup concurrently.
 
 ---
 
@@ -50,3 +50,7 @@ Inspect `python -m ctn.ops performance --group-by occupation_group --format mark
 | Timestamp (AEST) | Account | Branch / Template | Target Tag / Post | Post Summary | Platform PostID | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | *(No posts yet)* | - | - | - | Campaign initialized; awaiting first pulse execution | - | - |
+
+## RAG before strategic publication
+
+Query `python -m ctn.rag query --purpose P01 --text "<actual question or proposed topic>" --json` using the shared state file. Read the typed facts, attributed claims, arguments and unknowns. Use persona voice; style is reference only. Pass the returned ID to `ctn.macro publish --rag-snapshot <id>`. Read the actual published/simulated/unknown result before updating the harness.

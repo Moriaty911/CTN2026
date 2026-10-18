@@ -148,7 +148,7 @@ class BrainTests(unittest.TestCase):
                     self.assertEqual(verdict.text, REPLY)
                     self.assertEqual(len(llm_calls), 1)
 
-    def test_opposing_standard_post_without_raw_platform_level_is_replied_not_dropped(self):
+    def test_opposing_missing_platform_level_stays_unknown_without_generation(self):
         cases = [
             ("question", "policy_proposal", "Why mandate H2D2 on public buses?", "P02"),
             ("argument", "policy_proposal", "A citywide transit mandate hurts small shops.", "P03"),
@@ -177,9 +177,9 @@ class BrainTests(unittest.TestCase):
                 brain = make_brain(workflow, llm)
                 # Post has empty raw={} (no explicit platform_level)
                 verdict = brain.think(Post(f"opp_{idx}", "citizen_opp", text))
-                self.assertEqual(verdict.action, ActionKind.REPLY, verdict.reason)
-                self.assertEqual(verdict.prompt_type, expected_purpose)
-                self.assertEqual(len(llm_calls), 1)
+                self.assertEqual(brain._infer_platform_level(Post('unknown','dr_unverified',text)), 'unknown')
+                self.assertEqual(verdict.action, ActionKind.NONE, verdict.reason)
+                self.assertEqual(len(llm_calls), 0)
 
 
 class EndToEndTests(unittest.TestCase):

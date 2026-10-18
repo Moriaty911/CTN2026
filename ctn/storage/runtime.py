@@ -14,7 +14,7 @@ from pathlib import Path
 
 DEFAULT_EVIDENCE_POLICY=json.loads((Path(__file__).resolve().parents[2]/"policies/evidence-v1.json").read_text())
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 RUNTIME_SCHEMA = """
 CREATE TABLE IF NOT EXISTS runtime_policy(key TEXT PRIMARY KEY,value_json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS action_intents(
@@ -146,7 +146,7 @@ class RuntimeStoreMixin:
                 if not exists:
                     self.get_account_state(p.account_id)
                     self._conn.execute("UPDATE account_states SET mode='standby' WHERE account_id=?",(p.account_id,))
-            for key,value in (('original_lock_seconds',86400),('daily_original_limit',10),('phase','warmup')):
+            for key,value in (('original_lock_seconds',86400),('daily_original_limit',10),('daily_warmup_limit',15),('phase','warmup')):
                 if self.policy(key) is None:self.set_policy(key,value)
             if self.policy('evidence_policy') is None: self.set_policy('evidence_policy',DEFAULT_EVIDENCE_POLICY)
             self.set_policy('campaign_seeded',True)
@@ -197,6 +197,8 @@ class RuntimeStoreMixin:
         from .sqlite_store import normalize_text,compute_post_norm_hash
         subject = (compute_post_norm_hash(text) or normalize_text(text)) if kind=='post' else str(target)
         owner = account if kind in ('like','repost','follow','unfollow','delete_account') else 'team'
+        if kind in ('report','report_account') and (metadata or {}).get('report_attempt_id'):
+            subject=[str(target),metadata['report_attempt_id']]
         if kind=='reply' and (metadata or {}).get('reply_batch_id'):
             subject=[str(target),metadata['reply_batch_id'],metadata['reply_slot']]
         return hashlib.sha256(json.dumps([self.policy('campaign_id','ctn2026'),kind,owner,subject]).encode()).hexdigest()
@@ -219,6 +221,12 @@ class RuntimeStoreMixin:
             old=self._conn.execute('SELECT * FROM action_intents WHERE action_key=?',(key,)).fetchone()
             if old and old['status']!='failed':
                 return None, 'action_'+old['status']
+            if kind in ('post','reply'):
+                ready,reason=self.publication_gate(text,meta)
+                if not ready:return None,reason
+                if self.policy('require_warmup',False) and meta.get('purpose')!='warmup':
+                    warm=self._conn.execute('SELECT warmed_at FROM account_readiness WHERE account_id=?',(account,)).fetchone()
+                    if not warm or not warm[0]:return None,'account_needs_warmup'
             st=self.get_account_state(account)
             if st.is_disabled() and kind!='delete_account':
                 return None,'account_disabled'
@@ -245,7 +253,9 @@ class RuntimeStoreMixin:
                 # Reservations and uncertain sends consume quota until reconciled.
                 rows=self._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' "
                     "AND status IN ('claimed','sending','unknown','succeeded')").fetchall()
-                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day for r in rows)>=int(self.policy('daily_original_limit',10)):
+                warmup=meta.get('purpose')=='warmup'
+                limit=self.policy('daily_warmup_limit',15) if warmup else self.policy('daily_original_limit',10)
+                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose')=='warmup')==warmup for r in rows)>=int(limit):
                     return None,'daily_original_limit'
             if kind in ('report','report_account'):
                 if self.is_reporting_suspended(now=ts)[0]:
@@ -261,10 +271,14 @@ class RuntimeStoreMixin:
                 intents=self._conn.execute("SELECT metadata_json FROM action_intents WHERE kind IN ('report','report_account') "
                     "AND status IN ('claimed','sending','unknown')").fetchall()
                 authors=[r[0] for r in pending]+[json.loads(r[0]).get('target_author') for r in intents]
-                if len(authors)>=int(self.policy('max_pending_reports',10)):
+                if len(authors)>=int(self.policy('max_pending_reports',5)):
                     return None,'pending_team_limit'
                 if authors.count(author)>=int(self.policy('max_pending_per_author',1)):
                     return None,'pending_author_limit'
+            if kind in ('report','report_account'):
+                if kind=='report' and self._conn.execute("SELECT 1 FROM action_intents WHERE kind='report' AND target_id=? AND status!='failed' LIMIT 1",(target,)).fetchone():return None,'report_target_already_claimed'
+                ready,reason=self.report_authorization(kind,target,meta,now=ts)
+                if not ready:return None,reason
             ident=old['id'] if old else uuid.uuid4().hex
             self._conn.execute('INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,'
                 'lease_until,created_at,updated_at,metadata_json) VALUES(?,?,?,?,?,?,\'claimed\',?,?,?,?,?) '
@@ -272,6 +286,16 @@ class RuntimeStoreMixin:
                 'lease_until=excluded.lease_until,updated_at=excluded.updated_at,detail=\'\','
                 'account_id=excluded.account_id,text=excluded.text,metadata_json=excluded.metadata_json,response_json=\'{}\'',
                 (ident,key,kind,account,target,text,uuid.uuid4().hex,ts+900,ts,ts,json.dumps(meta)))
+            if kind in ('post','reply'):
+                from .sqlite_store import normalize_text
+                normalized=normalize_text(text)
+                self._conn.execute('INSERT INTO publication_texts VALUES(?,?,?) ON CONFLICT(action_id) DO UPDATE SET text_hash=excluded.text_hash,normalized_text=excluded.normalized_text',(ident,hashlib.sha256(normalized.encode()).hexdigest(),normalized))
+            if kind in ('report','report_account'):
+                attempt=meta.get('report_attempt_id') or ident
+                self._conn.execute("INSERT INTO report_attempts VALUES(?,?,?,?,?,?,'claimed',?,0,'',?) ON CONFLICT(action_id) DO UPDATE SET status='claimed',payload_json=excluded.payload_json",
+                    (attempt,ident,'account' if kind=='report_account' else 'post',target,meta.get('target_author',target),'',ts,json.dumps(meta)))
+                if meta.get('approval_id'):
+                    self._conn.execute("UPDATE report_approvals SET consumed_by=? WHERE id=? AND consumed_by=''",(ident,meta['approval_id']))
             if kind in ('post','reply'):
                 self._conn.execute('INSERT INTO account_leases VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE '
                     'SET action_id=excluded.action_id,lease_until=excluded.lease_until',(account,ident,ts+900))
@@ -289,12 +313,14 @@ class RuntimeStoreMixin:
                 "(SELECT id FROM action_intents WHERE status='unknown')")
             self._conn.execute("UPDATE action_intents SET status='failed',detail='claim_expired_before_send' "
                 "WHERE status='claimed' AND lease_until<?",(ts,))
+            self._conn.execute("UPDATE report_attempts SET status=(SELECT status FROM action_intents WHERE id=action_id) WHERE status IN ('claimed','sending') AND action_id IN (SELECT id FROM action_intents WHERE status IN ('unknown','failed'))")
             self._conn.execute('DELETE FROM account_leases WHERE lease_until<?',(ts,))
             self._conn.execute("INSERT OR IGNORE INTO account_leases(account_id,action_id,lease_until) SELECT account_id,MIN(id),1e20 "
                 "FROM action_intents WHERE status='unknown' AND kind IN ('post','reply') GROUP BY account_id")
 
     def start_action(self, ident):
         with self.batch_transaction():
+            self._conn.execute("UPDATE report_attempts SET status='sending' WHERE action_id=? AND status='claimed'",(ident,))
             return self._conn.execute("UPDATE action_intents SET status='sending',updated_at=? "
                 "WHERE id=? AND status='claimed'",(time.time(),ident)).rowcount==1
 
@@ -312,6 +338,9 @@ class RuntimeStoreMixin:
             row=self._conn.execute('SELECT * FROM action_intents WHERE id=?',(ident,)).fetchone()
             if not row or row['status']!='sending': return False,'action_not_sending'
             meta=json.loads(row['metadata_json'])
+            if row['kind'] in ('post','reply'):
+                ready,reason=self.publication_gate(row['text'],meta,exclude_action=ident)
+                if not ready:return False,reason
             ready,reason=self.catalog_write_ready(row['account_id'],meta)
             if not ready:return False,reason
             if row['kind'] in ('post','reply'):
@@ -333,7 +362,9 @@ class RuntimeStoreMixin:
                 day=current_sydney_day(ts)
                 others=self._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' "
                     "AND status IN ('claimed','sending','unknown','succeeded') AND id<>?",(ident,)).fetchall()
-                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day for r in others)>=int(self.policy('daily_original_limit',10)):
+                warmup=meta.get('purpose')=='warmup'
+                limit=self.policy('daily_warmup_limit',15) if warmup else self.policy('daily_original_limit',10)
+                if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose')=='warmup')==warmup for r in others)>=int(limit):
                     return False,'daily_original_limit'
                 self._conn.execute("UPDATE action_intents SET metadata_json=json_set(metadata_json,'$.execution_day',?) WHERE id=?",(day,ident))
             if row['kind'] in ('report','report_account'):
@@ -341,6 +372,8 @@ class RuntimeStoreMixin:
                 prof=self.get_bot_profile(meta.get('target_author',row['target_id']))
                 if prof.get('verified') or prof['status'] in ('own_bot','verified_npc'): return False,'protected_account'
                 if not self.report_evidence_ready(prof): return False,'evidence_changed'
+                ready,reason=self.report_authorization(row['kind'],row['target_id'],{**meta,'_action_id':ident},now=ts,sending=True)
+                if not ready:return False,reason
             return True,'ready'
 
     def finish_action(self, ident, status, *, response=None, detail='', now=None):
@@ -353,6 +386,9 @@ class RuntimeStoreMixin:
                 return False
             self._conn.execute('UPDATE action_intents SET status=?,updated_at=?,detail=?,response_json=? WHERE id=?',
                 (status,ts,detail,json.dumps(response or {}),ident))
+            self._conn.execute("UPDATE report_attempts SET status=?,report_id=?,submitted_at=CASE WHEN ?='succeeded' THEN ? ELSE submitted_at END WHERE action_id=?",
+                ('pending' if status=='succeeded' else status,str((response or {}).get('report_id','')),status,ts,ident))
+            self.set_counter('business_progress_ms',max(self.get_counter('business_progress_ms'),int(ts*1000)))
             if status != 'unknown':
                 self._conn.execute('DELETE FROM account_leases WHERE action_id=?',(ident,))
             else:
@@ -375,10 +411,12 @@ class RuntimeStoreMixin:
                     self._conn.execute('UPDATE report_log SET report_id=? WHERE post_id=?',
                         (str((response or {}).get('report_id','')),r['target_id']))
                 elif r['kind']=='report_account':
-                    self._conn.execute('INSERT INTO account_reports VALUES(?,?,\'pending\',?,0,?)',
+                    self._conn.execute("INSERT INTO account_reports VALUES(?,?,'pending',?,0,?) ON CONFLICT(target_author) DO UPDATE SET report_id=excluded.report_id,outcome='pending',submitted_at=excluded.submitted_at,ruled_at=0,reason=excluded.reason",
                         (r['target_id'],str((response or {}).get('report_id','')),ts,meta.get('detail','')))
                 if r['kind'] in ('post','reply'):
                     self.mark_account_used(r['account_id'],now=ts,kind=r['kind'],target_stance=meta.get('target_stance',''))
+                    if r['kind']=='post' and meta.get('purpose')=='warmup':
+                        self._conn.execute('INSERT INTO account_readiness VALUES(?,?) ON CONFLICT(account_id) DO UPDATE SET warmed_at=excluded.warmed_at',(r['account_id'],ts))
                 self.log_interaction(engine=meta.get('engine','micro'),account_id=r['account_id'],action=r['kind'],
                     target_post_id=str(((response or {}).get('post_id') or r['target_id']) if r['kind']=='post' else r['target_id']),
                     target_author=meta.get('target_author',''),target_stance=meta.get('target_stance',''),
@@ -400,9 +438,10 @@ class RuntimeStoreMixin:
         ts=time.time() if now is None else float(now)
         with self.batch_transaction():
             # The persistent plan owns this target, including after a restart or edit.
-            planned=self._conn.execute('SELECT target_version FROM reply_batches WHERE target_id=?',(post_id,)).fetchone()
+            self._expire_reply_batches(ts)
+            planned=self._conn.execute("SELECT target_version FROM reply_batches WHERE target_id=? AND (target_version=? OR status IN ('active','paused') OR EXISTS (SELECT 1 FROM action_intents WHERE kind='reply' AND target_id=? AND status IN ('sending','unknown','succeeded'))) ORDER BY created_at DESC LIMIT 1",(post_id,version,post_id)).fetchone()
             self._conn.execute("UPDATE post_tasks SET status='skipped',reason='superseded' WHERE post_id=? "
-                "AND version<>? AND status IN ('queued','claimed')",(post_id,version))
+                "AND version<>? AND status IN ('queued','claimed','waiting_materials')",(post_id,version))
             self._conn.execute('INSERT OR IGNORE INTO post_tasks(post_id,version,next_attempt_at,expires_at) VALUES(?,?,?,?)',
                 (post_id,version,ts,ts+ttl))
             if planned:
@@ -424,14 +463,17 @@ class RuntimeStoreMixin:
             return [{**dict(r),'owner':owner} for r in rows]
 
     def update_post_task(self, task, status, *, reason='', delay=0, draft=None, draft_at=None, now=None):
-        if status not in ('queued','planned','succeeded','skipped','expired','unknown','simulated'):
+        if status not in ('queued','planned','succeeded','skipped','expired','unknown','simulated','waiting_materials'):
             raise ValueError('invalid task status')
         ts=time.time() if now is None else float(now)
         with self.batch_transaction():
-            return self._conn.execute('UPDATE post_tasks SET status=?,reason=?,next_attempt_at=?,lease_until=0,'
+            changed=self._conn.execute('UPDATE post_tasks SET status=?,reason=?,next_attempt_at=?,lease_until=0,'
                 'draft_json=?,draft_at=? WHERE post_id=? AND version=? AND owner=? AND status=\'claimed\'',
                 (status,reason,ts+delay,json.dumps(draft) if draft else '',(draft_at or ts) if draft else 0,
                  task['post_id'],task['version'],task['owner'])).rowcount==1
+            if changed and status!='queued':
+                self.set_counter('business_progress_ms',max(self.get_counter('business_progress_ms'),int(ts*1000)))
+            return changed
 
     def post_task_send_ready(self, task, *, now=None):
         ts=time.time() if now is None else float(now)
@@ -469,7 +511,9 @@ class RuntimeStoreMixin:
                 'reporting_suspended_s':self.is_reporting_suspended(now=ts)[1]}
 
     def record_confirmed_activity(self, account, count, *, observed_at, source):
-        if type(count) is not int or count<0 or not source or observed_at<=0:
+        import math
+        if (type(count) is not int or count<0 or not isinstance(account,str) or not account.strip() or
+            not isinstance(source,str) or not source.strip() or type(observed_at) not in (int,float) or not math.isfinite(observed_at) or observed_at<=0):
             raise ValueError('activity requires explicit count, observation time and source')
         with self.batch_transaction():
             self._conn.execute('INSERT INTO confirmed_account_activity VALUES(?,?,?,?) ON CONFLICT(account_id) '

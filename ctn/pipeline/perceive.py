@@ -43,6 +43,11 @@ def post_from_dict(row: dict[str, Any]) -> Post | None:
     except (TypeError, ValueError):
         created_at = 0.0
 
+    original=row.get('raw')
+    raw=dict(row)
+    if isinstance(original,dict):
+        raw={**original,**{k:v for k,v in row.items() if k not in ('raw','raw_json')}}
+        raw['_metric_presence']=original.get('_metric_presence',[k for k in ('likes','replies','reposts') if k in original])
     return Post(
         post_id=post_id,
         author=str(row.get("author", "")),
@@ -52,7 +57,7 @@ def post_from_dict(row: dict[str, Any]) -> Post | None:
         reposts=as_int("reposts"),
         replies=as_int("replies"),
         hashtags=[str(tag) for tag in row.get("hashtags", []) or []],
-        raw=dict(row),
+        raw=raw,
     )
 
 

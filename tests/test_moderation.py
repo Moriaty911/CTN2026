@@ -95,13 +95,18 @@ class BlueTeamReporterTests(unittest.IsolatedAsyncioTestCase):
             max_reports_per_step=10,enabled=True,event_source=MockModerationSource(),
         )
 
+    async def approved_sweep(self):
+        from tests.runtime_helpers import approve_synthetic_reports
+        approve_synthetic_reports(self.store)
+        return await self.reporter.sweep_and_report()
+
     async def seed(self,author,count=3):
         text='As an AI, this synthetic repeated template describes transit access conditions for workers and families in the offline test.'
         for i in range(count):
             row=await self.client.post(author,text+' '+str(i))
             self.store.upsert_observed_post(row)
-        self.store.add_weighted_evidence(author,'leak',50,{'post_id':row['post_id']},evidence_key='leak')
-        self.store.add_weighted_evidence(author,'repetition',35,{'post_id':row['post_id']},evidence_key='repeat')
+        self.store.add_weighted_evidence(author,'leak',50,{'post_id':row['post_id'],'version':1},evidence_key='leak')
+        self.store.add_weighted_evidence(author,'repetition',35,{'post_id':row['post_id'],'version':1},evidence_key='repeat')
 
     def ruling(self,pid,outcome,event_id):
         return self.store.apply_moderation_event({'event_id':event_id,'subject_kind':'post','subject_id':pid,
@@ -110,45 +115,47 @@ class BlueTeamReporterTests(unittest.IsolatedAsyncioTestCase):
     async def test_three_separate_upheld_events_suspend_account(self):
         await self.seed('enemy',4)
         for i in range(3):
-            batch=await self.reporter.sweep_and_report()
+            batch=await self.approved_sweep()
             self.assertEqual(batch.submitted_count,1)
             self.assertEqual(batch.upheld_count,0)
             self.assertEqual(self.store.get_bot_profile('enemy')['upheld_strikes'],i)
             self.ruling(batch.attempts[0].post_id,'upheld',str(i))
         self.assertTrue(self.store.get_bot_profile('enemy')['is_suspended'])
-        self.assertEqual((await self.reporter.sweep_and_report()).submitted_count,0)
+        self.assertEqual((await self.approved_sweep()).submitted_count,0)
 
     async def test_pending_cap_releases_after_ruling_without_daily_hoarding(self):
-        for i in range(11): await self.seed('enemy'+str(i),1)
-        batch=await self.reporter.sweep_and_report()
-        self.assertEqual(batch.submitted_count,10)
-        self.assertEqual((await self.reporter.sweep_and_report()).submitted_count,0)
+        for i in range(6): await self.seed('enemy'+str(i),1)
+        batch=await self.approved_sweep()
+        self.assertEqual(batch.submitted_count,5)
+        self.assertEqual((await self.approved_sweep()).submitted_count,0)
         for i,attempt in enumerate(batch.attempts): self.ruling(attempt.post_id,'upheld',str(i))
-        remaining=await self.reporter.sweep_and_report()
+        remaining=await self.approved_sweep()
         self.assertEqual(remaining.submitted_count,1)
         self.assertEqual(remaining.hoarded_for_tomorrow,[])
 
     async def test_noisy_rejection_suspends_reporting_without_certifying_identity(self):
         await self.seed('uncertain',1)
-        batch=await self.reporter.sweep_and_report()
+        batch=await self.approved_sweep()
         self.ruling(batch.attempts[0].post_id,'rejected','rejected')
         self.assertTrue(self.store.is_reporting_suspended()[0])
         prof=self.store.get_bot_profile('uncertain')
         self.assertFalse(prof['verified'])
         self.assertEqual(prof['suspicion_score'],80)
         self.assertNotEqual(prof['status'],'verified_npc')
-        self.assertTrue((await self.reporter.sweep_and_report()).suspended)
+        self.assertTrue((await self.approved_sweep()).suspended)
 
     async def test_pending_releases_and_missing_history_is_backfilled(self):
         await self.seed('enemy',1)
-        first=await self.reporter.sweep_and_report()
+        first=await self.approved_sweep()
         self.assertEqual(first.submitted_count,1)
         self.assertEqual(self.store.get_bot_profile('enemy')['upheld_strikes'],0)
-        self.assertEqual((await self.reporter.sweep_and_report()).submitted_count,0)
+        self.assertEqual((await self.approved_sweep()).submitted_count,0)
         self.ruling(first.attempts[0].post_id,'upheld','first')
         hidden=await self.client.post('enemy','An older uncollected post with actual inspectable text.')
         self.assertIsNone(self.store.get_observed_post(hidden['post_id']))
-        second=await self.reporter.sweep_and_report()
+        # Backfill creates a new candidate; that newly observed target needs approval.
+        self.assertEqual((await self.approved_sweep()).submitted_count,0)
+        second=await self.approved_sweep()
         self.assertEqual(second.submitted_count,1)
         self.assertIsNotNone(self.store.get_observed_post(hidden['post_id']))
         self.assertEqual(self.store.get_bot_profile('enemy')['upheld_strikes'],1)

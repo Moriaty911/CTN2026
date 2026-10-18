@@ -267,8 +267,8 @@ class PersistentBatchTests(unittest.TestCase):
             store.set_account_frozen('fresh_yes_001',True)
             store._conn.execute('PRAGMA user_version=3');store.close()
             reopened=StateStore(path);self.addCleanup(reopened.close)
-            self.assertEqual(reopened._conn.execute('PRAGMA user_version').fetchone()[0],4)
-            self.assertTrue(Path(str(path)+'.before-v4.bak').exists())
+            self.assertEqual(reopened._conn.execute('PRAGMA user_version').fetchone()[0],5)
+            self.assertTrue(Path(str(path)+'.before-v5.bak').exists())
             self.assertTrue(reopened.get_account_state('fresh_yes_001').is_frozen)
             self.assertEqual(before,[tuple(r) for r in reopened._conn.execute('SELECT persona_id,account_id FROM reply_slots ORDER BY slot')])
             self.assertIsNotNone(reopened.claim_reply_slot())
@@ -438,7 +438,7 @@ class PerformanceTests(unittest.TestCase):
                 self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0],3)
                 self.assertIsNone(conn.execute("SELECT name FROM sqlite_master WHERE name='should_rollback'").fetchone())
                 self.assertEqual(conn.execute("SELECT mode,post_count FROM account_states WHERE account_id='old_identity'").fetchone(),('dormant',1))
-            with closing(sqlite3.connect(str(path)+'.before-v4.bak')) as backup:
+            with closing(sqlite3.connect(str(path)+'.before-v5.bak')) as backup:
                 self.assertEqual(backup.execute('PRAGMA user_version').fetchone()[0],3)
 
 

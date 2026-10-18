@@ -1,6 +1,6 @@
 本批 80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[80 人预览](docs/personas-80/preview.md)。新人设默认未绑定，绑定后待命。
 
-YES RAG 语料第一步：见 [四类材料、来源与整理说明](docs/rag-yes-v1/README.md)及[审阅预览](docs/rag-yes-v1/preview.md)。正式语料在 `config/rag/yes.v1.json`，当前仅完成离线整理，尚未接入 Pi/JEV 或自动发布。
+YES RAG 静态基础语料：见 [四类材料、来源与整理说明](docs/rag-yes-v1/README.md)及[审阅预览](docs/rag-yes-v1/preview.md)。当前版本为 `config/rag/yes.v1.1.json`，原 v1 保留供回放；仅完成离线整理，尚未接入 Pi/JEV、自动发布或持续新闻/VIP 采集。
 
 运行入口与本轮修复：见 [修复交付说明](docs/repair-2026-10-17/implementation.md)、[启动和恢复](docs/repair-2026-10-17/operations.md)、[当前三棵逻辑树](docs/personas-80/logic-trees.md)。正式服务使用 `python -m ctn.main`；首次离线验证使用 `--mock --side yes --state-file state/mock.sqlite3 --once`。
 
@@ -557,12 +557,12 @@ python3 -m ctn.jev.smoke
 
 | Item | Required next step |
 |---|---|
-| Platform input mapping | Upstream supplies standardized content through the input contract. |
+| Platform input mapping | Official adapter and SQLite restoration are connected; verify actual live field availability. |
 | Official account-level labels | Confirm explicit label-to-`standard`/`high` mappings. |
-| Neutral/mixed generation integration | Consume JEV decisions, supply a same-purpose brief, and generate from checked materials. Calibrate action/purpose selection and the probability/margin gates with real samples. |
+| Neutral/mixed generation integration | Connected to checked materials and generation. Calibrate action/purpose selection with real samples. |
 | Independent engagement triggers | Define and review thresholds before enabling overrides. |
 | Historical retrieval and frequency statistics | Another module supplies candidate pairs and manages storage/counting. |
-| Draft review and account execution | Downstream supplies briefs, selects purposes for aligned/opposing posts and actual accounts, reviews generated text, checks execution limits, and publishes. DeepSeek drafting is implemented separately. |
+| Draft review and account execution | Implemented in the shared runtime and postflight.v3; live validation and outcome calibration remain pending. |
 | Real feedback | The feedback owner provides linked observations with source, time, and missing-data information. |
 | T10 calibration | Review real samples and outcome feedback, compare concrete versions, and explicitly decide which changes to adopt. |
 | Injection resilience | Calibrate with real JEV adversarial assessments, track missed attacks and benign review burden, and integrate downstream permission/output safeguards. |
@@ -570,3 +570,7 @@ python3 -m ctn.jev.smoke
 General platform/fleet/budget defaults and older policy sketches elsewhere in the repository are development scaffolding, not verified 2026 quotas, scoring formulas, or the active JEV action policy. Confirm applicable competition data-handling requirements before using real competition materials with external services.
 
 Provider references: [TypeSafe API](https://docs.typesafe.ai/api) and [question primitives](https://docs.typesafe.ai/primitives). Scope and deployment remain the responsibility of the project integrators; the module's current decisions and signals do not constitute a demonstrated strategy outcome.
+
+## 2026-10-18 runtime v5
+
+Source-bound static RAG, shared publication deduplication, staged fleet operations and mixed reporting are implemented. See [runbook](docs/implementation-2026-10-18/runbook.md), [three logic trees](docs/implementation-2026-10-18/logic-trees.md) and [offline validation](docs/implementation-2026-10-18/validation.json). Live reporting remains blocked until actual moderation/report-clearance capability is verified. No production writes were performed during this implementation.

@@ -43,6 +43,14 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
     if min(settings.max_pending_reports,settings.max_pending_per_author)<0: raise ValueError('negative pending report limit')
     store.set_policy('max_pending_reports',settings.max_pending_reports)
     store.set_policy('max_pending_per_author',settings.max_pending_per_author)
+    store.set_policy('report_mode',settings.report_mode)
+    store.set_policy('require_warmup',mode!='mock')
+    from .rag.corpus import Corpus
+    corpus=Corpus(settings.rag_corpus or None)
+    corpus.install_sources(store)
+    if mode=='live' and not any(not s.is_disabled() for s in store.account_states_for(store.persona_bindings().values()).values()):
+        store.close()
+        raise ValueError('live service needs a bound active account; use explicit fleet operations first')
     telemetry=Telemetry(settings.log_dir,settings.log_level)
     stop=asyncio.Event()
     for signum in (signal.SIGINT,signal.SIGTERM):
@@ -66,12 +74,12 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             jev,packer=JevPacker(verified_references=refs),
             post_questions=load_rubric("post",version=ACTIVE_POST_VERSION)))
         brain=JevLlmBrain(workflow,ReplyGenerator(workflow,llm),side=settings.side,router=router,
-            postflight=JevPostflightChecker(jev),trusted_background=refs)
+            postflight=JevPostflightChecker(jev),trusted_background=refs,corpus=corpus)
     accounts=[p.account_id for p in router.registry.list_by_side(settings.side.value) if p.account_id]
     loop=BotLoop(actuator,side=settings.side,accounts=accounts,store=store,brain=brain,telemetry=telemetry)
     performance=PerformanceCollector(actuator,router)
     source=UnavailableModerationSource()
-    loop.reporter.enabled=settings.auto_reports
+    loop.reporter.enabled=settings.report_mode!="off"
     loop.reporter.event_source=source
     if mode=='live' and brain is None: raise ValueError('live replies require configured JEV and LLM')
     # Read-only/dry sessions without model credentials collect only, never substitute heuristics for live decisions.
@@ -84,9 +92,13 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         now=time.time()
         payload={**runtime,'alive':running,'timestamp':now,'mode':mode,'workers':progress,'error':error,
             'tasks':counts,
-            'moderation_capability':'unavailable','auto_reports_effective':False,
+            'side':settings.side.value,'report_mode':settings.report_mode,'active_accounts':sum(not s.is_disabled() for s in store.account_states_for(store.persona_bindings().values()).values()),
+            'rag_version':corpus.data['corpus_version'],'moderation_capability':'unavailable',
+            'auto_reports_effective':settings.report_mode=='hybrid' and store.report_state_ready(automatic=True)[0],
+            'report_block_reason':store.report_state_ready(automatic=settings.report_mode=='hybrid')[1],
             'business_stalled':bool((counts.get('queued',0) or runtime['reply_slots'].get('pending',0)) and process_replies and
-                now-progress.get('reply',{}).get('completed_at',started_at)>300),
+                now-(store.get_counter('business_progress_ms')/1000 or started_at)>300),
+            'last_business_progress_at':store.get_counter('business_progress_ms')/1000 or started_at,
             'requests':actuator.ledger.snapshot()}
         heartbeat.parent.mkdir(parents=True,exist_ok=True)
         tmp=heartbeat.with_suffix('.tmp')
@@ -95,9 +107,18 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         while not stop.is_set():
             start=time.monotonic()
             progress[name]={**progress.get(name,{}),'started_at':time.time()}
-            await step()
+            try:
+                await step()
+                progress[name].pop('error',None)
+                progress[name]['completed_at']=time.time()
+            except Exception as exc:
+                from .client.base import PlatformError
+                if not isinstance(exc,(PlatformError,TimeoutError,OSError)) or isinstance(exc,OSError) and not isinstance(exc,(TimeoutError,ConnectionError)):
+                    raise
+                progress[name]['error']=type(exc).__name__
+                telemetry.error('worker dependency failed',worker=name,error=type(exc).__name__)
             telemetry.metric('worker',worker=name,duration_s=round(time.monotonic()-start,3))
-            progress[name]['completed_at']=time.time()
+            progress[name]['attempted_at']=time.time()
             if once: return
             try: await asyncio.wait_for(stop.wait(),timeout=max(.01,interval-(time.monotonic()-start)))
             except asyncio.TimeoutError: pass
@@ -128,6 +149,9 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
                asyncio.create_task(worker('state',state_step,10)),
                asyncio.create_task(worker('heartbeat',lambda:asyncio.to_thread(write_heartbeat),5))]
         if process_replies: tasks.append(asyncio.create_task(worker('reply',loop.process_pending,1)))
+        if brain is not None:
+            from .warmup import warmup_step
+            tasks.append(asyncio.create_task(worker('warmup',lambda:warmup_step(actuator,router,brain.postflight),30)))
         tasks.append(asyncio.create_task(worker('performance',performance.step,30)))
         if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),60)))
         stopper=asyncio.create_task(shutdown_after_signal())

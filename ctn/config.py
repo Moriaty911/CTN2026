@@ -261,7 +261,7 @@ class LLMConfig:
     retry_initial_s: float = 1.0
     retry_max_s: float = 8.0
     max_tokens: int = 1536
-    max_reply_chars: int = 1200
+    max_reply_chars: int = 280
     max_request_bytes: int = 262_144
     max_response_bytes: int = 1_048_576
 
@@ -375,7 +375,9 @@ class Settings:
     mode: str = "mock"
     state_file: str = ""
     auto_reports: bool = False
-    max_pending_reports: int = 10
+    report_mode: str = "off"
+    rag_corpus: str = ""
+    max_pending_reports: int = 5
     max_pending_per_author: int = 1
 
     # ---- lifecycle ------------------------------------------------------- #
@@ -415,9 +417,13 @@ class Settings:
             mode=_env_str("CTN_MODE", "dry-run" if _env_bool("CTN_DRY_RUN", True) else "live"),
             state_file=_env_str("CTN_STATE_FILE"),
             auto_reports=_env_bool("CTN_AUTO_REPORTS", False),
-            max_pending_reports=_env_int("CTN_MAX_PENDING_REPORTS",10),
+            report_mode=_env_str("CTN_REPORT_MODE", "off"),
+            rag_corpus=_env_str("CTN_RAG_CORPUS"),
+            max_pending_reports=_env_int("CTN_MAX_PENDING_REPORTS",5),
             max_pending_per_author=_env_int("CTN_MAX_PENDING_PER_AUTHOR",1),
         )
+        if settings.report_mode not in {"off","manual","hybrid"}:
+            raise ValueError("CTN_REPORT_MODE must be off, manual or hybrid")
         return settings
 
     def execution_mode(self, override: str | None = None) -> str:

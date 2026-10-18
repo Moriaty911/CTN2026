@@ -336,7 +336,7 @@ class OfficialLegitClient(LegitClient):
         platform_level = str(
             raw.get("platform_level")
             or raw.get("author_level")
-            or ("verified" if is_verified else "standard")
+            or ("verified" if is_verified else "unknown")
         ).strip()
 
         out: dict[str, Any] = {
@@ -386,7 +386,10 @@ class OfficialLegitClient(LegitClient):
             if exc.status == 401:
                 return AuthError(exc.message)
             if exc.status == 403:
-                if "suspended" in msg_low:
+                reporting_denial="report" in msg_low and any(word in msg_low for word in ("suspend","ban","disabled","not allowed"))
+                if reporting_denial:
+                    return PlatformError(exc.message,retryable=False,status=403)
+                if re.search(r"\baccount\s+(?:(?:is|has been)\s+)?suspended\b",msg_low):
                     if (
                         account
                         and self.store is not None
@@ -395,7 +398,7 @@ class OfficialLegitClient(LegitClient):
                         self.store.mark_managed_account_status(account, "suspended")
                     return AccountSuspended(exc.message, account=account or "")
                 return PlatformError(exc.message, retryable=False, status=403)
-            body_retryable = isinstance(exc.body, Mapping) and bool(exc.body.get("retryable"))
+            body_retryable = isinstance(exc.json, Mapping) and bool(exc.json.get("retryable"))
             retryable = body_retryable or (
                 exc.status in {408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524}
             )

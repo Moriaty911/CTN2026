@@ -98,6 +98,9 @@ def validate(corpus, schema, cases, root=ROOT):
     for style in corpus['style_examples']:
         require(style['argument_id'] in records and style['argument_id'].startswith('A'), f'{style["id"]}: missing argument')
         require(set(style['purposes']) <= purposes, f'{style["id"]}: unsupported purpose')
+        # argument_id is topic context, not an inherited purpose restriction.
+        if 'P02' in style['purposes']:
+            require(style.get('fact_ids') or style.get('unknown_ids'), f'{style["id"]}: direct answer needs explicit basis references')
         key = re.sub(r'\W+', ' ', style['text'].casefold()).strip()
         require(key not in normalised, f'{style["id"]}: duplicate example')
         normalised.add(key)
@@ -154,7 +157,22 @@ def validate(corpus, schema, cases, root=ROOT):
             for target in case[field]:
                 require(target in records and target.startswith(prefix), f'{case["id"]}: invalid expected record')
                 coverage.add(target)
+        if 'expected_style_ids' in case:
+            require(case.get('purpose') in purposes, f'{case["id"]}: missing/invalid style purpose')
+            require(type(case['expected_style_ids']) is list, f'{case["id"]}: invalid style list')
+            for sid in case['expected_style_ids']:
+                require(sid in records and sid.startswith('S'), f'{case["id"]}: invalid expected style')
+                require(case['purpose'] in records[sid]['purposes'], f'{case["id"]}: style does not support requested purpose')
     require({r['id'] for r in corpus['unknowns']} <= coverage, 'an unknown category has no acceptance question')
+    style_purposes = Counter(p for row in corpus['style_examples'] for p in row['purposes'])
+    argument_facts = {fid for row in corpus['argument_cards'] for fid in row['fact_ids']}
+    argument_unknowns = {uid for row in corpus['argument_cards'] for uid in row['unknown_ids']}
+    requirements = corpus.get('coverage_requirements', {})
+    require(set(requirements.get('required_style_purposes', [])) <= style_purposes.keys(), 'required style purpose has no examples')
+    for key, linked in (('required_argument_fact_ids', argument_facts),
+                        ('required_argument_unknown_ids', argument_unknowns),
+                        ('required_case_fact_ids', coverage)):
+        require(set(requirements.get(key, [])) <= linked, f'coverage requirement not met: {key}')
     return {
         'corpus_version': corpus['corpus_version'],
         'counts': {key: len(corpus[key]) for key in COLLECTIONS},
@@ -162,17 +180,27 @@ def validate(corpus, schema, cases, root=ROOT):
         'raw_dispositions': dict(Counter(r['disposition'] for r in review)),
         'acceptance_questions': len(cases['cases']),
         'max_example_characters': max(len(s['text']) for s in corpus['style_examples']),
+        'coverage': {
+            'style_purposes': dict(sorted(style_purposes.items())),
+            'facts_without_argument': [r['id'] for r in corpus['facts'] if r['id'] not in argument_facts],
+            'unknowns_without_argument': [r['id'] for r in corpus['unknowns'] if r['id'] not in argument_unknowns],
+            'facts_without_acceptance_question': [r['id'] for r in corpus['facts'] if r['id'] not in coverage],
+        },
+        'validation_scope': 'offline_corpus_metadata_only',
+        'style_copy_guard_implemented': None,
         'retrieval_tested': False,
-        'runtime_connected': False,
+        'runtime_connected': None,
     }
 
 
 def render(corpus, cases):
-    lines = ['# YES RAG v1 审阅预览', '',
-        '> 本文由 `config/rag/yes.v1.json` 生成；正式来源是 JSON。语料尚未接入运行链路。', '',
+    filename = 'yes.' + corpus['corpus_version'].removeprefix('yes.rag.') + '.json'
+    lines = [f'# YES RAG {corpus["corpus_version"].removeprefix("yes.rag.")} 审阅预览', '',
+        f'> 本文由 `config/rag/{filename}` 生成；正式来源是 JSON。本文只审阅静态内容；当前运行能力以 preflight 和运行测试为准。', '',
         f'版本：`{corpus["corpus_version"]}`；整理日期：{corpus["curated_on"]}。', '',
+        '范围：静态官方设定、用户原文和编辑补充。报纸背景不代表已采集新闻；不含持续新闻或 VIP 帖子库。', '',
         '以下内容仅属于虚构比赛设定。来源中的阵营预测保留归属，事实保留证据限定；示例与提案不能充当事实。', '',
-        '## 官方事实', '',
+        '## 官方背景、证据边界与归属主张', '',
         '来源：[官方设定](https://capturethenarrative.com/info/competitions/2026/setting/)。以下为来源快照，不是实时疫情或独立临床核验。', '']
     for f in corpus['facts']:
         lines += [f'### {f["id"]} · {f["title_zh"]}', '', f['text'], '',
@@ -181,14 +209,18 @@ def render(corpus, cases):
     lines += ['## YES 论点卡', '', '这些是政策判断、推理或实施提议；依赖事实见 ID，不代表效果已证实。', '']
     for a in corpus['argument_cards']:
         lines += [f'### {a["id"]} · {a["title_zh"]}', '', a['claim'], '', a['reasoning'], '',
-            '**应正面回应的质疑：** ' + a['fair_objection'], '',
+            '**可能遇到的合理质疑：** ' + a['fair_objection'], '',
             '**边界：** ' + a['response_boundary'], '',
             f'依据：{", ".join(a["fact_ids"])}；未知：{", ".join(a["unknown_ids"])}。',
             f'用途：{", ".join(a["purposes"])}；原文线索：{", ".join(a["raw_passage_ids"]) or "新增补充"}。', '']
-    lines += ['## 表达示例', '', '只参考表达；实际回复须适合人物、目的、材料和当前问题，不直接复制发布。', '']
+    lines += ['## 表达示例', '', '只参考表达；实际回复须适合人物、目的、材料和当前问题，不直接复制发布。', '',
+        '接入要求：每次生成提供 0 或 1 条，persona 声音优先，并检查近抄；这些运行能力尚未实现。', '',
+        '用途以示例自身 purposes 为准；argument_id 仅关联主题，不要求用途继承或一致。', '']
     for s in corpus['style_examples']:
         lines += [f'### {s["id"]} · {s["title_zh"]}', '', s['text'], '',
-            f'关联论点：{s["argument_id"]}；用途：{", ".join(s["purposes"])}；长度：{len(s["text"])}。', '']
+            f'主题关联：{s["argument_id"]}；用途：{", ".join(s["purposes"])}；长度：{len(s["text"])}。', '']
+        if s.get('fact_ids') or s.get('unknown_ids'):
+            lines += [f'示例内容依赖：{", ".join(s.get("fact_ids", []) + s.get("unknown_ids", []))}；实际生成仍须获得对应核准材料。', '']
     lines += ['## 未知事项', '', '未在材料中说明，不等于现实中不存在。以下处理方式供生成时参考，不是新公布的政策。', '']
     for u in corpus['unknowns']:
         lines += [f'### {u["id"]} · {u["title_zh"]}', '', u['question'], '',
@@ -206,6 +238,8 @@ def render(corpus, cases):
         expected = c['expected_fact_ids'] + c['expected_argument_ids'] + c['expected_unknown_ids']
         lines += [f'### {c["id"]}', '', c['query'], '',
             f'相关材料：{", ".join(expected)}。', '', c['constraint'], '']
+        if 'expected_style_ids' in c:
+            lines += [f'用途：{c["purpose"]}；参考示例：{", ".join(c["expected_style_ids"])}（仅校验元数据关系，尚未测试检索器）。', '']
     return '\n'.join(lines).rstrip() + '\n'
 
 
@@ -214,9 +248,9 @@ def main():
     parser.add_argument('--write-preview', action='store_true', help='Regenerate docs/rag-yes-v1/preview.md after successful checks')
     args = parser.parse_args()
     directory = ROOT / 'config/rag'
-    corpus = json.loads((directory / 'yes.v1.json').read_text())
+    corpus = json.loads((directory / 'yes.v1.1.json').read_text())
     schema = json.loads((directory / 'corpus.schema.json').read_text())
-    cases = json.loads((directory / 'review-cases.v1.json').read_text())
+    cases = json.loads((directory / 'review-cases.v1.1.json').read_text())
     result = validate(corpus, schema, cases)
     preview = ROOT / 'docs/rag-yes-v1/preview.md'
     expected = render(corpus, cases)

@@ -9,9 +9,8 @@ from __future__ import annotations
 
 SIDE_CORE_FRAMING: dict[str, str] = {
     "yes": (
-        "Campaign Stance (YES): Support sensible public health protections and H2D2 vaccination "
-        "readiness to keep Kingstonia's transit, hospitals, schools, and local economy safe from "
-        "Dolphin Flu disruptions."
+        "Campaign Stance (YES): Support requiring proof of H2D2 vaccination for access to public spaces. "
+        "Distinguish this policy judgment from evidence about outcomes; do not promise protection or implementation details."
     ),
     "no": (
         "Campaign Stance (NO): Defend voluntary healthcare decisions, informed consent, and "
@@ -31,8 +30,8 @@ PURPOSE_SIDE_GUIDANCE: dict[str, dict[str, str]] = {
             "using only verified supplied policy details; do not invent medical exemptions or statistics."
         ),
         "P03": (
-            "Acknowledge the point raised, then gently pivot or counter by showing why proactive "
-            "prevention beats reactive hospital crises and lock-downs."
+            "Represent the central objection fairly and answer it using supplied facts or explicit policy reasoning. "
+            "Do not replace a valid objection with an unrelated campaign slogan."
         ),
         "P07": (
             "Validate the author's practical concern with genuine empathy first, then reassure them "

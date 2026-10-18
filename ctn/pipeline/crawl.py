@@ -388,9 +388,9 @@ class CommentCrawler:
 
         has_cursor_attr = hasattr(rows, "next_cursor")
         caught_up_count = (int(target["replies_crawled"]) + len(report.new_comments)) >= total_replies
-        if not parsed:
-            # Empty page may be a failed read: just stamp the cooldown and retry later.
-            self.store.update_comment_crawl_state(pid, add_crawled=0, now=ts)
+        if getattr(rows,'read_failed',False):
+            report.skipped='read_failed'
+            self.store.update_comment_crawl_state(pid,add_crawled=0,now=ts)
         elif next_cursor:
             self.store.update_comment_crawl_state(pid,add_crawled=len(report.new_comments),
                 comment_cursor=str(next_cursor),now=ts)

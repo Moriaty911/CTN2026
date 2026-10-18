@@ -43,6 +43,7 @@ class ReplyDraftResult:
     usage: tuple[tuple[str, int], ...] = ()
     # Only local validated generation may populate this; normal audit output omits it.
     frozen_material_json: str = field(default="", repr=False)
+    rag_snapshot_id: str = ""
 
     def to_dict(self, *, include_text=False):
         if type(include_text) is not bool:
@@ -53,7 +54,7 @@ class ReplyDraftResult:
                 "prompt_version": self.prompt_version, "material_version": self.material_version,
                 "model": self.model, "needs": list(self.needs), "attempt_count": self.attempt_count,
                 "usage": dict(self.usage), "execution_authorized": False,
-                "semantic_review_required": True}
+                "semantic_review_required": True, "rag_snapshot_id": self.rag_snapshot_id}
         if include_text:
             data["reply"] = self.reply
         return data

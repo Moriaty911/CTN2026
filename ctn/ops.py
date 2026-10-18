@@ -1,4 +1,4 @@
-"""Local state operations. Never issues platform writes."""
+"""Local operations; only explicit fleet register/check commands access platform authentication."""
 from __future__ import annotations
 import argparse
 from contextlib import closing
@@ -19,8 +19,16 @@ def main(argv=None):
     p=subs.add_parser('backup');p.add_argument('destination')
     p=subs.add_parser('restore');p.add_argument('source');p.add_argument('destination')
     subs.add_parser('status')
+    subs.add_parser('preflight')
+    p=subs.add_parser('fleet');p.add_argument('operation',choices=['plan','register','check','import'])
+    p.add_argument('--size',type=int,choices=[30,50],default=30);p.add_argument('--account');p.add_argument('--source')
+    p.add_argument('--execute',action='store_true',help='explicitly execute the reviewed registration plan')
+    p=subs.add_parser('reports');p.add_argument('operation',choices=['list','approve','clearance'])
+    p.add_argument('--candidate');p.add_argument('--source')
+    p=subs.add_parser('rag-withdraw');p.add_argument('snapshot_id',nargs='?');p.add_argument('--reference');p.add_argument('--corpus-hash')
     p=subs.add_parser('account');p.add_argument('account_id');p.add_argument('--mode',choices=['active','standby','dormant'])
     p.add_argument('--tier',choices=['standard','high']);p.add_argument('--original-locked-until',type=float)
+    p=subs.add_parser('account-activity');p.add_argument('source',help='confirmed account_id/action_count/observed_at/source JSON')
     p=subs.add_parser('import-events');p.add_argument('source',help='JSON array of explicit, verified ruling events')
     p=subs.add_parser('import-accounts');p.add_argument('source',help='legacy JSON account-state mapping')
     p=subs.add_parser('background');p.add_argument('source',help='operator-verified BackgroundReference JSON array')
@@ -56,7 +64,71 @@ def main(argv=None):
     path=settings.database_path(args.state_file)
     store=StateStore(path)
     try:
-        if args.command=='backup':
+        if args.command=='preflight':
+            from .accounts import preflight
+            from .rag.corpus import Corpus
+            result=preflight(settings,store,corpus=Corpus(settings.rag_corpus or None))
+        elif args.command=='fleet':
+            from .accounts import fleet_plan,register_one,check_registration
+            from .persona.registry import PersonaRegistry
+            registry=PersonaRegistry().attach(store)
+            if args.operation=='plan':
+                result={'requested':args.size,'selected':fleet_plan(args.size,phase=store.policy('phase','warmup')),
+                    'platform_counts':store.get_managed_account_counts(),'note':'standby platform accounts also occupy server slots'}
+            elif args.operation=='import':
+                if not args.source:parser.error('fleet import requires --source')
+                records=json.loads(Path(args.source).read_text())
+                with store.batch_transaction():
+                    for row in records:
+                        store.bind_persona(row['persona_id'],row['account_id'])
+                        store.upsert_managed_account(row['account_id'],password=row.get('password'),token=row.get('token'),platform_account_id=row.get('platform_account_id'))
+                result={'imported':len(records),'mode':'standby'}
+            else:
+                if args.operation=='register' and not args.execute:parser.error('registration requires --execute; inspect fleet plan first')
+                from .client.legit_v1 import OfficialLegitClient
+                import asyncio
+                if not settings.platform.api_key:parser.error('platform credentials required')
+                client=OfficialLegitClient(url=settings.platform.base_url or None,team_key=settings.platform.api_key,
+                    default_password=settings.platform.bot_password,auto_register=False,store=store)
+                client.configure_pacing(settings.rate,settings.budget)
+                async def perform():
+                    try:
+                        if args.operation=='check':
+                            if not args.account:raise ValueError('check requires --account')
+                            return await check_registration(store,client,args.account)
+                        outcomes=[]
+                        for row in fleet_plan(args.size,phase=store.policy('phase','warmup')):
+                            if args.account and row['account_id']!=args.account:continue
+                            outcome=await register_one(store,client,row['persona_id'],row['account_id'],settings.platform.bot_password,
+                                max_active=settings.fleet.bot_accounts,max_total=settings.fleet.max_total_accounts)
+                            outcomes.append(outcome)
+                            if outcome['status'] in ('unknown','failed'):break
+                        return {'results':outcomes}
+                    finally:await client.close()
+                result=asyncio.run(perform())
+        elif args.command=='reports':
+            if args.operation=='approve':
+                if not args.candidate:parser.error('approve requires --candidate')
+                result={'approval_id':store.approve_report(args.candidate),'expires_in_s':300}
+            elif args.operation=='clearance':
+                if not args.source:parser.error('clearance requires operator evidence JSON')
+                proof=json.loads(Path(args.source).read_text())
+                if not proof.get('source') or proof.get('allowed') is not True:parser.error('clearance needs source and allowed=true')
+                store.set_policy('report_clearance',{'source':proof['source'],'allowed':True,
+                    'expires_at':time.time()+300,'live_source_verified':False})
+                result={'manual_clearance_expires_in_s':300,'automatic_capability':False}
+            else:
+                with store._lock:
+                    result={'state':store.report_state_ready(),'candidates':[dict(r) for r in store._conn.execute('SELECT * FROM report_candidates ORDER BY created_at DESC LIMIT 50')],
+                        'attempts':[dict(r) for r in store._conn.execute('SELECT * FROM report_attempts ORDER BY submitted_at DESC LIMIT 50')]}
+        elif args.command=='rag-withdraw':
+            if args.reference:
+                if args.snapshot_id or not args.corpus_hash:parser.error('reference withdrawal requires --corpus-hash and no snapshot ID')
+                result={'withdrawn':store.revoke_rag_reference(args.reference,args.corpus_hash)}
+            else:
+                if not args.snapshot_id:parser.error('snapshot ID or --reference required')
+                store.revoke_rag_snapshot(args.snapshot_id);result={'withdrawn':args.snapshot_id}
+        elif args.command=='backup':
             store.backup(args.destination);result={'backup':str(Path(args.destination).resolve())}
         elif args.command=='account':
             bindings=store.persona_bindings()
@@ -117,10 +189,17 @@ def main(argv=None):
             if args.action_id not in unknown: parser.error('action is not unknown')
             result={'resolved':store.finish_action(args.action_id,outcome,
                 response={**proof.get('response',{}),'operator_resolution':proof},detail='operator verified: '+proof['source'])}
+        elif args.command=='account-activity':
+            proof=json.loads(Path(args.source).read_text())
+            store.record_confirmed_activity(proof['account_id'],proof['action_count'],observed_at=proof['observed_at'],source=proof['source'])
+            result={'recorded':store.confirmed_activity(proof['account_id'])}
         elif args.command=='import-events':
             events=json.loads(Path(args.source).read_text())
-            with store.batch_transaction(): applied=sum(bool(store.apply_moderation_event(e)) for e in events)
-            result={'applied':applied,'events':len(events)}
+            applied=0;invalid=0
+            for event in events:
+                try:applied+=bool(store.apply_moderation_event(event))
+                except (ValueError,TypeError,KeyError):invalid+=1
+            result={'applied':applied,'events':len(events),'invalid':invalid}
         elif args.command=='background':
             from .jev import BackgroundReference,JevPacker
             data=json.loads(Path(args.source).read_text())

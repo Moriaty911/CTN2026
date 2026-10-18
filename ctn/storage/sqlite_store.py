@@ -194,7 +194,9 @@ def current_sydney_day(ts: float | None = None) -> str:
     return datetime.fromtimestamp(epoch, tz=SYDNEY_TZ).strftime("%Y-%m-%d")
 
 
-class StateStore(CampaignStoreMixin, RuntimeStoreMixin):
+from .operations import OperationsStoreMixin
+
+class StateStore(OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
     """SQLite-backed store for account cooldowns, post history mirror, bot intelligence, and reporting gates."""
 
     def __init__(self, db_path: str | Path = ":memory:") -> None:
@@ -233,6 +235,7 @@ class StateStore(CampaignStoreMixin, RuntimeStoreMixin):
                 self._ensure_columns()
                 self.migrate_runtime()
                 self.migrate_campaign()
+                self.migrate_operations()
                 for sql in statements:
                     if sql.startswith('CREATE INDEX'):
                         self._conn.execute(sql)

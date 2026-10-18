@@ -75,6 +75,7 @@ class StrategicPublisher:
         branch: str = "",
         target_text: str = "",
         bypass_jev: bool = False,
+        rag_snapshot_id: str = "",
     ) -> dict[str, Any]:
         """Publish a proactive post after cooldown and unified Layer-1 + Layer-2 verification."""
         now = time.time()
@@ -148,6 +149,23 @@ class StrategicPublisher:
                 "text": post_text,
             }
 
+        approved_materials=None
+        if purpose!='warmup':
+            from ctn.rag.corpus import Corpus
+            if rag_snapshot_id:
+                try:snapshot=self.router.store.load_rag_snapshot(rag_snapshot_id)
+                except ValueError:return {'ok':False,'status':'blocked','reason':'invalid_rag_snapshot'}
+            else:
+                if not (mock or self.actuator.dry_run):
+                    return {'ok':False,'status':'blocked','reason':'rag_snapshot_required'}
+                snapshot=Corpus().retrieve(target_text or text,purpose=purpose)
+                rag_snapshot_id=self.router.store.save_rag_snapshot(snapshot)
+            data=snapshot.to_dict()
+            if data['purpose']!=purpose:return {'ok':False,'status':'blocked','reason':'rag_purpose_mismatch'}
+            approved_materials={'campaign_materials':snapshot.campaign_items()}
+            from ctn.rag.corpus import too_close
+            if too_close(post_text,[r['text'] for r in data['styles']]):
+                return {'ok':False,'status':'rejected','reason':'style_copy'}
         # 3. Layer-2 JEV Postflight Gatekeeper (shared with micro replies, with strict_alignment=True)
         active_key = branch if branch else purpose
         resolved_purpose = PURPOSE_RULES.get(active_key, active_key)
@@ -156,7 +174,8 @@ class StrategicPublisher:
 
         postflight_dict: dict[str, Any] = {}
         if not bypass_jev:
-            verdict = self.postflight.check(
+            import asyncio
+            verdict = await asyncio.to_thread(self.postflight.check,
                 post_id="proactive_publish",
                 target_text=effective_target,
                 reply_text=post_text,
@@ -164,6 +183,7 @@ class StrategicPublisher:
                 intended_purpose=resolved_purpose,
                 persona_profile=persona_profile,
                 strict_alignment=(purpose != 'warmup'),
+                approved_materials=approved_materials,
             )
             postflight_dict = verdict.to_dict()
             if not verdict.can_send:
@@ -184,10 +204,10 @@ class StrategicPublisher:
         material_version='macro-input.v1:'+hashlib.sha256(json.dumps(material_context,
             sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
         res = await self.actuator.post(account_id, post_text,context={"engine":"macro",
-            **self.router.context_for(persona),'prompt_version':'pi-campaign.v2',
+            **self.router.context_for(persona),'prompt_version':'pi-campaign.v3',
             'material_version':material_version,'material_context':material_context,
             'topic':branch or purpose,
-            "purpose":active_key,"assigned_side":self.side,"cooldown_s":persona.cooldown_s,"draft_expires_at":now+300})
+            "purpose":("warmup" if purpose=="warmup" else active_key),"rag_snapshot_id":rag_snapshot_id,"assigned_side":self.side,"cooldown_s":persona.cooldown_s,"draft_expires_at":now+300})
         if res.ok:
             normalized = re.sub(r"\s+", " ", post_text.lower())
             self._recent_normalized_posts.add(normalized)
@@ -221,6 +241,7 @@ class StrategicPublisher:
         branch: str = "",
         target_text: str = "",
         bypass_jev: bool = False,
+        rag_snapshot_id: str = "",
     ) -> dict[str, Any]:
         """Synchronous wrapper for publish."""
         return asyncio.run(

@@ -92,69 +92,61 @@ class BlueTeamReporter:
         tier=0 if count<5 else (1 if count<10 else 2)
         return tier,-float(prof['suspicion_score']),float(prof.get('first_seen_at',now))
 
-    def _detail(self,author):
-        import json
-        entries=self.store.evidence_for(author)
-        evidence=[]
-        for row in entries:
-            if row['family'] in ('moderator','weak'): continue
-            d=json.loads(row['detail_json'])
-            evidence.append({'group':row['family'],'post_id':d.get('post_id'),
-                'published_at':d.get('published_at'),'observed_at':row['created_at'],
-                'details':d})
-        if not evidence: return '',[]
-        detail='I think that this content is inauthentic (bot) activity because '+json.dumps(evidence,ensure_ascii=True)
-        return detail,entries
+    async def _submit_candidate(self, kind, target, author):
+        from .policy import candidate_payload,automatic_evidence
+        import asyncio,json,uuid
+        mode=self.store.policy('report_mode','off')
+        if not self.enabled or mode=='off':return None
+        payload=await asyncio.to_thread(candidate_payload,self.store,kind,target,author)
+        if not payload:return None
+        candidate=await asyncio.to_thread(self.store.store_report_candidate,payload)
+        automatic=mode=='hybrid' and automatic_evidence(self.store,payload) and self.store.report_state_ready(automatic=True)[0]
+        ready,reason=self.store.report_state_ready(automatic=automatic)
+        if not ready:return None
+        with self.store._lock:
+            approvals=self.store._conn.execute("SELECT id FROM report_approvals WHERE candidate_id=? AND consumed_by='' AND expires_at>? ORDER BY expires_at DESC LIMIT 1",(candidate,time.time())).fetchone()
+        if not automatic and not approvals:return None
+        account=self._next_account()
+        if not account:return None
+        context={'target_author':author,'evidence_hash':payload['evidence_hash'],
+            'candidate_id':candidate,'approval_id':approvals[0] if approvals and not automatic else '',
+            'report_attempt_id':uuid.uuid4().hex,'policy_version':payload['policy_version'],
+            'true_team_id':self.store.get_bot_profile(author).get('true_team_id','')}
+        if kind=='account':
+            return await self.actuator.report_account(account,author,detail=payload['detail'],context=context)
+        return await self.actuator.report(account,target,reason='inauthentic',detail=payload['detail'],context=context)
 
     async def report_account_candidate(self,author,*,confirmed_action_count):
-        prof=self.store.get_bot_profile(author)
-        if not self.enabled or not self.event_source.available: return None
-        if confirmed_action_count is None or confirmed_action_count<100 or prof['upheld_strikes']<1: return None
-        if not self.store.report_evidence_ready(prof): return None
-        detail,evidence=self._detail(author)
-        account=self._next_account()
-        if not detail or not account: return None
-        detail=detail.replace('this content is inauthentic (bot) activity','this account is conducting inauthentic (bot) activity',1)
-        return await self.actuator.report_account(account,author,detail=detail,context={
-            'target_author':author,'true_team_id':prof.get('true_team_id',''),
-            'detail':detail,'policy_version':'evidence.v1','policy':self.store.policy('evidence_policy',{}),'evidence':evidence})
+        if confirmed_action_count is None or confirmed_action_count<100:return None
+        if self.store.get_bot_profile(author)['upheld_strikes']<1:return None
+        return await self._submit_candidate('account',author,author)
 
     async def sweep_and_report(self,*,priority_authors=(),sydney_day=None,now=None):
         ts=time.time() if now is None else float(now)
         day=sydney_day or current_sydney_day(ts)
         batch=ReportBatchResult(sydney_day=day)
         batch.suspended,batch.suspended_remaining_s=self.store.is_reporting_suspended(now=ts)
-        if batch.suspended or not self.enabled or not self.event_source.available or not self.accounts: return batch
+        if batch.suspended or not self.enabled or not self.accounts:return batch
         end=self.store.policy('campaign_ends_at',None)
-        if end is not None and ts>=end: return batch
+        if end is not None and ts>=end:return batch
         profiles=self.store.list_bots_by_status('confirmed_bot')
         profiles.sort(key=lambda p:self._candidate_priority(p,sydney_day=day,now=ts))
         for prof in profiles:
-            if len(batch.attempts)>=self.max_reports_per_step: break
+            if len(batch.attempts)>=self.max_reports_per_step:break
             author=prof['account_id']
-            if prof.get('verified') or prof.get('is_suspended') or prof['upheld_strikes']>=3: continue
-            if not self.store.report_evidence_ready(prof): continue
-            detail,evidence=self._detail(author)
-            if not detail: continue
-            # First-report opportunity is retained even beyond the daily diminishing tier.
-            activity=self.store.confirmed_activity(author)
-            if activity and activity['action_count']>=100 and prof['upheld_strikes']>=1:
-                result=await self.report_account_candidate(author,confirmed_action_count=activity['action_count'])
-                if result and result.ok:
-                    batch.attempts.append(ReportAttempt(author,author,prof.get('true_team_id',''),
-                        result.account,'inauthentic',True,'pending',result))
-                    continue
+            if prof.get('verified') or prof.get('is_suspended'):continue
             posts=await self._history_candidates(author,ts)
-            for post in posts:
-                allowed,_=self.store.can_report_post(post['post_id'],author,now=ts)
-                if not allowed: continue
-                account=self._next_account()
-                if account is None: return batch
-                result=await self.actuator.report(account,post['post_id'],reason='inauthentic',detail=detail,
-                    context={'target_author':author,'true_team_id':prof.get('true_team_id',''),
-                        'detail':detail,'policy_version':'evidence.v1','policy':self.store.policy('evidence_policy',{}),'evidence':evidence})
-                batch.attempts.append(ReportAttempt(post['post_id'],author,prof.get('true_team_id',''),
-                    account,'inauthentic',result.ok,'pending' if result.ok else result.status,result))
-                # Limits are reserved in the same transaction as the action, across processes.
-                break
+            activity=self.store.confirmed_activity(author)
+            result=None;kind='post';target=''
+            if activity and activity['action_count']>=100 and prof['upheld_strikes']>=1:
+                kind='account';target=author
+                result=await self.report_account_candidate(author,confirmed_action_count=activity['action_count'])
+            else:
+                for post in posts:
+                    target=post['post_id']
+                    result=await self._submit_candidate('post',target,author)
+                    if result:break
+            if result and (result.ok or result.status=='unknown'):
+                batch.attempts.append(ReportAttempt(target,author,prof.get('true_team_id',''),
+                    result.account,'inauthentic',result.ok,'pending' if result.ok else result.status,result))
         return batch

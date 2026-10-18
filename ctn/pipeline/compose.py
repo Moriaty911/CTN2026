@@ -58,5 +58,5 @@ def check_text(text: str, recent: Iterable[str] = ()) -> GuardVerdict:
     if not stripped or len(stripped) > MAX_LEN:
         return GuardVerdict.BLOCK
     if stripped in {r.strip() for r in recent}:
-        return GuardVerdict.FLAG
+        return GuardVerdict.BLOCK
     return GuardVerdict.ALLOW

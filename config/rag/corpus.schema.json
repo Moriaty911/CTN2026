@@ -63,6 +63,26 @@
         "integration": {
           "type": "string",
           "minLength": 1
+        },
+        "style_purpose_selection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style_copy_guard": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opposition_context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style_selection_limit": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
@@ -117,6 +137,50 @@
       "items": {
         "$ref": "#/$defs/raw_review"
       }
+    },
+    "coverage_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required_style_purposes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "required_argument_fact_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "required_argument_unknown_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "required_case_fact_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "required_style_purposes",
+        "required_argument_fact_ids",
+        "required_argument_unknown_ids",
+        "required_case_fact_ids"
+      ]
     }
   },
   "required": [
@@ -418,6 +482,22 @@
           "const": "no_personal_history_or_professional_claim"
         },
         "raw_passage_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "fact_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "unknown_ids": {
           "type": "array",
           "items": {
             "type": "string",

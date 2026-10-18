@@ -219,6 +219,7 @@ class JevPacker:
         self.model = model
         if type(verified_references) is not tuple or any(type(r) is not BackgroundReference for r in verified_references):
             raise PackingValidationError("verified_references: expected local reference records")
+        self._campaign_registry = {}
         self._registry = {}
         for reference in verified_references:
             key = (reference.reference_id, reference.source_id)
@@ -236,10 +237,21 @@ class JevPacker:
                         "injection_preflight": self.preflight.fingerprint,
                         "registry": [_reference_data(r) for _, r in sorted(self._registry.items())]})
 
+    def register_campaign_snapshot(self, snapshot):
+        from ctn.rag.corpus import RagSnapshot
+        if type(snapshot) is not RagSnapshot:raise PackingValidationError('typed local campaign snapshot required')
+        data=snapshot.to_dict()
+        if len(self._campaign_registry)>=2048:
+            self._campaign_registry.pop(next(iter(self._campaign_registry)),None)
+        self._campaign_registry[snapshot.snapshot_id]={'snapshot_id':snapshot.snapshot_id,
+            'corpus_hash':data['corpus_hash'],'items':snapshot.campaign_items()}
+
     def with_forbidden_values(self, values):
-        return JevPacker(limits=self.limits, verified_references=tuple(self._registry.values()),
+        packer=JevPacker(limits=self.limits, verified_references=tuple(self._registry.values()),
                          forbidden_values=tuple(dict.fromkeys(self._forbidden_values + values)),
                          model=self.model, preflight=self.preflight)
+        packer._campaign_registry=self._campaign_registry
+        return packer
 
     def _secret(self, text: str) -> bool:
         return any(v in text for v in self._forbidden_values) or any(p.search(text) for p in _SECRET_PATTERNS)
@@ -388,6 +400,12 @@ class JevPacker:
                                  issues=(PackingIssue("content", "same_post_pair"),),
                                  input_fingerprint=input_fingerprint, **common)
 
+        for record in records:
+            campaign=record.to_dict().get('campaign_materials')
+            if campaign is not None and self._campaign_registry.get(campaign['snapshot_id'])!=campaign:
+                return PackingResult(status='deferred',targets=targets,
+                    issues=(PackingIssue('campaign_materials','unregistered_campaign_snapshot'),),
+                    input_fingerprint=input_fingerprint,**common)
         data = deepcopy(original)
         backgrounds = [[] for _ in records]
         issues: dict[str, PackingIssue] = {}

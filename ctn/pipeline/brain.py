@@ -127,6 +127,7 @@ class JevLlmBrain:
         allied_reply_every_n: int = 3,
         allied_reply_hourly_cap: int = 3,
         trusted_background: tuple = (),
+        corpus=None,
     ) -> None:
         if side not in (Side.YES, Side.NO):
             raise ValueError("JevLlmBrain needs an assigned side (yes/no)")
@@ -136,7 +137,8 @@ class JevLlmBrain:
         self.side = side
         self.router = router if router is not None else PersonaRouter(default_side=side.value)
         self.postflight = postflight if postflight is not None else JevPostflightChecker(workflow.evaluator.client)
-        self.options = options or DraftOptions()
+        self.options = options or DraftOptions(language="en", max_reply_chars=280)
+        self.corpus=corpus
         self.information_gap = information_gap
         self.trusted_background=trusted_background
         self.allied_reply_every_n = allied_reply_every_n
@@ -168,13 +170,14 @@ class JevLlmBrain:
             )
             handle_low = (post.author or "").strip().lower()
             is_verified = is_verified or bool(self.router.store.get_bot_profile(post.author).get("verified"))
-            candidate = "verified" if is_verified else "standard"
+            candidate = "verified" if is_verified else "unknown"
 
         policy = getattr(self.workflow, "action_policy", None)
         if type(policy) is ActionPolicy and policy.platform_levels:
             level_map = dict(policy.platform_levels)
             if candidate in level_map:
                 return candidate
+            if candidate.lower()=='unknown':return 'unknown'
             target_grade = "high" if candidate.lower() in _HIGH_LEVEL_SYNONYMS else "standard"
             for label, grade in policy.platform_levels:
                 if grade == target_grade:
@@ -193,7 +196,9 @@ class JevLlmBrain:
         }
         iso=lambda ts: datetime.fromtimestamp(ts,timezone.utc).isoformat()
         observed=payload['source']['observed_at']
-        payload['metrics']={'likes':post.likes,'reposts':post.reposts,'replies':post.replies,'observed_at':observed}
+        presence=post.raw.get('_metric_presence',post.raw.keys())
+        payload['metrics']={k:getattr(post,k) for k in ('likes','reposts','replies') if k in presence or (not post.raw.get('_metric_presence') and getattr(post,k)>0)}
+        payload['metrics']['observed_at']=observed
         if post.created_at>0: payload['post']['created_at']=iso(post.created_at)
         parent_id=str(post.raw.get('parent_id') or '')
         payload['post']['kind']='reply' if parent_id else 'original'
@@ -210,6 +215,12 @@ class JevLlmBrain:
             'target_post_id':r['target_post_id'],'acted_at':iso(r['created_at']),'text':r['text']} for r in rows]}
         if self.trusted_background:
             payload['trusted_background']={'items':[asdict(r) for r in self.trusted_background]}
+        if self.corpus is not None:
+            stored=self.router.store.get_observed_post(post.post_id) or {}
+            snapshot=self.corpus.retrieve(post.text,target_id=post.post_id,target_version=stored.get('version',1))
+            ident=self.router.store.save_rag_snapshot(snapshot)
+            self.workflow.evaluator.packer.register_campaign_snapshot(snapshot)
+            payload['campaign_materials']={'snapshot_id':ident,'corpus_hash':self.corpus.hash,'items':snapshot.campaign_items()}
         return payload
 
     # ---- decision -------------------------------------------------------- #
@@ -241,6 +252,19 @@ class JevLlmBrain:
         """Construct a checked MaterialBrief for P01, P02, P03, P07, or P08."""
         text = post.text
         focus_span = TextSpan(("content", "post", "text"), 0, len(text), text)
+        full_data=package.to_dict(include_materials=True)
+        campaign=((full_data.get('materials') or {}).get('content') or {}).get('campaign_materials')
+        if campaign:
+            items=campaign['items']
+            if active_purpose=='P08':
+                unknown=next((r for r in items if r['kind']=='unknown'),None)
+                # The target still defines the gap; the corpus supplies a related question, never its answer.
+                gap=(unknown['text'].split('\n')[0] if unknown else self.information_gap)
+                return MaterialBrief('P08',focus_span,information_gap=gap)
+            accepted=('official_fact','attributed_claim','argument','unknown') if active_purpose in ('P02','P07') else ('official_fact','attributed_claim','argument')
+            supports=tuple(MaterialUse(TextSpan(('content','campaign_materials','items',i,'text'),0,len(r['text']),r['text']),_PURPOSE_SUPPORT_USE[active_purpose]) for i,r in enumerate(items) if r['kind'] in accepted)
+            if not supports:raise ValueError('no_relevant_material')
+            return MaterialBrief(active_purpose,focus_span,support=supports)
         if active_purpose in _PURPOSE_SUPPORT_USE:
             use_kind = _PURPOSE_SUPPORT_USE[active_purpose]
             support_span = None
@@ -359,8 +383,12 @@ class JevLlmBrain:
         except ValueError:
             return BrainVerdict(reason="needs_materials:"+active_purpose,prompt_type=active_purpose,detail=detail)
 
+        campaign=((package.to_dict(include_materials=True).get('materials') or {}).get('content') or {}).get('campaign_materials')
+        snapshot=self.router.store.load_rag_snapshot(campaign['snapshot_id']) if campaign else None
+        rag_kwargs={'rag_snapshot':snapshot} if snapshot else {}
+        if snapshot:detail['rag_snapshot_id']=snapshot.snapshot_id
         # Attempt 1: generate candidate draft using selected persona
-        draft = self.generator.generate(package, brief, options=self.options, persona=routing.persona)
+        draft = self.generator.generate(package, brief, options=self.options, persona=routing.persona, **rag_kwargs)
         detail["draft"] = draft.to_dict()
         if draft.status != "draft" or not draft.reply:
             return BrainVerdict(reason=f"llm:{draft.status}:{draft.reason}", prompt_type=draft.prompt_type, detail=detail)
@@ -376,9 +404,15 @@ class JevLlmBrain:
             intended_purpose=draft.prompt_type or active_purpose,
             persona=routing.persona,
             strict_alignment=strict_mode,
+            approved_materials=package.to_dict(include_materials=True).get("materials"),
         )
         detail["postflight"] = pv1.to_dict()
 
+        from ..rag.corpus import too_close
+        from ..jev.postflight import PostflightVerdict
+        references=self.router.store.publication_references()
+        if snapshot:references += [s['text'] for s in snapshot.to_dict()['styles']]
+        if too_close(draft.reply,references):pv1=PostflightVerdict(False,'near_duplicate_or_style_copy')
         if pv1.can_send:
             self._batch_materials(detail,draft,data,post)
             final_purpose = draft.prompt_type or active_purpose
@@ -389,7 +423,7 @@ class JevLlmBrain:
         # Option B: One targeted retry if postflight rejected attempt 1
         detail["postflight_attempt_1_rejected"] = pv1.reason
         draft_retry = self.generator.generate(
-            package, brief, options=self.options, persona=routing.persona, retry_feedback=pv1.reason,
+            package, brief, options=self.options, persona=routing.persona, retry_feedback=pv1.reason, **rag_kwargs,
         )
         detail["draft_retry"] = draft_retry.to_dict()
         if draft_retry.status != "draft" or not draft_retry.reply:
@@ -405,9 +439,11 @@ class JevLlmBrain:
             intended_purpose=draft_retry.prompt_type or active_purpose,
             persona=routing.persona,
             strict_alignment=strict_mode,
+            approved_materials=package.to_dict(include_materials=True).get("materials"),
         )
         detail["postflight_retry"] = pv2.to_dict()
 
+        if too_close(draft_retry.reply,references):pv2=PostflightVerdict(False,'near_duplicate_or_style_copy')
         if pv2.can_send:
             self._batch_materials(detail,draft_retry,data,post)
             final_purpose = draft_retry.prompt_type or active_purpose
@@ -427,6 +463,7 @@ class JevLlmBrain:
         extras=self.router.additional_candidates(data,post.text,detail['selected_account'],requested,
             purpose=draft.prompt_type,materials=json.loads(frozen)['materials'])
         detail['reply_batch_plan']={
+            'rag_snapshot_id':detail.get('rag_snapshot_id',''),
             'version':'ctn-reply-batch.v1','catalog_hash':self.router.registry.catalog_hash,
             'expansion':expansion,'requested_extra_count':requested,
             'sampled_persona_ids':[p.persona_id for p in extras],
@@ -438,6 +475,7 @@ class JevLlmBrain:
     def draft_additional(self,plan,persona,previous,primary):
         """Generate and review one fixed slot without evaluating the target again."""
         frozen=plan['frozen_material_json'];materials=json.loads(frozen)['materials']
+        if plan.get('rag_snapshot_id'):self.router.store.load_rag_snapshot(plan['rag_snapshot_id'])
         purpose=materials['prompt_type'];feedback=None
         for attempt in range(2):
             draft=self.generator.generate_frozen(frozen,persona=persona,previous_replies=previous,
@@ -448,6 +486,10 @@ class JevLlmBrain:
                 reply_text=draft.reply,assigned_side=self.side.value,intended_purpose=purpose,
                 persona=persona,strict_alignment=(purpose=='P01'),
                 previous_replies=previous,approved_materials=materials)
+            from ..rag.corpus import too_close
+            from ..jev.postflight import PostflightVerdict
+            refs=self.router.store.publication_references()
+            if too_close(draft.reply,refs):verdict=PostflightVerdict(False,'near_duplicate_publication')
             if verdict.can_send:
                 decision=json.loads(json.dumps(primary))
                 decision.update(decision_id=uuid.uuid4().hex[:12],account=persona.account_id,

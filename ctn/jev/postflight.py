@@ -242,7 +242,7 @@ class JevPostflightChecker:
         max_hashtag_chars: int = MAX_HASHTAG_CHARS,
     ) -> None:
         self.client = client
-        self.rubric = rubric if rubric is not None else load_rubric("postflight", version="v1")
+        self.rubric = rubric if rubric is not None else load_rubric("postflight", version="v3")
         self.parser = parser if parser is not None else JevResponseParser()
         self.toxicity_threshold = toxicity_threshold
         self.max_chars = max_chars
@@ -293,6 +293,8 @@ class JevPostflightChecker:
         }
         if resolved_persona:
             context_data["persona_profile"] = resolved_persona
+        if approved_materials is not None:
+            context_data['approved_materials']=approved_materials
         if additional:
             context_data['previous_successful_replies']=previous_replies
             context_data['approved_materials']=approved_materials
@@ -311,7 +313,7 @@ class JevPostflightChecker:
             }
         }
 
-        rubric=load_rubric('postflight',version='v2') if additional else self.rubric
+        rubric=self.rubric
         questions = rubric.to_provider_questions("response")
         body = {
             "model": self.client.config.model,
@@ -416,6 +418,12 @@ class JevPostflightChecker:
         if additional and (getattr(addition,'status',None)!='valid' or addition_val!='new_supported_content'):
             can_send=False
             reason='no_substantive_addition'
+        if 'evidence_support' in questions:
+            evidence=output_answers.get('evidence_support')
+            value=getattr(evidence,'value','unclear')
+            answers_summary['evidence_support']=value
+            if getattr(evidence,'status',None)!='valid' or value!='supported':
+                can_send=False;reason='unsupported_or_unclear_evidence'
         if additional: answers_summary['substantive_addition']=addition_val
 
         return PostflightVerdict(

@@ -111,3 +111,8 @@ class LegitClient(Protocol):
 
     async def report(self, account: str, post_id: str, *, reason: str = "inauthentic", detail: str = "") -> dict[str, Any]: ...
 
+
+
+class ReadFailurePage(list):
+    """An unsuccessful read; empty successful lists retain their normal meaning."""
+    read_failed = True

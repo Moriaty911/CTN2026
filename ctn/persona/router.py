@@ -108,6 +108,10 @@ class PersonaRouter:
             state=states.get(p.account_id)
             if state is None or state.is_disabled() or (high and state.capability_tier!='high'):continue
             if not self.allow_unbound and not bindings.get(p.persona_id)==p.account_id:continue
+            if self.store.policy('require_warmup',False):
+                with self.store._lock:
+                    warm=self.store._conn.execute('SELECT warmed_at FROM account_readiness WHERE account_id=?',(p.account_id,)).fetchone()
+                if not warm or not warm[0]:continue
             if state.is_in_cooldown(now,p.cooldown_s):cooling.append((p,state))
             else:available.append((p,state))
         return available,cooling

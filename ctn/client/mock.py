@@ -160,6 +160,7 @@ class MockLegitClient:
         d: dict[str, Any] = {
             "post_id": post.post_id,
             "author": post.author,
+            "platform_level": "standard",
             "text": post.text,
             "created_at": post.created_at,
             "likes": post.likes,
