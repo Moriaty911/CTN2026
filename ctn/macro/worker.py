@@ -113,12 +113,12 @@ class MacroWorker:
                 from .schedule import POLICY as PACING,campaign_day,effective_limit,red_multiplier
                 day=current_sydney_day();now=time.time()
                 with self.store._lock:
-                    used=self.store._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' AND status IN ('claimed','sending','unknown','succeeded') AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('warmup','initialise')").fetchall()
+                    used=self.store._conn.execute("SELECT account_id,created_at,metadata_json FROM action_intents WHERE kind='post' AND status IN ('claimed','sending','unknown','succeeded') AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('warmup','initialise')").fetchall()
                     recent=[r[0] for r in self.store._conn.execute("SELECT text FROM action_intents WHERE kind='post' AND status='succeeded' "
                         "AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('warmup','initialise') ORDER BY created_at DESC LIMIT ?",
                         (int(PACING['recent_originals_in_prompt']),)).fetchall()]
-                used=sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day for r in used)
-                if used>=effective_limit(self.store,now):
+                today=[r['account_id'] for r in used if json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day]
+                if len(today)>=effective_limit(self.store,now):
                     self.store.finish_macro_job(job,'skipped',reason='daily_original_limit');return {'status':'skipped'}
                 eligible=[]
                 for p in self.router.registry.list_by_side(self.router.default_side):
@@ -126,6 +126,7 @@ class MacroWorker:
                     state=self.router.get_state(p.account_id)
                     if state.is_disabled() or state.original_locked_until>now or state.is_in_cooldown(now,p.cooldown_s):continue
                     if not self.store.account_initialise_ready(p.account_id):continue
+                    if today.count(p.account_id)>=int(PACING['per_account']['daily_max']):continue
                     eligible.append(p)
                 if not eligible:return retry('no_eligible_account')
                 snapshot=await self.collector.collect()

@@ -1,14 +1,17 @@
 """Campaign-day pacing for strategic originals (policies/originals-v1.json).
 
-Day 0 is the first campaign day in Sydney time. The daily limit follows the Red multiplier tiers and
-switches to the next tier from `ramp_hour` on the previous evening, because engagement on a post keeps
-arriving for hours and Red points are multiplied when they are recorded. The day is divided into
-`limit` equal slots inside `active_hours`; each slot is one macro job with bounded retries.
+Day 0 is the first campaign day in Sydney time. The team's daily limit is a per-account quota (by
+campaign day) times the accounts that can post originals, and switches to the next tier from `ramp_hour`
+on the previous evening, because engagement on a post keeps arriving for hours and Red points are
+multiplied when they are recorded. The day is divided into `limit` equal slots inside `active_hours`;
+each slot is one macro job with bounded retries, starting at a random point early in the slot.
+Each account waits a random 1-3 hours between its own originals and posts at most `daily_max` a day.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import random
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -36,17 +39,42 @@ def red_multiplier(ts, policy=POLICY):
     return _tier(campaign_day(ts, policy), policy['red_multipliers'], 'red')
 
 
-def scheduled_limit(ts, policy=POLICY):
-    """Daily original ceiling in force at `ts`, including the evening ramp to the next tier."""
+def per_account_quota(ts, policy=POLICY):
+    """Originals per account per day in force at `ts`, including the evening ramp to the next tier."""
     day = campaign_day(ts, policy)
     if _local(ts).hour >= int(policy['ramp_hour']):day += 1
-    return int(_tier(day, policy['tiers'], 'limit'))
+    return min(int(_tier(day, policy['tiers'], 'per_account')), int(policy['per_account']['daily_max']))
+
+
+def scheduled_limit(ts, accounts, policy=POLICY):
+    """Team-wide daily ceiling: the per-account quota times the accounts able to post originals."""
+    return per_account_quota(ts, policy) * max(0, int(accounts))
+
+
+def posting_accounts(store):
+    """Bound, active accounts whose first post is done (the only ones the worker may pick)."""
+    with store._lock:
+        return store._conn.execute("SELECT count(*) FROM persona_bindings b JOIN account_states s USING(account_id) "
+            "JOIN account_lifecycle l USING(account_id) WHERE s.mode='active' AND l.initialise_status='ready'").fetchone()[0]
 
 
 def effective_limit(store, ts, policy=POLICY):
     """The schedule unless an operator has fixed the limit (`ops campaign configure`)."""
-    if store.policy('originals_schedule', True):return scheduled_limit(ts, policy)
+    if store.policy('originals_schedule', True):return scheduled_limit(ts, posting_accounts(store), policy)
     return int(store.policy('daily_original_limit', 10))
+
+
+def slot_start_delay(suffix, start, end, policy=POLICY):
+    """Seconds after the slot opens to make the first attempt: stable per slot, inside the early part
+    of the slot so retries still fit, and never on the hour across the team."""
+    roll = int(hashlib.sha256(('start:' + suffix).encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+    return roll * float(policy.get('slot_jitter', 0.0)) * (end - start)
+
+
+def original_gap(rng=random, policy=POLICY):
+    """Random wait before the same account may post another original."""
+    rules = policy['per_account']
+    return rng.uniform(float(rules['min_gap_seconds']), float(rules['max_gap_seconds']))
 
 
 def slot(ts, limit, policy=POLICY):

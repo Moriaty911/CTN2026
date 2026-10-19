@@ -200,7 +200,7 @@ def main(argv=None):
                     at=datetime.fromisoformat(args.ends_at.replace('Z','+00:00'))
                     if at.tzinfo is None:parser.error('--ends-at must include timezone')
                     store.set_policy('campaign_ends_at',at.timestamp())
-            result={'phase':store.effective_phase(),'phase_override':store.policy('phase_override',{}),'phase_times':store.policy('phase_times'),'daily_original_limit':store.policy('daily_original_limit',10),'originals':store.originals_status(),'original_lock_seconds':store.policy('original_lock_seconds',86400),'ends_at':store.policy('campaign_ends_at')}
+            result={'phase':store.effective_phase(),'phase_override':store.policy('phase_override',{}),'phase_times':store.policy('phase_times'),'daily_original_limit':store.policy('daily_original_limit',10),'originals':store.originals_status(),'per_account_originals':__import__('ctn.macro.schedule',fromlist=['POLICY']).POLICY['per_account'],'ends_at':store.policy('campaign_ends_at')}
         elif args.command=='maintenance':
             if args.operation in ('admit','release'):
                 if not args.account:parser.error('--account required')

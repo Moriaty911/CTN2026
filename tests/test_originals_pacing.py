@@ -27,11 +27,31 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual([schedule.red_multiplier(at(d)) for d in ('2026-10-25T12:00:00', '2026-10-26T00:00:00', '2026-11-01T00:00:00')],
                          [1, 2, 4])
 
-    def test_limits_follow_tiers_and_ramp_from_previous_evening(self):
-        cases = {'2026-10-19T12:00:00': 10, '2026-10-20T17:59:00': 10, '2026-10-20T18:00:00': 16,
-                 '2026-10-25T17:59:00': 16, '2026-10-25T18:00:00': 24, '2026-10-31T18:00:00': 32, '2026-11-02T12:00:00': 32}
-        self.assertEqual({k: schedule.scheduled_limit(at(k)) for k in cases}, cases)
+    def test_limits_scale_with_accounts_and_ramp_from_previous_evening(self):
+        cases = {'2026-10-19T12:00:00': 2, '2026-10-20T17:59:00': 2, '2026-10-20T18:00:00': 3, '2026-11-02T12:00:00': 3}
+        self.assertEqual({k: schedule.per_account_quota(at(k)) for k in cases}, cases)
+        self.assertEqual(schedule.scheduled_limit(at('2026-10-19T12:00:00'), 50), 100)
+        self.assertEqual(schedule.scheduled_limit(at('2026-10-19T12:00:00'), 0), 0)
+        with patch.dict(schedule.POLICY, {'tiers': [{'from_day': 0, 'per_account': 9}]}):
+            self.assertEqual(schedule.per_account_quota(at('2026-10-19T12:00:00')), 4)
 
+    def test_only_ready_active_bound_accounts_count(self):
+        with closing(StateStore()) as store:
+            bound_router(store, ('yes_001', 'yes_002', 'yes_003'))
+            accounts = list(store.persona_bindings().values())
+            with store.batch_transaction():
+                for account in accounts[:2]:
+                    store._conn.execute("INSERT INTO account_lifecycle(account_id,initialise_status,initialised_at) VALUES(?,'ready',1)", (account,))
+            store.set_account_policy(accounts[1], mode='standby')
+            self.assertEqual(schedule.posting_accounts(store), 1)
+            self.assertEqual(schedule.effective_limit(store, at('2026-10-19T12:00:00')), 2)
+
+    def test_account_gap_is_random_between_one_and_three_hours(self):
+        gaps = [schedule.original_gap() for _ in range(200)]
+        self.assertTrue(all(3600 <= g <= 10800 for g in gaps))
+        self.assertGreater(len({round(g) for g in gaps}), 150)
+
+    @patch.dict(schedule.POLICY, {'active_hours': [0, 24]})
     def test_slots_divide_the_day_by_the_limit(self):
         suffix, start, end = schedule.slot(at('2026-10-26T10:30:00'), 24)
         self.assertEqual(suffix, '2026-10-26:24:10')
@@ -49,7 +69,7 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(schedule.purpose_for('x:1', at('2026-10-19T12:00:00')), schedule.purpose_for('x:1', at('2026-10-19T12:00:00')))
 
     def test_operator_can_fix_the_limit_and_restore_the_schedule(self):
-        with closing(StateStore()) as store:
+        with closing(StateStore()) as store, patch.object(schedule, 'posting_accounts', return_value=8):
             ts = at('2026-10-26T12:00:00')
             self.assertEqual(schedule.effective_limit(store, ts), 24)
             store.configure_campaign(12)
@@ -62,6 +82,26 @@ class SlotJobTests(unittest.TestCase):
     def setUp(self):
         self.store = StateStore(); self.addCleanup(self.store.close)
         self.t = at('2026-10-26T10:05:00')
+        # 8 accounts x 3 = 24 slots a day; no start jitter unless a test asks for it.
+        for p in (patch.object(schedule, 'posting_accounts', return_value=8), patch.dict(schedule.POLICY, {'slot_jitter': 0.0, 'active_hours': [0, 24]})):
+            p.start(); self.addCleanup(p.stop)
+
+    def test_first_attempt_waits_for_a_stable_random_point_early_in_the_slot(self):
+        with patch.dict(schedule.POLICY, {'slot_jitter': 0.6}):
+            delay = schedule.slot_start_delay('2026-10-26:24:10', 0, 3600)
+            self.assertTrue(0 <= delay <= 0.6 * 3600)
+            self.assertEqual(delay, schedule.slot_start_delay('2026-10-26:24:10', 0, 3600))
+            self.assertNotEqual(delay, schedule.slot_start_delay('2026-10-26:24:11', 0, 3600))
+            start = at('2026-10-26T10:00:00')
+            self.assertIsNone(self.store.claim_macro_job(now=start))
+            due = self.store._conn.execute('SELECT next_attempt_at FROM macro_jobs').fetchone()[0]
+            self.assertAlmostEqual(due, start + delay)
+            self.assertEqual(self.store.claim_macro_job(now=due)['id'], 'macro:live:2026-10-26:24:10')
+
+    def test_no_originals_before_seven(self):
+        with patch.dict(schedule.POLICY, {'active_hours': [7, 24]}):
+            self.assertIsNone(self.store.claim_macro_job(now=at('2026-10-26T06:59:00')))
+            self.assertIsNotNone(self.store.claim_macro_job(now=at('2026-10-26T07:00:00')))
 
     def test_claim_creates_one_job_per_slot_and_expires_it_at_slot_end(self):
         job = self.store.claim_macro_job(now=self.t)
@@ -106,6 +146,8 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         from ctn.macro.worker import MacroWorker
         from ctn.rag.corpus import Corpus
+        # Any time of day, first attempt at slot start.
+        p = patch.dict(schedule.POLICY, {'slot_jitter': 0.0, 'active_hours': [0, 24]}); p.start(); self.addCleanup(p.stop)
         self.store = StateStore(); self.addCleanup(self.store.close)
         self.router = bound_router(self.store, ('yes_001', 'yes_002'))
         for pid in ('yes_001', 'yes_002'):
@@ -158,6 +200,17 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         row = self.store._conn.execute("SELECT attempts,tried_json FROM macro_jobs WHERE status='queued'").fetchone()
         self.assertEqual(row['attempts'], 1)
         self.assertEqual(len(json.loads(row['tried_json'])), 1)
+
+    async def test_an_account_posts_at_most_four_originals_a_day(self):
+        first = self.router.registry.get('yes_001').account_id
+        with self.store.batch_transaction():
+            for i in range(4):
+                self.store._conn.execute("INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,lease_until,created_at,updated_at,metadata_json) "
+                    "VALUES(?,?,'post',?,'',?,'succeeded','',0,?,?,?)", (f'o{i}', f'o{i}', first, f'Original {i}', time.time(), time.time(), json.dumps({'purpose': 'P01'})))
+        self.runner.return_value = {'act': False, 'reason': 'nothing supported'}
+        with patch('ctn.macro.schedule.posting_accounts', return_value=10):
+            await self.run_slot('P01')
+        self.assertEqual(self.runner.await_args.args[0]['persona']['persona_id'], 'yes_002')
 
     async def test_pi_contract_requires_the_assigned_purpose(self):
         from ctn.macro import worker as module

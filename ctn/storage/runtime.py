@@ -15,6 +15,12 @@ from pathlib import Path
 DEFAULT_EVIDENCE_POLICY=json.loads((Path(__file__).resolve().parents[2]/"policies/evidence-v1.json").read_text())
 SEND_RECOVERY=json.loads((Path(__file__).resolve().parents[2]/"policies/send-recovery-v1.json").read_text())
 
+
+def original_gap():
+    """Random wait before an account's next original (policies/originals-v1.json `per_account`)."""
+    from ctn.macro.schedule import original_gap as gap  # lazy: ctn.macro imports the storage layer
+    return gap()
+
 SCHEMA_VERSION = 6
 RUNTIME_SCHEMA = """
 CREATE TABLE IF NOT EXISTS runtime_policy(key TEXT PRIMARY KEY,value_json TEXT NOT NULL);
@@ -206,7 +212,7 @@ class RuntimeStoreMixin:
                 'original_locked_until=CASE WHEN ? THEN ? ELSE original_locked_until END WHERE account_id=?',
                 (ts,int(kind=='reply' and target_stance=='aligned'),int(kind=='reply' and target_stance=='opposing'),
                  kind=='post',ts,kind=='reply',ts,kind=='post',
-                 ts+float(self.policy('original_lock_seconds',86400)),account))
+                 ts+original_gap(),account))
 
     def action_key(self, kind, account, target, text='', metadata=None):
         from .sqlite_store import normalize_text,compute_post_norm_hash
@@ -548,7 +554,7 @@ class RuntimeStoreMixin:
                 if meta.get('accounting_already_applied'):
                     if r['kind']=='post':
                         self._conn.execute('UPDATE account_states SET original_locked_until=MAX(original_locked_until,?),last_original_at=MAX(last_original_at,?) WHERE account_id=?',
-                            (ts+float(self.policy('original_lock_seconds',86400)),ts,r['account_id']))
+                            (ts+original_gap(),ts,r['account_id']))
                     return True
                 if r['kind']=='report':
                     self.log_report(r['target_id'], meta.get('target_author',''),

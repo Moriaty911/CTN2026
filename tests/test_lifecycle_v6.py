@@ -62,10 +62,10 @@ class LifecycleTests(unittest.TestCase):
         self.store.finish_action(ident,'succeeded',response={'post_id':'first'})
         self.assertEqual(self.store.get_account_state('a').post_count,1)
 
-    def test_strategic_original_keeps_twenty_four_hour_lock(self):
+    def test_strategic_original_locks_the_account_for_a_random_one_to_three_hours(self):
         ident,_=self.store.claim_action('post','a',text='Substantive YES policy argument.',metadata={'purpose':'P01'},now=100)
         self.store.start_action(ident);self.store.finish_action(ident,'succeeded',response={'post_id':'strategic'},now=110)
-        self.assertEqual(self.store.get_account_state('a').original_locked_until,86510)
+        self.assertTrue(110+3600<=self.store.get_account_state('a').original_locked_until<=110+10800)
 
     def test_unknown_initialisation_stays_unavailable_even_in_climax(self):
         ident,_=self.store.claim_action('post','a',text='Uncertain first message.',metadata={'purpose':'initialise'})
@@ -301,6 +301,8 @@ class AsyncIntegrationTests(unittest.IsolatedAsyncioTestCase):
             await hydrate_waiting_context(act,store);store.resume_material_tasks('hash')
             self.assertEqual(store.get_observed_post('parent')['text'],'Full parent context.')
             act.get_post.assert_awaited_once_with('parent')
+    @patch('ctn.macro.schedule.posting_accounts', lambda store: 10)
+    @patch.dict('ctn.macro.schedule.POLICY', {'slot_jitter': 0.0, 'active_hours': [0, 24]})
     async def test_macro_job_lease_and_saved_draft_survive_restart(self):
         with tempfile.TemporaryDirectory() as td:
             path=Path(td)/'db'
@@ -312,6 +314,8 @@ class AsyncIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 recovered=store.claim_macro_job(now=701)
                 self.assertEqual(recovered['id'],job['id']);self.assertEqual(json.loads(recovered['payload_json']),{'draft':'saved'})
                 self.assertNotEqual(recovered['owner'],job['owner'])
+    @patch('ctn.macro.schedule.posting_accounts', lambda store: 10)
+    @patch.dict('ctn.macro.schedule.POLICY', {'slot_jitter': 0.0, 'active_hours': [0, 24]})
     async def test_macro_existing_success_never_generates_or_sends_again(self):
         from ctn.macro.worker import MacroWorker
         with closing(StateStore()) as store:
@@ -421,6 +425,8 @@ class AuditRegressionTests(unittest.TestCase):
 if __name__=='__main__':unittest.main()
 
 class RuntimePolicyTests(unittest.TestCase):
+    @patch('ctn.macro.schedule.posting_accounts', lambda store: 10)
+    @patch.dict('ctn.macro.schedule.POLICY', {'slot_jitter': 0.0, 'active_hours': [0, 24]})
     def test_simulated_macro_pulse_does_not_block_live_pulse(self):
         with closing(StateStore()) as store:
             simulated=store.claim_macro_job(now=100,mode='simulated')

@@ -1,20 +1,20 @@
 {
   "version": "originals.v1",
-  "notes": "Team-wide daily limits for strategic originals (initialise posts excluded). A limit is a ceiling, not a target. Each account still posts at most one original per 24 hours.",
+  "notes": "Strategic originals (initialise posts excluded). Team daily limit = per_account quota x accounts able to post; a limit is a ceiling, not a target. Each account waits a random min_gap..max_gap between its own originals and posts at most daily_max a day (2026-10-19: was one per 24 hours, 10 per team).",
   "day0": "2026-10-19",
   "tiers": [
-    {"from_day": 0, "limit": 10},
-    {"from_day": 2, "limit": 16},
-    {"from_day": 7, "limit": 24},
-    {"from_day": 13, "limit": 32}
+    {"from_day": 0, "per_account": 2},
+    {"from_day": 2, "per_account": 3}
   ],
+  "per_account": {"min_gap_seconds": 3600, "max_gap_seconds": 10800, "daily_max": 4},
+  "slot_jitter": 0.6,
   "red_multipliers": [
     {"from_day": 0, "red": 1},
     {"from_day": 7, "red": 2},
     {"from_day": 13, "red": 4}
   ],
   "ramp_hour": 18,
-  "active_hours": [0, 24],
+  "active_hours": [7, 24],
   "retries": {
     "max_attempts": 3,
     "observe_attempts": 2,

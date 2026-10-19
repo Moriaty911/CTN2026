@@ -347,7 +347,7 @@ class LifecycleStoreMixin:
             if current:
                 suffix,start,end=current
                 self._conn.execute('INSERT OR IGNORE INTO macro_jobs(id,scheduled_at,slot_end,next_attempt_at,purpose) VALUES(?,?,?,?,?)',
-                    (f'macro:{mode}:{suffix}',ts,end,ts,schedule.purpose_for(suffix,ts)))
+                    (f'macro:{mode}:{suffix}',ts,end,max(ts,start+schedule.slot_start_delay(suffix,start,end)),schedule.purpose_for(suffix,ts)))
             row=self._conn.execute("SELECT * FROM macro_jobs WHERE status='queued' AND next_attempt_at<=? AND id LIKE ? ORDER BY scheduled_at LIMIT 1",(ts,f'macro:{mode}:%')).fetchone()
             if not row:return None
             owner=uuid.uuid4().hex
