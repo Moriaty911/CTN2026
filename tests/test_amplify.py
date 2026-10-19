@@ -122,7 +122,8 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.store.set_policy('like_pacing', {'per_hour': 100, 'per_day': 100, 'require_initialised': True})
         self.store.set_policy('reply_pacing', {'per_hour': 100, 'min_gap_seconds': 0})
         self.llm = Mock()
-        self.llm.call.return_value = Mock(reason='ok', data=json.dumps({'choices': [{'message': {'content': 'Same at our stop, the morning queue was out the door.'}}]}).encode())
+        from ctn.llm.client import LlmCallResult
+        self.llm.call.return_value = LlmCallResult('ok', 1, 'r', json.dumps({'choices': [{'message': {'content': 'Same at our stop, the morning queue was out the door.'}}]}).encode())
         self.checker = Mock(); self.checker.check.return_value = PostflightVerdict(True, 'approved')
         self.worker = amplify.AmplifyWorker(actor(self.platform, self.store), self.router, self.llm, self.checker, rng=random.Random(3))
 

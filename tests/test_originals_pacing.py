@@ -102,6 +102,13 @@ class SlotJobTests(unittest.TestCase):
             self.assertAlmostEqual(due, start + delay)
             self.assertEqual(self.store.claim_macro_job(now=due)['id'], 'macro:live:2026-10-26:24:10')
 
+    def test_a_changing_account_count_does_not_open_a_second_slot(self):
+        job = self.store.claim_macro_job(now=self.t)
+        self.store.retry_macro_job(job, 'no_eligible_account', now=self.t)
+        with patch.object(schedule, 'posting_accounts', return_value=9):
+            self.store.claim_macro_job(now=self.t + 30)
+        self.assertEqual(self.store._conn.execute("SELECT COUNT(*) FROM macro_jobs").fetchone()[0], 1)
+
     def test_no_originals_before_seven(self):
         with patch.dict(schedule.POLICY, {'active_hours': [7, 24]}):
             self.assertIsNone(self.store.claim_macro_job(now=at('2026-10-26T06:59:00')))
@@ -204,6 +211,36 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         row = self.store._conn.execute("SELECT attempts,tried_json FROM macro_jobs WHERE status='queued'").fetchone()
         self.assertEqual(row['attempts'], 1)
         self.assertEqual(len(json.loads(row['tried_json'])), 1)
+
+    async def test_neutral_opening_question_is_sent_despite_authorization_reject(self):
+        self.runner.return_value = {'act': True, 'purpose': 'P00', 'branch': 'branch_unknown',
+                                    'text': 'Running a depot means checking a lot at the door already. How would venue entry checks work day to day?'}
+        self.checker.check.return_value = PostflightVerdict(False, 'authorization_reject', side_alignment='neutral',
+            purpose_compliance='compliant', persona_and_style='colloquial', send_authorization='reject')
+        self.assertTrue((await self.run_slot('P00')).get('ok'))
+
+    async def test_authorization_reject_still_blocks_a_stance_post_or_a_drifted_question(self):
+        self.runner.return_value = {'act': True, 'purpose': 'P01', 'branch': 'branch_unknown',
+                                    'text': 'Clinics here are small and fill up fast, so the shared entry rule makes sense to me.'}
+        self.checker.check.return_value = PostflightVerdict(False, 'authorization_reject', side_alignment='neutral',
+            purpose_compliance='compliant', persona_and_style='colloquial', send_authorization='reject')
+        self.assertEqual((await self.run_slot('P01'))['status'], 'retry')
+        with self.store.batch_transaction():
+            self.store._conn.execute('DELETE FROM macro_jobs')
+        self.checker.check.return_value = PostflightVerdict(False, 'authorization_reject', side_alignment='neutral',
+            purpose_compliance='drifted', persona_and_style='colloquial', send_authorization='reject')
+        self.runner.return_value = {**self.runner.return_value, 'purpose': 'P00'}
+        self.assertEqual((await self.run_slot('P00'))['status'], 'retry')
+
+    async def test_an_account_inside_its_reply_pacing_is_not_picked(self):
+        first = self.router.registry.get('yes_001').account_id
+        self.store.set_policy('reply_pacing', {'per_hour': 4, 'min_gap_seconds': 300})
+        with self.store.batch_transaction():
+            self.store._conn.execute("INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,lease_until,created_at,updated_at,metadata_json) "
+                "VALUES('r','r','reply',?,'t','x','succeeded','',0,?,?,'{}')", (first, time.time() - 60, time.time() - 60))
+        self.runner.return_value = {'act': False, 'reason': 'nothing supported'}
+        await self.run_slot('P01')
+        self.assertEqual(self.runner.await_args.args[0]['persona']['persona_id'], 'yes_002')
 
     async def test_an_account_posts_at_most_four_originals_a_day(self):
         first = self.router.registry.get('yes_001').account_id

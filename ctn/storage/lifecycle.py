@@ -344,7 +344,9 @@ class LifecycleStoreMixin:
             self._conn.execute("UPDATE macro_jobs SET status='expired',reason='slot_expired' WHERE status='queued' AND slot_end>0 AND slot_end<=?",(ts,))
             self._conn.execute("UPDATE macro_jobs SET status='expired',reason='pulse_expired' WHERE status='queued' AND slot_end=0 AND scheduled_at<?",(ts-7200,))
             self._conn.execute("UPDATE macro_jobs SET status='queued',reason='worker_recovered' WHERE status='claimed' AND lease_until<=?",(ts,))
-            if current:
+            # The limit (and so the slot id) changes as accounts become ready; one open slot at a time stops a burst.
+            open_job=self._conn.execute("SELECT 1 FROM macro_jobs WHERE id LIKE ? AND status IN ('queued','claimed') AND slot_end>?",(f'macro:{mode}:%',ts)).fetchone()
+            if current and not open_job:
                 suffix,start,end=current
                 self._conn.execute('INSERT OR IGNORE INTO macro_jobs(id,scheduled_at,slot_end,next_attempt_at,purpose) VALUES(?,?,?,?,?)',
                     (f'macro:{mode}:{suffix}',ts,end,max(ts,start+schedule.slot_start_delay(suffix,start,end)),schedule.purpose_for(suffix,ts)))

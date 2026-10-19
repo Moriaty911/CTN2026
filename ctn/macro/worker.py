@@ -134,6 +134,11 @@ class MacroWorker:
                     state=self.router.get_state(p.account_id)
                     if state.is_disabled() or state.original_locked_until>now or state.is_in_cooldown(now,p.cooldown_s):continue
                     if not self.store.account_initialise_ready(p.account_id):continue
+                    # An account busy with a reply or inside its reply pacing would fail at send time and waste the slot.
+                    from ctn.pipeline.targeting import cap_reason
+                    with self.store._lock:
+                        if cap_reason(self.store,account=p.account_id,now=now):continue
+                        if self.store._conn.execute('SELECT 1 FROM account_leases WHERE account_id=? AND lease_until>?',(p.account_id,now)).fetchone():continue
                     if today.count(p.account_id)>=int(PACING['per_account']['daily_max']):continue
                     eligible.append(p)
                 if not eligible:return retry('no_eligible_account')
