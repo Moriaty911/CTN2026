@@ -55,16 +55,19 @@ def recent_texts(store, policy=POLICY):
 
 def repetition_reason(text, recent, policy=POLICY):
     """'' when the draft is fine, else a reason naming what to avoid (fed back to the redraft)."""
-    words = _words(text)
+    # Hashtags are assigned and shared on purpose (policies/hashtags-v1.json): they never count as a repeated
+    # opening or ending, only as a stock phrase.
+    words = [w for w in _words(text) if not w.startswith('#')]
     if not words:
         return ''
-    lowered = ' '.join(words)
+    lowered = ' '.join(_words(text))
     head = ' '.join(words[:int(policy['opening_words'])])
     for opening in policy['stock_openings']:
         o = _words(opening)
         if words[:len(o)] == o:
             return f'repetitive_phrasing: do not open with "{opening}"'
-    others = [' '.join(_words(t)) for t in recent]
+    full = [' '.join(_words(t)) for t in recent]
+    others = [' '.join(w for w in o.split() if not w.startswith('#')) for o in full]
     limit = int(policy['max_repeats'])
     if sum(o.startswith(head + ' ') or o == head for o in others) >= limit:
         return f'repetitive_phrasing: other accounts recently opened with "{head}"; open differently'
@@ -73,7 +76,7 @@ def repetition_reason(text, recent, policy=POLICY):
         return f'repetitive_phrasing: other accounts recently ended with "{tail}"; end differently'
     for phrase in policy['stock_phrases']:
         p = ' '.join(_words(phrase))
-        if p and f' {p} ' in f' {lowered} ' and any(f' {p} ' in f' {o} ' for o in others):
+        if p and f' {p} ' in f' {lowered} ' and any(f' {p} ' in f' {o} ' for o in full):
             return f'repetitive_phrasing: drop the stock phrase "{phrase}"'
     return ''
 

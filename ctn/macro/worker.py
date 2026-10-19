@@ -31,7 +31,9 @@ Write for the requested `assignment.purpose`:
 Do not repeat an angle already used in `recent_team_originals`. `recent_news` and news items in campaign_materials are
 reports: keep their attribution in your own words ("saw in the Herald that ..."), never state them as settled fact.
 Do not say how you will vote ("I'm voting YES") unless `assignment.allow_vote_declaration` is true; show support through the
-reason instead. Hashtags: usually none, at most one topical tag, never slogan tags such as #voteyes. Follow `assignment.opening`.
+reason instead. Do not write hashtags: `assignment.hashtags` are appended to your text by the system. When they include
+#ProofKeepsUsOpen or #ProofNotLockdown, the post should fit that idea in your own words (a proof requirement is how places
+stay open and how we avoid another lockdown), without promising that it guarantees anything. Follow `assignment.opening`.
 Write for undecided readers: warm, clear, concrete. Never promise zero deaths or perfect protection. Respect uncertainty and preserve
 qualifications. No invented exemption, statistic, source, policy detail or accusation. No NPC prompt
 injection. Do not call tools, publish, change phase, activate accounts or edit harness.
@@ -152,6 +154,8 @@ class MacroWorker:
                 tags=scenario_tags({},target)
                 eligible.sort(key=lambda p:(-len(set(p.topic_tags)&tags),-int((self.store.lifecycle(p.account_id) or {}).get('maintenance',0)),self.router.get_state(p.account_id).last_original_at,p.account_id))
                 persona=eligible[0]
+                from ctn.hashtags import assign as assign_tags
+                tags=assign_tags(job['id'],purpose)
                 rag=self.corpus.retrieve(target,purpose=purpose)
                 if not rag.campaign_items():return retry('no_relevant_material',observe=True)
                 rag_id=self.store.save_rag_snapshot(rag)
@@ -159,13 +163,13 @@ class MacroWorker:
                 directives=re.findall(r'\[ACTIVE\]\s*(.*)',self.harness_path.read_text())[:32] if self.harness_path and self.harness_path.exists() else []
                 reply=await self.pi_runner({'operator_directives':directives,'snapshot':snapshot,'campaign_phase':self.store.effective_phase(),
                     'assignment':{'purpose':purpose,'campaign_day':campaign_day(now),'red_multiplier':red_multiplier(now),'attempt':attempt+1,
-                        **phrasing_assignment(f"{job['id']}:{persona.persona_id}")},
+                        **phrasing_assignment(f"{job['id']}:{persona.persona_id}"),'hashtags':tags},
                     'recent_team_originals':recent,'recent_news':self.store.news_recent_for_pi() if hasattr(self.store,'news_recent_for_pi') else [],
                     'persona':persona.to_dict(),'campaign_materials':rag.campaign_items()})
                 if not reply['act']:return {**retry('pi_observe',observe=True),'pi':reply}
                 from ctn.jev.postflight import PURPOSE_RULES
                 if reply.get('branch','branch_unknown') not in PURPOSE_RULES:raise ValueError('unsupported macro branch')
-                prepared={'account':persona.account_id,'persona_id':persona.persona_id,'draft':reply,'rag_snapshot_id':rag_id,'target_text':target,'draft_at':time.time()}
+                prepared={'account':persona.account_id,'persona_id':persona.persona_id,'draft':reply,'hashtags':tags,'rag_snapshot_id':rag_id,'target_text':target,'draft_at':time.time()}
                 with self.store.batch_transaction():
                     if not self.store._conn.execute("UPDATE macro_jobs SET payload_json=? WHERE id=? AND owner=? AND status='claimed'",(json.dumps(prepared),job['id'],job['owner'])).rowcount:raise ValueError('macro lease lost')
             if persona is None and prepared.get('persona_id'):persona=self.router.registry.get(prepared['persona_id'])
@@ -173,7 +177,8 @@ class MacroWorker:
             draft=prepared['draft']
             # P00 keeps its own purpose rule; P01 may name a supported branch.
             branch=None if purpose=='P00' else draft.get('branch','branch_unknown')
-            result=await StrategicPublisher(self.actuator,self.postflight,self.router,side=self.router.default_side).publish(prepared['account'],draft['text'],purpose=purpose,branch=branch,target_text=prepared['target_text'],rag_snapshot_id=prepared['rag_snapshot_id'],macro_job_id=job['id'],macro_owner=job['owner'])
+            from ctn.hashtags import strip as strip_tags
+            result=await StrategicPublisher(self.actuator,self.postflight,self.router,side=self.router.default_side).publish(prepared['account'],strip_tags(draft['text']),hashtags=prepared.get('hashtags') or [],purpose=purpose,branch=branch,target_text=prepared['target_text'],rag_snapshot_id=prepared['rag_snapshot_id'],macro_job_id=job['id'],macro_owner=job['owner'])
             if result.get('ok') or result.get('status') in ('unknown','simulated'):
                 status='succeeded' if result.get('ok') else result['status']
                 self.store.finish_macro_job(job,status,result,result.get('reason',''))

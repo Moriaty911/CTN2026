@@ -212,6 +212,17 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row['attempts'], 1)
         self.assertEqual(len(json.loads(row['tried_json'])), 1)
 
+    async def test_p01_original_gets_assigned_hashtags_and_loses_its_own(self):
+        self.runner.return_value = {'act': True, 'purpose': 'P01', 'branch': 'branch_unknown',
+                                    'text': 'Clinics here are small and fill up fast, so planning ahead keeps the doors open. #VoteYes'}
+        with patch('ctn.hashtags.assign', return_value=['#ProofKeepsUsOpen', '#KeepKingstoniaOpen']):
+            result = await self.run_slot('P01')
+        self.assertTrue(result.get('ok'), result)
+        self.assertEqual(self.runner.await_args.args[0]['assignment']['hashtags'], ['#ProofKeepsUsOpen', '#KeepKingstoniaOpen'])
+        text = self.store._conn.execute("SELECT text FROM action_intents WHERE kind='post'").fetchone()[0]
+        self.assertTrue(text.endswith('#ProofKeepsUsOpen #KeepKingstoniaOpen'), text)
+        self.assertNotIn('#VoteYes', text)
+
     async def test_neutral_opening_question_is_sent_despite_authorization_reject(self):
         self.runner.return_value = {'act': True, 'purpose': 'P00', 'branch': 'branch_unknown',
                                     'text': 'Running a depot means checking a lot at the door already. How would venue entry checks work day to day?'}

@@ -171,6 +171,9 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
   ②@提及每帖 ≤4、每条回复 ≤3（我们没用 @）；③市民一次会话里刚改过看法，短时间内同方向再改的效果变弱 → 同一作者两条回复至少隔 30 分钟；
   ④深层讨论串里 NPC 更少回复 → 选帖按层数降权（原帖 1.0、第 1 层 0.8、第 2 层起 0.4），目标在第 3 层及更深的跳过，
   例外是市民直接回我们，同一讨论串当天我们最多回 2 次（`policies/reply-targeting-v1.json` 的 `thread_depth`）。
+- **Hashtag**（用户决定，2026-10-19 23:50，`policies/hashtags-v1.json`）：主推我们自己的 **#ProofKeepsUsOpen**，常和 NO 方最热的
+  #KeepKingstoniaOpen 搭配（在对方的 tag 页里接住它的口号）；#ProofNotLockdown 备选；P01 原创约 90% 带 tag，P00 中立提问只带
+  #KeepKingstoniaOpen 或 #h2d2；回复不带。tag 由代码追加，Pi 自己写的 tag 会被删掉。看效果：平台 `popular_tags` 的排名。
 - **长度**：平台实际上限 500 字（实测）；提示词仍要求 ≤280，只有硬检查用 500（`PLATFORM_MAX_CHARS`）。
 - **句式**：每稿随机开头方式，约 15% 允许表态投票；全队最近 40 条查重（套话开头、重复开头 / 结尾、套话再用）会打回重写。
   `ops launch` 的 `phrasing` 看套话开头和表态比例，目标都 < 10%。
@@ -183,7 +186,8 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
 - **待用户决定（附当前倾向）**：
   - 何时关 shadow：先只放开 `leak_behavior` 和 `account`；第一批举报 24 小时后才裁决，越早越划算。
   - 是否举报 YES 方的刷帖网络（同边，但举报能得分、对方 NO 队也会举报）。
-  - 反用 #KeepKingstoniaOpen（“证明要求是为了不再封城”，不承诺一定开门）、GIF（NPC 16% 的帖带 giphy）、原创附新闻链接（平台显示 article 卡片）：方案已提，未批准。
+  - GIF（NPC 16% 的帖带 giphy）、原创附新闻链接（平台显示 article 卡片）：方案已提，未批准。
+  - 第一帖之后马上谈公投（新号十几分钟就开始回复）容易被认出：是否延后 1–2 小时或偶尔再发生活帖，未定。
   - 宽松渠道（部分账号写假消息）：未定，没批准前不要实现。
   - 关注（follow）：代码不会主动关注任何人；批量关注不做。
   - 续接回复（市民回了 X，由 X 接着回）：冻结。

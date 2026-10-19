@@ -1,0 +1,16 @@
+{
+  "version": "hashtags.v1",
+  "notes": "Operator decision 2026-10-19: concentrate originals on our tag #ProofKeepsUsOpen, paired with the NO side's top tag #KeepKingstoniaOpen to answer it in its own feed; #ProofNotLockdown second. Tags only pay off in volume, so originals use a few fixed tags. A tag only we use links our accounts, hence the pairing with shared tags. Replies stay untagged (citizens almost never tag replies). P00 questions are neutral, so they get only shared tags. Pi's own hashtags are removed and these are appended.",
+  "originals": {
+    "P01": {"share": 0.9, "combos": [
+      {"tags": ["#ProofKeepsUsOpen", "#KeepKingstoniaOpen"], "weight": 0.45},
+      {"tags": ["#ProofKeepsUsOpen"], "weight": 0.25},
+      {"tags": ["#ProofNotLockdown"], "weight": 0.15},
+      {"tags": ["#ProofKeepsUsOpen", "#h2d2"], "weight": 0.15}
+    ]},
+    "P00": {"share": 0.6, "combos": [
+      {"tags": ["#KeepKingstoniaOpen"], "weight": 0.5},
+      {"tags": ["#h2d2"], "weight": 0.5}
+    ]}
+  }
+}
