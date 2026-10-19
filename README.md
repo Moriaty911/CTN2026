@@ -832,6 +832,13 @@ Deployment steps (git pull, verify, backup, build, replace, check, roll back) ar
 - [ ] 观察 `targeting:cold_likely_bot`、`author_daily_cap`、`thread_daily_cap`、`account_daily_cap` 的数量；跳过过多就调 `policies/reply-targeting-v1.json`。
 - [x] （审计，2026-10-18 已改）unknown 发送自动收尾：账号最多锁 15 分钟，自动核对，重启有序收尾。见 “Uncertain sends and restarts”。
 - [ ] 观察 `ops status` 里 unknown 的 `last_check`：大多数以 abandoned 结束说明读接口覆盖不够（翻页上限或可见延迟），需要调策略文件。
+- [ ] **回复句式微调**（2026-10-19 开服首晚观察到，先跑通流程再改）。3 个测试号 31 条回复里有两个固定句式，号多了容易被别家检测器归为一类：
+  - 结尾或开头常是 “I'm voting YES, but…” / “I'd vote YES”（例如 mara_bakes82 19:14、20:06，aishab_ferries 19:48）。
+    来源很可能是 RAG 例句：`config/rag/yes.v1.1.json` 里有多条以 “I'm voting YES” 开头的 `text`，起草时被直接模仿。
+  - P08（追问细节）多号共用一个模板：“Fair point / Fair enough… but before I picture… which doses / how would someone…”，3 个号都在用。
+  - 改法候选：`ctn/llm/prompts.py` 的 P01–P09 指令里禁止固定开头/结尾、要求不必每条都表态；RAG 例句改成只给观点不给句式；
+    发布闸门加一条本地检查：同一句式（开头 6 词 / 结尾 6 词）在全队最近 N 条回复里出现超过 2 次就重写。
+  - 先用 `action_intents` 里的已发回复统计开头/结尾 n-gram 频率，改完再对比。
 
 **第一周**
 - [ ] 每个举报档位攒够 15–20 个裁决后看 `p_estimate`；稳定高于 0.7 再考虑把 `leak_only` 加入 `auto_buckets`。
