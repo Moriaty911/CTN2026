@@ -25,7 +25,9 @@ from .parsing import JevResponseParser
 from .questions import QuestionSet
 from .rubrics import load_rubric
 
-MAX_POST_CHARS = 280
+from ctn.config import PLATFORM_MAX_CHARS
+
+MAX_POST_CHARS = PLATFORM_MAX_CHARS
 MAX_HASHTAG_CHARS = 30
 _CJK_PATTERN = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 # Matches non-Latin scripts: Greek, Cyrillic, Armenian, Hebrew, Arabic, Indic, Thai, CJK, Hangul, etc.

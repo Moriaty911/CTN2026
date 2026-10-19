@@ -233,7 +233,9 @@ class ReplyGenerator:
 
             # Reject malformed Unicode rather than leak it into logs/publishing.
             reply.encode("utf-8")
-            if len(reply) > max_chars:
+            # The prompt asks for max_chars; only the platform limit is a hard stop.
+            from ctn.config import PLATFORM_MAX_CHARS
+            if len(reply) > PLATFORM_MAX_CHARS:
                 return finish("needs_review", "reply_length_exceeded")
             if self.checker._has_secret(reply):
                 return finish("needs_review", "sensitive_output")

@@ -17,7 +17,9 @@ from typing import Iterable
 from ..models import GuardVerdict, Post, Side
 
 # Platform length limit is not published yet; conservative guess.
-MAX_LEN = 280
+from ..config import PLATFORM_MAX_CHARS
+
+MAX_LEN = PLATFORM_MAX_CHARS
 
 _TEMPLATES: dict[Side, dict[str, tuple[str, ...]]] = {
     Side.YES: {

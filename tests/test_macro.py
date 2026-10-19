@@ -231,7 +231,7 @@ class TestStrategicPublisher(unittest.TestCase):
         self.postflight.check.assert_not_called()
 
     def test_publish_rejected_by_character_limit(self):
-        long_text = "A" * 275
+        long_text = "A" * 495  # with the hashtag this passes the platform's 500
         result = self.publisher.publish_sync(
             "bot_worker_yes",
             long_text,

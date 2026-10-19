@@ -221,7 +221,8 @@ class AmplifyWorker:
             text = json.loads(result.body)['choices'][0]['message']['content'].strip().strip('"')
         except (ValueError, KeyError, IndexError, TypeError):
             return ''
-        return text if 0 < len(text) <= 240 else ''
+        from ctn.config import PLATFORM_MAX_CHARS
+        return text if 0 < len(text) <= PLATFORM_MAX_CHARS else ''
 
 
 def summary(store, *, since):

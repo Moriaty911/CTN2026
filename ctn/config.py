@@ -77,6 +77,11 @@ def _env_side(name: str) -> Side:
         return Side.UNASSIGNED
 
 
+# Live 2026-10-19: the platform accepts posts up to 500 characters (longest observed exactly 500, none longer).
+# Prompts still ask for at most 280 (max_reply_chars); only the hard checks use this.
+PLATFORM_MAX_CHARS = 500
+
+
 # --------------------------------------------------------------------------- #
 # Sections
 # --------------------------------------------------------------------------- #
@@ -266,7 +271,7 @@ class LLMConfig:
     retry_initial_s: float = 1.0
     retry_max_s: float = 8.0
     max_tokens: int = 1536
-    max_reply_chars: int = 280
+    max_reply_chars: int = 280  # length the prompts aim for; hard checks use PLATFORM_MAX_CHARS
     max_request_bytes: int = 262_144
     max_response_bytes: int = 1_048_576
 

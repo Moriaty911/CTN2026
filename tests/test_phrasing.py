@@ -78,3 +78,18 @@ class PromptTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LengthLimitTests(unittest.TestCase):
+    def test_prompts_aim_for_280_but_only_500_is_a_hard_stop(self):
+        from ctn.config import PLATFORM_MAX_CHARS, LLMConfig
+        from ctn.jev.postflight import validate_text_constraints
+        from ctn.storage import StateStore
+        self.assertEqual((PLATFORM_MAX_CHARS, LLMConfig.max_reply_chars), (500, 280))
+        text = 'Our ferry ramp gets crowded at six. ' * 11  # ~400 characters
+        self.assertTrue(280 < len(text.strip()) <= 500)
+        self.assertTrue(validate_text_constraints(text.strip())[0])
+        self.assertFalse(validate_text_constraints('x' * 501)[0])
+        store = StateStore(); self.addCleanup(store.close)
+        self.assertEqual(store.publication_gate(text.strip(), {})[1], 'ready')
+        self.assertEqual(store.publication_gate('y' * 501, {})[1], 'text_constraint')

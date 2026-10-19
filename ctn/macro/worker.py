@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import time
 
-from ctn.config import Settings, _env_bool
+from ctn.config import PLATFORM_MAX_CHARS, Settings, _env_bool
 from ctn.persona import PersonaRegistry,PersonaRouter
 from ctn.storage import StateStore
 from ctn.rag.corpus import Corpus
@@ -65,7 +65,7 @@ async def run_pi(payload,*,binary=None,timeout=120):
     result=json.loads(stdout.decode())
     if type(result) is not dict or type(result.get('act')) is not bool:raise ValueError('invalid Pi draft contract')
     expected=(payload.get('assignment') or {}).get('purpose','P01')
-    if result['act'] and (result.get('purpose')!=expected or not isinstance(result.get('text'),str) or not 1<=len(result['text'])<=280):raise ValueError('invalid Pi publication')
+    if result['act'] and (result.get('purpose')!=expected or not isinstance(result.get('text'),str) or not 1<=len(result['text'])<=PLATFORM_MAX_CHARS):raise ValueError('invalid Pi publication')
     return result
 
 
@@ -186,7 +186,7 @@ class MacroWorker:
             if prior and prior['status'] in ('claimed','sending','unknown','succeeded'):
                 self.store.finish_macro_job(job,'succeeded' if prior['status']=='succeeded' else 'unknown',reason=type(exc).__name__)
                 return {'status':'failed','reason':type(exc).__name__}
-            return retry(type(exc).__name__)
+            return retry((type(exc).__name__+':'+str(exc))[:120])
         finally:
             lease.cancel();await asyncio.gather(lease,return_exceptions=True)
 

@@ -157,7 +157,8 @@ class OperationsStoreMixin:
     def publication_gate(self, text, metadata, *, exclude_action=''):
         from ctn.storage.sqlite_store import normalize_text
         from ctn.rag.corpus import too_close
-        if not text.strip() or len(text)>280: return False,'text_constraint'
+        from ctn.config import PLATFORM_MAX_CHARS
+        if not text.strip() or len(text)>PLATFORM_MAX_CHARS: return False,'text_constraint'
         ok,reason=self.message_policy_gate(text,exclude_action=exclude_action)
         if not ok:return False,reason
         normalized=normalize_text(text)
