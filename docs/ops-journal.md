@@ -2,6 +2,13 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-19 22:30 注册其余 47 个号，句式修复上线
+- 现象：`scripts/register_fleet.sh` 注册 47 个，全部 succeeded（第一次运行因 docker exec 读走循环的 stdin 只处理了一行，c3da016 修复）。
+  已发 52 条里 37% 以“Fair point / Fair enough / You're right”开头，27% 写了“I'm voting YES”。
+- 处理：e36d769 句式多样化（每稿随机开头方式、约 15% 允许表态、风格例句去掉表态句、全队最近 40 条查重闸门，被拒会带原因重写；`ops launch` 显示句式统计）。
+  备份 `/state/backup-20261019-1128.sqlite3` 后 22:28 重启 fleet、macro-agent、discord-review（同时带上 d1d3e33）。重启后 initialisation：ready 6、pending 44，第一帖在 1 小时窗口内陆续发出。
+- 待办：看 `ops launch` 的 phrasing 统计是否降到 10% 以下；观察 50 个号满载时发帖队列积压和 429；举报策略仍未定。
+
 ## 2026-10-19 22:20 原创上线、互刷上线、发帖拉到平台上限
 - 现象：排行榜第 1 名 5465 分。平台上有一个约 150 个号的刷帖网络（6 个主号、40 个回复号每隔整 20 秒回复一次、一批点赞号，名单见 `docs/intel/accounts-2026-10-19.md`，未提交）。
   被刷的帖平均约 110 赞、300 浏览，其中 12–29 个赞来自开服前注册的号（按 id ≤ 2343 认定为 NPC）；同时段普通原创约 2 赞、4 浏览。
