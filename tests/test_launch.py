@@ -89,6 +89,7 @@ class ReplyPacingTests(unittest.TestCase):
     # Live 2026-10-19: two fresh accounts replied every ~2 minutes (60 s cooldown + jitter, daily cap only).
     def setUp(self):
         self.store = StateStore(); self.addCleanup(self.store.close)
+        self.store.set_policy('reply_pacing', {'per_hour': 3, 'min_gap_seconds': 480})
 
     def sent(self, ident, at, purpose=''):
         with self.store.batch_transaction():
@@ -228,6 +229,7 @@ class LikePacingTests(unittest.TestCase):
     def setUp(self):
         self.store = StateStore(); self.addCleanup(self.store.close)
         self.store.set_policy('require_warmup', True)
+        self.store.set_policy('like_pacing', {'per_hour': 4, 'per_day': 30, 'require_initialised': True})
 
     def like(self, target, now):
         return self.store.claim_action('like', 'acct', target, metadata={}, now=now)

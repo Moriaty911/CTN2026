@@ -20,6 +20,10 @@ def at(text):
     return datetime.fromisoformat(text).replace(tzinfo=SYDNEY).timestamp()
 
 
+TIERS = {'tiers': [{'from_day': 0, 'per_account': 2}, {'from_day': 2, 'per_account': 3}]}
+
+
+@patch.dict(schedule.POLICY, TIERS)
 class ScheduleTests(unittest.TestCase):
     def test_campaign_days_and_red_multipliers(self):
         self.assertEqual(schedule.campaign_day(at('2026-10-19T09:00:00')), 0)
@@ -83,7 +87,7 @@ class SlotJobTests(unittest.TestCase):
         self.store = StateStore(); self.addCleanup(self.store.close)
         self.t = at('2026-10-26T10:05:00')
         # 8 accounts x 3 = 24 slots a day; no start jitter unless a test asks for it.
-        for p in (patch.object(schedule, 'posting_accounts', return_value=8), patch.dict(schedule.POLICY, {'slot_jitter': 0.0, 'active_hours': [0, 24]})):
+        for p in (patch.object(schedule, 'posting_accounts', return_value=8), patch.dict(schedule.POLICY, {'slot_jitter': 0.0, 'active_hours': [0, 24], **TIERS})):
             p.start(); self.addCleanup(p.stop)
 
     def test_first_attempt_waits_for_a_stable_random_point_early_in_the_slot(self):

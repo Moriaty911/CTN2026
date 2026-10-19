@@ -3,8 +3,7 @@
   "notes": "Strategic originals (initialise posts excluded). Team daily limit = per_account quota x accounts able to post; a limit is a ceiling, not a target. Each account waits a random min_gap..max_gap between its own originals and posts at most daily_max a day (2026-10-19: was one per 24 hours, 10 per team).",
   "day0": "2026-10-19",
   "tiers": [
-    {"from_day": 0, "per_account": 2},
-    {"from_day": 2, "per_account": 3}
+    {"from_day": 0, "per_account": 4}
   ],
   "per_account": {"min_gap_seconds": 3600, "max_gap_seconds": 10800, "daily_max": 4},
   "slot_jitter": 0.6,

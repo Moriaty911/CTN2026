@@ -30,7 +30,7 @@ def main(argv=None):
     p.add_argument('--p-floor',type=float,help='automation: raise the minimum bot probability (never below 0.7)')
     p.add_argument('--max-expected-genuine',type=float,help='automation: risk budget for unresolved post reports')
     p.add_argument('--candidate');p.add_argument('--source');p.add_argument('--reason',default='');p.add_argument('--revision',type=int);p.add_argument('--resume-at',type=float)
-    p=subs.add_parser('launch');p.add_argument('--batches',choices=['on','off']);p.add_argument('--initialise-window',type=int,help='seconds to spread initialise posts over');p.add_argument('--unslow',help='restore the normal daily cap for an account')
+    p=subs.add_parser('launch');p.add_argument('--batches',choices=['on','off']);p.add_argument('--initialise-window',type=int,help='seconds to spread initialise posts over');p.add_argument('--unslow',help='restore the normal daily cap for an account');p.add_argument('--amplify',choices=['auto','off','low','high','max'],help='team amplification level; auto follows the phase schedule')
     p=subs.add_parser('news');p.add_argument('operation',choices=['list','show','withdraw','summary']);p.add_argument('claim_id',nargs='?');p.add_argument('--status');p.add_argument('--limit',type=int,default=30);p.add_argument('--reason',default='')
     p=subs.add_parser('rag-withdraw');p.add_argument('snapshot_id',nargs='?');p.add_argument('--reference');p.add_argument('--corpus-hash')
     p=subs.add_parser('account');p.add_argument('account_id');p.add_argument('--mode',choices=['active','standby','dormant'])
@@ -147,13 +147,16 @@ def main(argv=None):
             from ctn.pipeline.targeting import launch_rule
             with store.batch_transaction():
                 if args.batches:store.set_policy('reply_batches_enabled',args.batches=='on')
+                if args.amplify:store.set_policy('amplify_override','' if args.amplify=='auto' else args.amplify)
                 if args.initialise_window is not None:
                     if args.initialise_window<0:parser.error('window must be non-negative')
                     store.set_policy('initialise_spread',{**launch_rule(store,'initialise_spread'),'window_seconds':args.initialise_window})
                 if args.unslow:
                     slowed=dict(store.policy('slowed_accounts',{}) or {});slowed.pop(args.unslow,None);store.set_policy('slowed_accounts',slowed)
-                store.audit_operation('cli','launch_settings','policy',{'batches':args.batches,'initialise_window':args.initialise_window,'unslow':args.unslow})
-            result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown')}
+                store.audit_operation('cli','launch_settings','policy',{'batches':args.batches,'initialise_window':args.initialise_window,'unslow':args.unslow,'amplify':args.amplify})
+            from ctn.amplify import summary as amplify_summary
+            result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown','like_pacing','reply_pacing')}
+            result['amplify']=amplify_summary(store,since=time.time()-86400)
             result['slowed_accounts']=store.policy('slowed_accounts',{})
         elif args.command=='news':
             if args.operation=='list':result=store.news_list(status=args.status,limit=args.limit)

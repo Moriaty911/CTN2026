@@ -271,8 +271,10 @@ class RuntimeStoreMixin:
             if kind in ('post','reply') and meta.get('purpose') not in ('warmup','initialise'):
                 # Team-wide anti-pile-on caps per target author and thread, plus per-account daily volume.
                 from ctn.pipeline.targeting import cap_reason
-                capped=cap_reason(self,target_author=meta.get('target_author','') if kind=='reply' else '',
-                    root_post_id=str(meta.get('root_post_id') or target) if kind=='reply' else '',account=account,now=ts)
+                # Amplification replies to our own posts keep the per-account pacing but not the anti-pile-on caps.
+                amplify=meta.get('engine')=='amplify'
+                capped=cap_reason(self,target_author=meta.get('target_author','') if kind=='reply' and not amplify else '',
+                    root_post_id=str(meta.get('root_post_id') or target) if kind=='reply' and not amplify else '',account=account,now=ts)
                 if capped:return None,capped
             if kind=='like':
                 # A new account liking every few seconds before its first post reads as a bot,

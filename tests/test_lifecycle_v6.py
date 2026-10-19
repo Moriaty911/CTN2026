@@ -314,7 +314,8 @@ class AsyncIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 recovered=store.claim_macro_job(now=701)
                 self.assertEqual(recovered['id'],job['id']);self.assertEqual(json.loads(recovered['payload_json']),{'draft':'saved'})
                 self.assertNotEqual(recovered['owner'],job['owner'])
-    @patch('ctn.macro.schedule.posting_accounts', lambda store: 10)
+    # One posting account: few, long slots, so the 10-minute retry fits whatever the time of day.
+    @patch('ctn.macro.schedule.posting_accounts', lambda store: 1)
     @patch.dict('ctn.macro.schedule.POLICY', {'slot_jitter': 0.0, 'active_hours': [0, 24]})
     async def test_macro_existing_success_never_generates_or_sends_again(self):
         from ctn.macro.worker import MacroWorker

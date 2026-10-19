@@ -1,0 +1,23 @@
+{
+  "version": "amplify.v1",
+  "notes": "Our own accounts like and reply to each other's posts so they reach trending (live 2026-10-19: amplified posts drew 12-29 citizen likes each, plain ones 1-2). Interactions between our accounts score nothing themselves. Phases are Sydney time; `ops launch --amplify` overrides the level. Counts are ranges; the planner draws inside them per post.",
+  "phases": [
+    {"from": "2026-10-19T18:00:00+11:00", "level": "high"},
+    {"from": "2026-10-22T00:00:00+11:00", "level": "low"},
+    {"from": "2026-10-31T18:00:00+11:00", "level": "max"}
+  ],
+  "levels": {
+    "off":  {"original_likes": [0, 0],     "original_replies": [0, 0], "reply_likes": [0, 0]},
+    "low":  {"original_likes": [0.15, 0.3], "original_replies": [0, 1], "reply_likes": [0, 1]},
+    "high": {"original_likes": [0.5, 0.8], "original_replies": [2, 4], "reply_likes": [0, 2]},
+    "max":  {"original_likes": [0.7, 1.0], "original_replies": [3, 5], "reply_likes": [1, 3]}
+  },
+  "like_window_seconds": [90, 2400],
+  "reply_window_seconds": [180, 3600],
+  "plan_lookback_seconds": 3600,
+  "max_publish_backlog_seconds": 60,
+  "reply_retry_seconds": 120,
+  "max_reply_attempts": 3,
+  "max_like_attempts": 6,
+  "steps_per_tick": 4
+}

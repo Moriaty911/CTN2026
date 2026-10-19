@@ -113,7 +113,7 @@ class CapTests(unittest.TestCase):
         intent(self.store, 'a3', 't3', author='x', root='root1')
         intent(self.store, 'a4', 't4', author='y', root='root1')
         self.assertEqual(targeting.cap_reason(self.store, root_post_id='root1'), 'thread_daily_cap')
-        for i in range(35):
+        for i in range(targeting.POLICY['caps']['per_account_per_day']):
             intent(self.store, 'busy', f'p{i}', author=f'u{i}', root=f'r{i}')
         intent(self.store, 'busy', 'init', kind='post', purpose='initialise')
         self.assertEqual(targeting.cap_reason(self.store, account='busy'), 'account_daily_cap')

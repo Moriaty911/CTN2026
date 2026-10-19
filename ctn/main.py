@@ -175,6 +175,13 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         if brain is not None:
             from .warmup import warmup_step
             tasks.append(asyncio.create_task(worker('initialise',lambda:warmup_step(actuator,router,brain.postflight),30)))
+            # Our accounts liking/replying to each other. Runtime off switch: `ops launch --amplify off`;
+            # CTN_AMPLIFY=false does not start the worker at all.
+            from .config import _env_bool
+            if _env_bool('CTN_AMPLIFY',True):
+                from .amplify import AmplifyWorker
+                amplify=AmplifyWorker(actuator,router,llm,brain.postflight,side=settings.side.value)
+                tasks.append(asyncio.create_task(worker('amplify',amplify.step,5)))
         tasks.append(asyncio.create_task(worker('performance',performance.step,30)))
         from .pipeline.refresh import refresh_step
         tasks.append(asyncio.create_task(worker('refresh',lambda:refresh_step(actuator,store),5)))

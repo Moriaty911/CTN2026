@@ -184,6 +184,10 @@ def skip_reason(store, post, relative_stance=None, now=None):
     return ''
 
 
+# Our accounts replying to each other (ctn/amplify.py) do not use up the caps on replying to citizens.
+NOT_AMPLIFY = "COALESCE(json_extract(metadata_json,'$.engine'),'')<>'amplify'"
+
+
 def cap_reason(store, *, target_author='', root_post_id='', account='', now=None, include_account=True):
     """Team-wide anti-pile-on caps (per target author, per thread) and per-account daily volume."""
     ts = time.time() if now is None else now
@@ -193,12 +197,12 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
     with store._lock:
         if target_author:
             n = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE kind='reply' AND {live} AND created_at>=? "
-                                    "AND json_extract(metadata_json,'$.target_author')=?", (start, target_author)).fetchone()[0]
+                                    f"AND json_extract(metadata_json,'$.target_author')=? AND {NOT_AMPLIFY}", (start, target_author)).fetchone()[0]
             if n >= caps['per_author_per_day']:
                 return 'author_daily_cap'
         if root_post_id:
             n = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE kind='reply' AND {live} AND created_at>=? "
-                                    "AND COALESCE(json_extract(metadata_json,'$.root_post_id'),target_id)=?",
+                                    f"AND COALESCE(json_extract(metadata_json,'$.root_post_id'),target_id)=? AND {NOT_AMPLIFY}",
                                     (start, root_post_id)).fetchone()[0]
             if n >= caps['per_thread_per_day']:
                 return 'thread_daily_cap'
