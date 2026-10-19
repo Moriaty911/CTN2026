@@ -849,6 +849,16 @@ Deployment steps (git pull, verify, backup, build, replace, check, roll back) ar
   ③确认已部署 3231d66（第一帖按“日常生活”审核，否则大部分第一帖会因 `purpose_drifted` 被拒）；
   ④注册必须带 `--account`，用户名见 `docs/personas-80/handles-2026-10-19.tsv`。
 
+- [x] **原创发送闸门的每日上限**（2026-10-20 01:12 观察，d5b314e 已改）：排期器按“每号配额 × 可发号数”排，`claim_action` / `guard_wire_action`
+  却还读固定兜底值 `daily_original_limit`（10），每天第 10 条原创之后的时段全部 `actuator_failed:daily_original_limit`。现在闸门取两者较大值，运营者固定值照旧生效。
+- [ ] **黑名单举报暂停中，举报理由与被举报帖子对不上**（2026-10-20 02:40 用户决定 `ops blacklist off`；已发 18 条，等裁决）。问题：
+  - 黑名单号的每条帖子都会被举报，但理由（`policies/blacklist-v1.json` 的 `report_detail`）描述的是这个号为什么被拉黑，不是这条帖子本身。
+    例：帖子 16158 正文只有 “Absolutely yes.”，理由却是“同一段文字被多个新号逐字发布”。
+  - 正文为空的帖子（转发）也被举报：已发 18 条里 1 条正文为空、5 条正文不到 40 字。
+  - 理由是每类一段固定模板，只填一个数字，不引用这条帖子或同类帖子的具体证据；同类举报的理由几乎完全一样。
+  - 风险：裁判若只看这条帖子，容易判“真人”，任何一次判真人都会让我们 6 小时不能举报。
+  - 下一步：等这 18 条的裁决（`ops blacklist stats`、官方计分面板），对照每条的正文长度和理由类型看哪些成立，再决定怎么改、何时 `ops blacklist on`。
+
 **第一周**
 - [ ] 每个举报档位攒够 15–20 个裁决后看 `p_estimate`；稳定高于 0.7 再考虑把 `leak_only` 加入 `auto_buckets`。
 - [ ] （待定）关注（follow）策略：开服后先观察 1–2 天再决定做不做，目前代码不会主动关注任何人。
