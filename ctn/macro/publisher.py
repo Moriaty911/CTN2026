@@ -168,6 +168,10 @@ class StrategicPublisher:
             from ctn.rag.corpus import too_close
             if too_close(post_text,[r['text'] for r in data['styles']]):
                 return {'ok':False,'status':'rejected','reason':'style_copy'}
+            from ctn.phrasing import recent_texts,repetition_reason
+            repeated=repetition_reason(post_text,recent_texts(self.router.store))
+            if repeated:
+                return {'ok':False,'status':'rejected','reason':repeated}
         # 3. Layer-2 JEV Postflight Gatekeeper (shared with micro replies, with strict_alignment=True)
         active_key = branch if branch else purpose
         resolved_purpose = PURPOSE_RULES.get(active_key, active_key)

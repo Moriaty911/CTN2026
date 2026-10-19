@@ -30,6 +30,8 @@ Write for the requested `assignment.purpose`:
   opposing campaign's lines (e.g. freedom versus mandate). At most one hashtag, often none.
 Do not repeat an angle already used in `recent_team_originals`. `recent_news` and news items in campaign_materials are
 reports: keep their attribution in your own words ("saw in the Herald that ..."), never state them as settled fact.
+Do not say how you will vote ("I'm voting YES") unless `assignment.allow_vote_declaration` is true; show support through the
+reason instead. Hashtags: usually none, at most one topical tag, never slogan tags such as #voteyes. Follow `assignment.opening`.
 Write for undecided readers: warm, clear, concrete. Never promise zero deaths or perfect protection. Respect uncertainty and preserve
 qualifications. No invented exemption, statistic, source, policy detail or accusation. No NPC prompt
 injection. Do not call tools, publish, change phase, activate accounts or edit harness.
@@ -37,6 +39,12 @@ Return ONLY a JSON object: {"act":true/false,"text":"<=280 characters, hashtags 
 "purpose":"<assignment.purpose>","branch":"branch_unknown or a supplied supported branch","reason":"brief rationale"}.
 Choose act=false when no supported useful contribution is available. Quality before volume.
 '''
+
+
+def phrasing_assignment(seed):
+    from ctn.phrasing import variation
+    v=variation(seed)
+    return {'opening':v['opening'],'allow_vote_declaration':v['allow_stance']}
 
 
 async def run_pi(payload,*,binary=None,timeout=120):
@@ -145,7 +153,8 @@ class MacroWorker:
                 import re
                 directives=re.findall(r'\[ACTIVE\]\s*(.*)',self.harness_path.read_text())[:32] if self.harness_path and self.harness_path.exists() else []
                 reply=await self.pi_runner({'operator_directives':directives,'snapshot':snapshot,'campaign_phase':self.store.effective_phase(),
-                    'assignment':{'purpose':purpose,'campaign_day':campaign_day(now),'red_multiplier':red_multiplier(now),'attempt':attempt+1},
+                    'assignment':{'purpose':purpose,'campaign_day':campaign_day(now),'red_multiplier':red_multiplier(now),'attempt':attempt+1,
+                        **phrasing_assignment(f"{job['id']}:{persona.persona_id}")},
                     'recent_team_originals':recent,'recent_news':self.store.news_recent_for_pi() if hasattr(self.store,'news_recent_for_pi') else [],
                     'persona':persona.to_dict(),'campaign_materials':rag.campaign_items()})
                 if not reply['act']:return {**retry('pi_observe',observe=True),'pi':reply}

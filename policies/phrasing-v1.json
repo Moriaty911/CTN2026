@@ -1,0 +1,22 @@
+{
+  "version": "phrasing.v1",
+  "notes": "Live 2026-10-19: of 52 replies/originals, 37% opened with 'Fair point / Fair enough / You're right' and 27% said 'I'm voting YES'; many accounts sharing a template are easy to group. Drafts get a random opening style and rarely a vote declaration; a local gate rejects a draft whose opening, closing or stock phrase the team used recently.",
+  "recent_window": 40,
+  "opening_words": 3,
+  "closing_words": 4,
+  "max_repeats": 2,
+  "stance_share": 0.15,
+  "stock_phrases": [
+    "i'm voting yes", "i am voting yes", "i'll be voting yes", "i'd vote yes", "voting yes because",
+    "fair point", "fair enough", "fair question", "you're right", "you are right", "that's a fair",
+    "i support the requirement", "i support the proof requirement", "before i picture",
+    "i want this to work", "#voteyes", "#voteno"
+  ],
+  "stock_openings": ["fair point", "fair enough", "fair question", "you're right", "you are right", "that's a fair", "that worry", "i hear you", "good question", "great point"],
+  "opening_styles": [
+    "Open with one concrete detail from your own daily life that bears on the point.",
+    "Open with the specific thing the author mentioned (a place, a service, a rule), not with a reaction to them.",
+    "Open by stating your point directly in your own words.",
+    "Open with a short, genuine question about the specific situation."
+  ]
+}

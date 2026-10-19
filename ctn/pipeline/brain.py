@@ -419,6 +419,10 @@ class JevLlmBrain:
         references=self.router.store.publication_references()
         if snapshot:references += [s['text'] for s in snapshot.to_dict()['styles']]
         if too_close(draft.reply,references):pv1=PostflightVerdict(False,'near_duplicate_or_style_copy')
+        from ..phrasing import recent_texts,repetition_reason
+        recent=recent_texts(self.router.store)
+        repeated=repetition_reason(draft.reply,recent) if pv1.can_send else ''
+        if repeated:pv1=PostflightVerdict(False,repeated)
         self.router.store.record_quality(routing.account_id,post.post_id,pv1.can_send,pv1.reason,'primary')
         if pv1.can_send:
             self._batch_materials(detail,draft,data,post)
@@ -451,6 +455,8 @@ class JevLlmBrain:
         detail["postflight_retry"] = pv2.to_dict()
 
         if too_close(draft_retry.reply,references):pv2=PostflightVerdict(False,'near_duplicate_or_style_copy')
+        repeated=repetition_reason(draft_retry.reply,recent) if pv2.can_send else ''
+        if repeated:pv2=PostflightVerdict(False,repeated)
         self.router.store.record_quality(routing.account_id,post.post_id,pv2.can_send,pv2.reason,'primary')
         if pv2.can_send:
             self._batch_materials(detail,draft_retry,data,post)
@@ -511,6 +517,9 @@ class JevLlmBrain:
             from ..jev.postflight import PostflightVerdict
             refs=self.router.store.publication_references()
             if too_close(draft.reply,refs):verdict=PostflightVerdict(False,'near_duplicate_publication')
+            from ..phrasing import recent_texts,repetition_reason
+            repeated=repetition_reason(draft.reply,recent_texts(self.router.store)) if verdict.can_send else ''
+            if repeated:verdict=PostflightVerdict(False,repeated)
             self.router.store.record_quality(persona.account_id,primary['post_id'],verdict.can_send,verdict.reason,'additional')
             if verdict.can_send:
                 decision=json.loads(json.dumps(primary))

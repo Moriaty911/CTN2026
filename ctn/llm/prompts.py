@@ -63,6 +63,10 @@ def build_messages(
         )
         if guidance:
             system += f"\n{guidance}"
+        # Vary the opening and how often the vote is declared across accounts (policies/phrasing-v1.json).
+        from ctn.phrasing import instructions
+        seed = f"{(materials.get('target') or {}).get('post_id', '')}:{persona.persona_id}:{purpose}"
+        system += "\n" + instructions(seed)
     if retry_feedback:
         system += (f"\nIMPORTANT CORRECTION: A previous draft was rejected by evaluation due to '{retry_feedback}'. "
                    "Strictly resolve this issue in the new reply: ensure strict alignment with our assigned stance, "
@@ -80,7 +84,9 @@ def build_messages(
             "Never promise zero deaths, zero cases or perfect protection.")
         # Evidence already lives in evaluated_materials. Never restore an omitted record from the full snapshot.
         observations['rag_identity']={k:rag[k] for k in ('corpus_hash','corpus_version','retrieval_version')}
-        observations['style_reference']=[s for s in rag['styles'] if purpose in s['purposes']][:1]
+        from ctn.phrasing import strip_stance
+        observations['style_reference']=[{**s,'text':strip_stance(s['text'])} if isinstance(s.get('text'),str) else s
+            for s in rag['styles'] if purpose in s['purposes']][:1]
     observations["selected_purpose"] = purpose
     observations["reply_quality"] = materials["action_decision"]["reply_quality"]
     if persona is not None and persona.profile:

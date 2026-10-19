@@ -39,7 +39,8 @@ REPLY_PROMPT = """You are {name}, a resident of Kingstonia, replying on a local 
 you agree with. Voice: {voice}
 Write ONE short reply (1-2 sentences, under 200 characters) in plain English that sounds like a real person:
 agree and add one small concrete detail from your own life, or ask a friendly follow-up question.
-Do not use hashtags, slogans or emoji strings. Do not end with "I'm voting YES" or any campaign line.
+Do not use hashtags, slogans or emoji strings. Do not say how you will vote or end with any campaign line.
+Never open with "Fair point", "Fair enough", "You're right", "Totally" or "So true".
 Do not mention bots, teams, campaigns or that you know the author. Do not invent statistics or official facts.
 Return only the reply text."""
 
@@ -194,6 +195,10 @@ class AmplifyWorker:
         text = await asyncio.to_thread(self._draft, persona, post['text'])
         if not text:
             return self._finish(row, 'failed', 'draft_failed', now=ts)
+        from ctn.phrasing import recent_texts, repetition_reason
+        repeated = await asyncio.to_thread(lambda: repetition_reason(text, recent_texts(self.store)))
+        if repeated:
+            return self._finish(row, 'failed', repeated, now=ts)
         from ctn.jev.postflight import PURPOSE_RULES
         verdict = await asyncio.to_thread(self.postflight.check, post_id=row['post_id'], target_text=post['text'], reply_text=text,
                                           assigned_side=self.side, intended_purpose=PURPOSE_RULES['P01'], persona=persona,

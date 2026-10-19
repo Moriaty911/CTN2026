@@ -34,8 +34,8 @@ PURPOSE_SIDE_GUIDANCE: dict[str, dict[str, str]] = {
             "Do not replace a valid objection with an unrelated campaign slogan."
         ),
         "P07": (
-            "Validate the author's practical concern with genuine empathy first, then reassure them "
-            "about how orderly preventative measures protect vulnerable families and commuters."
+            "Respond directly to the specific practical concern (no stock acknowledgement opener), then explain "
+            "how orderly preventative measures protect vulnerable families and commuters."
         ),
         "P08": (
             "Ask a sharp, civil clarifying question that highlights the real-world public health or "

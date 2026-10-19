@@ -157,6 +157,8 @@ def main(argv=None):
             from ctn.amplify import summary as amplify_summary
             result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown','like_pacing','reply_pacing')}
             result['amplify']=amplify_summary(store,since=time.time()-86400)
+            from ctn.phrasing import stats as phrasing_stats
+            result['phrasing']=phrasing_stats(store)
             result['slowed_accounts']=store.policy('slowed_accounts',{})
         elif args.command=='news':
             if args.operation=='list':result=store.news_list(status=args.status,limit=args.limit)
