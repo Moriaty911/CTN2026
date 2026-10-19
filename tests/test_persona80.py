@@ -472,6 +472,23 @@ class CollectorAndRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tuple(row),(None,'unavailable'))
         self.assertTrue(store._conn.execute("SELECT 1 FROM feed_scans WHERE source='shared_ranked_sample'").fetchone())
 
+    async def test_post_metrics_come_from_counters_and_missing_posts_stay_unknown(self):
+        store=StateStore();self.addCleanup(store.close);router=bound_router(store,('yes_001',))
+        now=time.time()
+        for pid in ('101','404'):
+            store._conn.execute("INSERT INTO performance_jobs(job_key,kind,subject,scheduled_at,window_s,next_attempt_at) VALUES(?,'post',?,?,300,?)",
+                (f'post:{pid}:300',pid,now-1,now-1))
+        platform=MockLegitClient(failure_rate=0,latency_ms=(0,0))
+        async def counters(post_id):
+            if post_id=='404':raise PlatformError('post not found',status=404,retryable=False)
+            return {'likes':2,'replies':1,'reposts':0,'views':7}
+        async def no_counts(post_id):raise AssertionError('post bodies carry no counts')
+        platform.get_counters=counters;platform.get_post=no_counts
+        await PerformanceCollector(actor(platform,store),router).step()
+        rows={r[0]:tuple(r[1:]) for r in store._conn.execute('SELECT post_id,likes,replies,reposts,views,status FROM post_metric_snapshots')}
+        self.assertEqual(rows['101'],(2,1,0,7,'available'))
+        self.assertEqual(rows['404'],(None,None,None,None,'unavailable'))
+
     async def test_saved_draft_expiration_cancels_slot_without_model_calls(self):
         store=StateStore();self.addCleanup(store.close);router,batch=batch_fixture(store)
         platform=MockLegitClient(failure_rate=0,latency_ms=(0,0))

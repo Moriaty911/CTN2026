@@ -1,6 +1,5 @@
 """Budgeted, restartable observation sampling; never estimates competition revenue."""
 import asyncio
-import json
 import time
 
 
@@ -23,13 +22,9 @@ class PerformanceCollector:
             for job in jobs:
                 raw=None;source='platform'
                 if job['kind']=='post':
-                    cached=await asyncio.to_thread(self.store.get_observed_post,job['subject'])
-                    if cached and cached['last_seen_at']>=job['scheduled_at'] and time.time()-cached['last_seen_at']<=60:
-                        raw=json.loads(cached['raw_json']);source='shared_post_mirror'
-                        observed_at=cached['last_seen_at']
-                    else:
-                        raw=await self.actuator._read('metrics_post',lambda:self.actuator._client.get_post(job['subject']),None)
-                        observed_at=time.time()
+                    # Live posts carry no counts; only /posts/{id}/counters has them (a 404 comes back empty = unavailable).
+                    raw=await self.actuator.get_counters(job['subject'])
+                    observed_at=time.time()
                 elif job['kind']=='account':
                     raw=await self.actuator._read('metrics_account',lambda:self.actuator._client.get_profile(job['subject']),None)
                     observed_at=time.time()
