@@ -144,6 +144,8 @@ class AmplifyWorker:
 
     def _due(self, ts):
         with self.store.batch_transaction():
+            # A row left running by a restart goes back to the queue; the send path dedupes an action already sent.
+            self.store._conn.execute("UPDATE amplify_plan SET status='queued',reason='recovered' WHERE status='running' AND updated_at<?", (ts - 600,))
             rows = [dict(r) for r in self.store._conn.execute(
                 "SELECT * FROM amplify_plan WHERE status='queued' AND due_at<=? ORDER BY due_at LIMIT ?",
                 (ts, int(self.policy['steps_per_tick'])))]

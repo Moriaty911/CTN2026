@@ -169,6 +169,14 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.status('like', self.accounts[1]), ('queued', ''))
         self.assertEqual(self.store._conn.execute('SELECT COUNT(*) FROM amplify_sources').fetchone()[0], 0)
 
+    async def test_a_row_left_running_by_a_restart_is_retried(self):
+        self.queue('like', self.accounts[1])
+        with self.store.batch_transaction():
+            self.store._conn.execute("UPDATE amplify_plan SET status='running',updated_at=?", (time.time() - 700,))
+        with patch.object(amplify, 'level', return_value='high'):
+            await self.worker.step()
+        self.assertEqual(self.status('like', self.accounts[1]), ('done', 'ok'))
+
     async def test_pacing_refusal_requeues_and_gives_up_after_the_attempt_limit(self):
         self.store.set_policy('like_pacing', {'per_hour': 0, 'per_day': 100, 'require_initialised': True})
         self.queue('like', self.accounts[1])
