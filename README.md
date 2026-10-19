@@ -839,6 +839,13 @@ Deployment steps (git pull, verify, backup, build, replace, check, roll back) ar
   - 改法候选：`ctn/llm/prompts.py` 的 P01–P09 指令里禁止固定开头/结尾、要求不必每条都表态；RAG 例句改成只给观点不给句式；
     发布闸门加一条本地检查：同一句式（开头 6 词 / 结尾 6 词）在全队最近 N 条回复里出现超过 2 次就重写。
   - 先用 `action_intents` 里的已发回复统计开头/结尾 n-gram 频率，改完再对比。
+- [ ] **点赞加最小间隔**（2026-10-19 观察）：`like_pacing` 只有每小时 4 / 每天 30，额度一到就连点，
+  例如 mara_bakes82 18:54:56–18:55:26 点了 4 个、nolan_mercer 19:03–19:05 点了 4 个。照 `reply_pacing` 的 `min_gap_seconds`
+  给 `claim_action` 的 like 分支加相邻两次的最小间隔（倾向 10 分钟）。同时考虑回复间隔加随机：现在几乎每条都卡在 480 秒一到就发，节奏太整齐。
+- [ ] **注册其余 47 个账号之前**（流程跑通后再做）：①`ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3`；
+  ②`ops launch --initialise-window 18000`（开服测试时改成了 600，不改回去 47 个号会在 10 分钟内扎堆发第一帖）；
+  ③确认已部署 3231d66（第一帖按“日常生活”审核，否则大部分第一帖会因 `purpose_drifted` 被拒）；
+  ④注册必须带 `--account`，用户名见 `docs/personas-80/handles-2026-10-19.tsv`。
 
 **第一周**
 - [ ] 每个举报档位攒够 15–20 个裁决后看 `p_estimate`；稳定高于 0.7 再考虑把 `leak_only` 加入 `auto_buckets`。
