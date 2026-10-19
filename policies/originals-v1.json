@@ -13,7 +13,7 @@
     {"from_day": 13, "red": 4}
   ],
   "ramp_hour": 18,
-  "active_hours": [7, 24],
+  "active_hours": [0, 24],
   "retries": {
     "max_attempts": 3,
     "observe_attempts": 2,
