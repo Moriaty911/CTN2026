@@ -31,6 +31,8 @@ def main(argv=None):
     p.add_argument('--max-expected-genuine',type=float,help='automation: risk budget for unresolved post reports')
     p.add_argument('--candidate');p.add_argument('--source');p.add_argument('--reason',default='');p.add_argument('--revision',type=int);p.add_argument('--resume-at',type=float)
     p=subs.add_parser('launch');p.add_argument('--batches',choices=['on','off']);p.add_argument('--initialise-window',type=int,help='seconds to spread initialise posts over');p.add_argument('--unslow',help='restore the normal daily cap for an account');p.add_argument('--amplify',choices=['auto','off','low','high','max'],help='team amplification level; auto follows the phase schedule')
+    p.add_argument('--push',help="'next' pushes the next original we publish towards trending, a post id pushes that original of ours now, 'cancel' drops a pending 'next'")
+    p.add_argument('--push-reposts',type=int);p.add_argument('--push-replies',type=int)
     p=subs.add_parser('blacklist',help='accounts whose every post is reported (ctn/blacklist.py)')
     p.add_argument('operation',choices=['list','stats','add','remove','import','scan','on','off'])
     p.add_argument('target',nargs='?',help='account id for add/remove, file for import')
@@ -157,10 +159,15 @@ def main(argv=None):
                     store.set_policy('initialise_spread',{**launch_rule(store,'initialise_spread'),'window_seconds':args.initialise_window})
                 if args.unslow:
                     slowed=dict(store.policy('slowed_accounts',{}) or {});slowed.pop(args.unslow,None);store.set_policy('slowed_accounts',slowed)
-                store.audit_operation('cli','launch_settings','policy',{'batches':args.batches,'initialise_window':args.initialise_window,'unslow':args.unslow,'amplify':args.amplify})
+                store.audit_operation('cli','launch_settings','policy',{'batches':args.batches,'initialise_window':args.initialise_window,'unslow':args.unslow,'amplify':args.amplify,'push':args.push})
+            if args.push:
+                from ctn.amplify import request_push
+                try:pushed=request_push(store,args.push,reposts=args.push_reposts,replies=args.push_replies)
+                except ValueError as exc:parser.error(str(exc))
             from ctn.amplify import summary as amplify_summary
             result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown','like_pacing','reply_pacing')}
             result['amplify']=amplify_summary(store,since=time.time()-86400)
+            if args.push:result['push']=pushed
             from ctn.phrasing import stats as phrasing_stats
             result['phrasing']=phrasing_stats(store)
             result['slowed_accounts']=store.policy('slowed_accounts',{})

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS amplify_plan(id TEXT PRIMARY KEY,post_id TEXT NOT NUL
  due_at REAL NOT NULL,status TEXT NOT NULL DEFAULT 'queued',attempts INTEGER NOT NULL DEFAULT 0,reason TEXT NOT NULL DEFAULT '',
  updated_at REAL NOT NULL,UNIQUE(post_id,kind,account_id));
 CREATE INDEX IF NOT EXISTS idx_amplify_due ON amplify_plan(status,due_at);
+CREATE TABLE IF NOT EXISTS amplify_push(post_id TEXT PRIMARY KEY,reposts INTEGER NOT NULL,replies INTEGER NOT NULL,pushed_at REAL NOT NULL);
 """
 
 # Results that mean "this account cannot act right now", not "this action is wrong".
@@ -108,6 +109,62 @@ def plan_post(store, post_id, author, kind, published_at, accounts, *, lvl, rng=
     return len(rows)
 
 
+def push_post(store, post_id, author, start, accounts, *, reposts, replies, rng=random, now=None, policy=POLICY):
+    """Push one of our originals hard (policy `push`): reposts plus enough replies to reach `replies` in total,
+    each from a different account, front-loaded after `start`. Queued replies already planned move into the window."""
+    ts = time.time() if now is None else now
+    rules = policy['push']
+    with store.batch_transaction():
+        if store._conn.execute('INSERT OR IGNORE INTO amplify_push VALUES(?,?,?,?)', (post_id, reposts, replies, ts)).rowcount == 0:
+            return {'post_id': post_id, 'reposts': 0, 'replies': 0, 'reason': 'already_pushed'}
+        store._conn.execute('INSERT OR IGNORE INTO amplify_sources VALUES(?,?,?,?,?)', (post_id, author, 'post', 'push', ts))
+        taken = {r[0] for r in store._conn.execute("SELECT account_id FROM amplify_plan WHERE post_id=? AND kind IN ('reply','repost')", (post_id,))}
+        queued = [r[0] for r in store._conn.execute("SELECT id FROM amplify_plan WHERE post_id=? AND kind='reply' AND status='queued'", (post_id,))]
+        have = store._conn.execute("SELECT COUNT(*) FROM amplify_plan WHERE post_id=? AND kind='reply' AND status IN ('queued','running','done')",
+                                   (post_id,)).fetchone()[0]
+        # Spread pushes over different accounts: the same few accounts in every crowded thread reads as a ring.
+        joined = dict(store._conn.execute(
+            "SELECT p.account_id,COUNT(DISTINCT p.post_id) FROM amplify_plan p JOIN amplify_push u ON u.post_id=p.post_id "
+            "WHERE u.pushed_at>=? AND u.post_id<>? AND p.kind IN ('reply','repost') GROUP BY p.account_id", (ts - 86400, post_id)).fetchall())
+        pool = [a for a in accounts if a != author and a not in taken and joined.get(a, 0) < int(rules['max_per_account_per_day'])]
+        reposters = rng.sample(pool, min(int(reposts), len(pool)))
+        rest = [a for a in pool if a not in reposters]
+        repliers = rng.sample(rest, min(max(0, int(replies) - have), len(rest)))
+        for kind, account in [('repost', a) for a in reposters] + [('reply', a) for a in repliers]:
+            store._conn.execute('INSERT OR IGNORE INTO amplify_plan(id,post_id,kind,account_id,due_at,updated_at) VALUES(?,?,?,?,?,?)',
+                                (uuid.uuid4().hex, post_id, kind, account, max(_due(start, rules['window_seconds'], rng), ts), ts))
+        for ident in queued:
+            store._conn.execute('UPDATE amplify_plan SET due_at=MIN(due_at,?) WHERE id=?', (max(_due(start, rules['window_seconds'], rng), ts), ident))
+    return {'post_id': post_id, 'reposts': len(reposters), 'replies': len(repliers) + have}
+
+
+def request_push(store, target, *, reposts=None, replies=None, now=None, policy=POLICY):
+    """Operator: 'next' pushes the next original we publish, a post id pushes that original of ours now, 'cancel' drops a pending 'next'."""
+    ts = time.time() if now is None else now
+    rules = policy['push']
+    spec = {'reposts': int(rules['reposts'] if reposts is None else reposts), 'replies': int(rules['replies'] if replies is None else replies)}
+    if target == 'cancel':
+        store.set_policy('amplify_push_next', {})
+        return {'cancelled': True}
+    if target == 'next':
+        store.set_policy('amplify_push_next', {**spec, 'requested_at': ts})
+        return {'next': {**spec, 'requested_at': ts}}
+    ensure_schema(store)
+    with store._lock:
+        row = store._conn.execute("SELECT account_id,published_at FROM publications WHERE post_id=? AND kind='post'", (str(target),)).fetchone()
+    if row is None:
+        raise ValueError('not one of our published originals: ' + str(target))
+    return push_post(store, str(target), row[0], ts, amplifiable_accounts(store), **spec, now=ts, policy=policy)
+
+
+def pending_push(store, now, policy=POLICY):
+    """The operator's 'push the next original' request, if still fresh."""
+    push = store.policy('amplify_push_next', {}) or {}
+    if not push or now - float(push.get('requested_at', 0)) > float(policy['push']['request_ttl_seconds']):
+        return None
+    return push
+
+
 def amplifiable_accounts(store):
     """Bound, active accounts whose first post is done."""
     with store._lock:
@@ -145,6 +202,12 @@ class AmplifyWorker:
         for src in await asyncio.to_thread(new_sources, self.store, ts, self.policy):
             planned += await asyncio.to_thread(plan_post, self.store, src['post_id'], src['account_id'], src['kind'],
                                                float(src['published_at']), accounts, lvl=lvl, rng=self.rng, now=ts, policy=self.policy)
+            push = await asyncio.to_thread(pending_push, self.store, ts, self.policy)
+            if push and src['kind'] == 'post' and float(src['published_at']) >= float(push['requested_at']):
+                # Clear the request first: a crash after this pushes nothing rather than pushing two posts.
+                await asyncio.to_thread(self.store.set_policy, 'amplify_push_next', {})
+                await asyncio.to_thread(lambda: push_post(self.store, src['post_id'], src['account_id'], float(src['published_at']), accounts,
+                                                          reposts=push['reposts'], replies=push['replies'], rng=self.rng, now=ts, policy=self.policy))
         done = []
         for row in await asyncio.to_thread(self._due, ts):
             done.append(await self._run(row, ts))
@@ -226,6 +289,12 @@ class AmplifyWorker:
         if row['kind'] == 'like':
             result = await self.actuator.like(row['account_id'], row['post_id'], context=context)
             return self._settle(row, result, ts)
+        if row['kind'] == 'repost':
+            # A repost is a publish (POST /posts) and shares the team's 3-a-minute budget with posts and replies.
+            if await asyncio.to_thread(self.store.request_backlog, 'route:publish', now=ts) > float(self.policy['max_publish_backlog_seconds']):
+                return self._finish(row, 'queued', 'publish_backlog', delay=float(self.policy['reply_retry_seconds']), now=ts)
+            result = await self.actuator.repost(row['account_id'], row['post_id'], context=context)
+            return self._settle(row, result, ts)
         if not post or not post.get('text'):
             return self._finish(row, 'queued', 'target_not_mirrored', delay=60, now=ts)
         if await asyncio.to_thread(self.store.request_backlog, 'route:publish', now=ts) > float(self.policy['max_publish_backlog_seconds']):
@@ -278,5 +347,10 @@ def summary(store, *, since):
         reasons = store._conn.execute("SELECT reason,COUNT(*) n FROM amplify_plan WHERE updated_at>=? AND status IN ('failed','skipped','queued') "
                                       'GROUP BY reason ORDER BY n DESC LIMIT 10', (since,)).fetchall()
         sources = store._conn.execute('SELECT kind,COUNT(*) FROM amplify_sources WHERE planned_at>=? GROUP BY kind', (since,)).fetchall()
-    return {'level': level(store), 'sources': {r[0]: r[1] for r in sources},
+        pushes = [dict(r) for r in store._conn.execute(
+            "SELECT u.post_id,u.pushed_at,SUM(p.kind='repost' AND p.status='done') reposts_done,SUM(p.kind='reply' AND p.status='done') replies_done,"
+            "SUM(p.status IN ('queued','running')) pending FROM amplify_push u LEFT JOIN amplify_plan p ON p.post_id=u.post_id "
+            "WHERE u.pushed_at>=? GROUP BY u.post_id ORDER BY u.pushed_at DESC LIMIT 10", (since,))]
+    return {'level': level(store), 'push_next': store.policy('amplify_push_next', {}) or {}, 'pushes': pushes,
+            'sources': {r[0]: r[1] for r in sources},
             'actions': {f"{r['kind']}:{r['status']}": r['n'] for r in rows}, 'reasons': {r['reason']: r['n'] for r in reasons}}

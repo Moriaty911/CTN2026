@@ -227,5 +227,116 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.status('reply', self.accounts[2]), ('queued', 'all_accounts_busy'))
         self.llm.call.assert_not_called()
 
+
+TEN = tuple(f'yes_{i:03d}' for i in range(1, 11))
+
+
+class PushTests(unittest.TestCase):
+    """Operator 2026-10-20: push a few originals hard (reposts + replies early) so they reach trending."""
+    def setUp(self):
+        self.store, self.router = setup_store(TEN); self.addCleanup(self.store.close)
+        self.accounts = amplify.amplifiable_accounts(self.store)
+        self.author = self.accounts[0]
+
+    def rows(self, post_id, kind=None):
+        sql = 'SELECT * FROM amplify_plan WHERE post_id=?' + (' AND kind=?' if kind else '')
+        return [dict(r) for r in self.store._conn.execute(sql, (post_id, kind) if kind else (post_id,))]
+
+    def test_push_adds_reposts_and_tops_replies_up_from_different_accounts(self):
+        amplify.plan_post(self.store, 'o1', self.author, 'post', 1000.0, self.accounts, lvl='high', rng=random.Random(1), now=1000.0)
+        before = self.rows('o1', 'reply')
+        out = amplify.push_post(self.store, 'o1', self.author, 1000.0, self.accounts, reposts=3, replies=6, rng=random.Random(2), now=1000.0)
+        reposts, replies = self.rows('o1', 'repost'), self.rows('o1', 'reply')
+        self.assertEqual((out['reposts'], out['replies']), (3, 6))
+        self.assertEqual((len(reposts), len(replies)), (3, 6))
+        actors = [r['account_id'] for r in reposts + replies]
+        self.assertEqual(len(actors), len(set(actors)))  # one action each, never repost and reply from the same account
+        self.assertNotIn(self.author, actors)
+        lo, hi = amplify.POLICY['push']['window_seconds']
+        self.assertTrue(all(1000 + lo <= r['due_at'] <= 1000 + hi for r in reposts + replies))
+        # Replies the normal plan had spread over an hour now land inside the push window too.
+        self.assertEqual({r['id'] for r in before} <= {r['id'] for r in replies}, True)
+        self.assertEqual(amplify.push_post(self.store, 'o1', self.author, 1000.0, self.accounts, reposts=3, replies=6, now=1000.0)['reason'], 'already_pushed')
+
+    def test_an_account_joins_at_most_two_pushes_a_day(self):
+        for i, post in enumerate(('p1', 'p2')):
+            amplify.push_post(self.store, post, self.author, 1000.0 + i, self.accounts, reposts=4, replies=5, rng=random.Random(i), now=1000.0 + i)
+        out = amplify.push_post(self.store, 'p3', self.author, 1002.0, self.accounts, reposts=4, replies=5, rng=random.Random(9), now=1002.0)
+        counts = {}
+        for post in ('p1', 'p2', 'p3'):
+            for r in self.rows(post):
+                counts[r['account_id']] = counts.get(r['account_id'], 0) + 1
+        self.assertLessEqual(max(counts.values()), 2)
+        self.assertLess(out['reposts'] + out['replies'], 9)  # 9 accounts, 18 places, two pushes already used them
+        # A day later the same accounts are free again.
+        later = amplify.push_post(self.store, 'p4', self.author, 1000.0 + 86401, self.accounts, reposts=4, replies=5, now=1000.0 + 86401)
+        self.assertEqual((later['reposts'], later['replies']), (4, 5))
+
+    def test_request_push_needs_one_of_our_originals(self):
+        publish(self.store, 'mine', self.author)
+        publish(self.store, 'myreply', self.author, kind='reply')
+        self.assertEqual(amplify.request_push(self.store, 'mine', reposts=2, replies=2)['reposts'], 2)
+        with self.assertRaises(ValueError):
+            amplify.request_push(self.store, 'myreply')
+        with self.assertRaises(ValueError):
+            amplify.request_push(self.store, 'someone_else')
+
+    def test_next_request_expires(self):
+        amplify.request_push(self.store, 'next', now=1000.0)
+        self.assertIsNotNone(amplify.pending_push(self.store, 1000.0 + amplify.POLICY['push']['request_ttl_seconds']))
+        self.assertIsNone(amplify.pending_push(self.store, 1001.0 + amplify.POLICY['push']['request_ttl_seconds']))
+        amplify.request_push(self.store, 'cancel')
+        self.assertIsNone(amplify.pending_push(self.store, 1000.0))
+
+
+class PushWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.store, self.router = setup_store(TEN); self.addCleanup(self.store.close)
+        self.accounts = amplify.amplifiable_accounts(self.store)
+        self.platform = MockLegitClient(failure_rate=0, latency_ms=(0, 0))
+        self.worker = amplify.AmplifyWorker(actor(self.platform, self.store), self.router, Mock(), Mock(), rng=random.Random(3))
+
+    async def test_next_request_pushes_only_the_first_original_published_after_it(self):
+        now = time.time()
+        publish(self.store, 'before', self.accounts[0], at_ts=now - 60)
+        amplify.request_push(self.store, 'next', reposts=2, replies=3, now=now - 30)
+        publish(self.store, 'after', self.accounts[1], at_ts=now - 10)
+        publish(self.store, 'reply', self.accounts[2], kind='reply', at_ts=now - 5)
+        with patch.object(amplify, 'level', return_value='high'), patch.object(self.worker, '_due', return_value=[]):
+            await self.worker.step(now=now)
+        pushed = [r[0] for r in self.store._conn.execute('SELECT post_id FROM amplify_push')]
+        self.assertEqual(pushed, ['after'])
+        self.assertEqual(self.store.policy('amplify_push_next', {}), {})
+        self.assertEqual(self.store._conn.execute("SELECT COUNT(*) FROM amplify_plan WHERE post_id='after' AND kind='repost'").fetchone()[0], 2)
+        publish(self.store, 'later', self.accounts[3], at_ts=now + 1)
+        with patch.object(amplify, 'level', return_value='high'), patch.object(self.worker, '_due', return_value=[]):
+            await self.worker.step(now=now + 2)
+        self.assertEqual([r[0] for r in self.store._conn.execute('SELECT post_id FROM amplify_push')], ['after'])
+
+    async def test_off_switch_holds_a_pending_push(self):
+        publish(self.store, 'o1', self.accounts[1])
+        amplify.request_push(self.store, 'next', now=time.time() - 60)
+        self.store.set_policy('amplify_override', 'off')
+        await self.worker.step()
+        self.assertEqual(self.store._conn.execute('SELECT COUNT(*) FROM amplify_push').fetchone()[0], 0)
+
+    async def test_repost_goes_through_the_send_path_and_yields_to_a_backed_up_queue(self):
+        self.platform.posts['o1'] = MockPost(post_id='o1', author=self.accounts[0], text='Ferry queue talk.', created_at=time.time())
+        with self.store.batch_transaction():
+            for account in self.accounts[1:3]:
+                self.store._conn.execute("INSERT INTO amplify_plan(id,post_id,kind,account_id,due_at,updated_at) VALUES(?,?,'repost',?,0,0)",
+                                         ('rp' + account, 'o1', account))
+        with patch.object(amplify, 'level', return_value='high'), patch.object(self.store, 'request_backlog', return_value=600):
+            await self.worker.step()
+        self.assertEqual({tuple(r) for r in self.store._conn.execute("SELECT status,reason FROM amplify_plan")}, {('queued', 'publish_backlog')})
+        with self.store.batch_transaction():
+            self.store._conn.execute('UPDATE amplify_plan SET due_at=0')
+        with patch.object(amplify, 'level', return_value='high'):
+            await self.worker.step()
+        self.assertEqual({tuple(r) for r in self.store._conn.execute("SELECT status,reason FROM amplify_plan")}, {('done', 'ok')})
+        self.assertEqual(self.platform.posts['o1'].reposts, 2)
+        meta = json.loads(self.store._conn.execute("SELECT metadata_json FROM action_intents WHERE kind='repost'").fetchone()[0])
+        self.assertEqual(meta['engine'], 'amplify')
+
 if __name__ == '__main__':
     unittest.main()
