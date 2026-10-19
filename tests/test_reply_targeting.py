@@ -103,6 +103,8 @@ class AudienceTests(unittest.TestCase):
 class CapTests(unittest.TestCase):
     def setUp(self):
         self.store = StateStore(); self.addCleanup(self.store.close)
+        # Daily caps only; the 30-minute per-author gap has its own test.
+        gap = patch.dict(targeting.POLICY['caps'], {'per_author_min_gap_seconds': 0}); gap.start(); self.addCleanup(gap.stop)
 
     def test_author_thread_and_account_caps(self):
         self.store.set_policy('reply_pacing', {'per_hour': 1000, 'min_gap_seconds': 0})  # daily caps only; pacing has its own test
@@ -280,3 +282,41 @@ class EarlySkipTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ThreadDepthAndAuthorGapTests(unittest.TestCase):
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+        self.store.register_verified_accounts(['ours'], status='own_bot')
+        now = time.time()
+        rows = [('r0', 'npc1', None, None), ('r1', 'npc2', 'r0', 'r0'), ('r2', 'ours', 'r1', 'r0'),
+                ('r3', 'npc1', 'r2', 'r0'), ('r4', 'npc3', 'r3', 'r0')]
+        for pid, author, parent, root in rows:
+            self.store.upsert_observed_post({'post_id': pid, 'author': author, 'text': 'Text ' + pid, 'created_at': now,
+                                             'parent_id': parent, 'root_post_id': root})
+
+    def post(self, pid):
+        return self.store.get_observed_post(pid)
+
+    def test_depth_counts_levels_and_treats_missing_ancestors_as_deep(self):
+        self.assertEqual([targeting.thread_depth(self.store, self.post(p)) for p in ('r0', 'r1', 'r2', 'r3', 'r4')], [0, 1, 2, 3, 4])
+        self.assertGreaterEqual(targeting.thread_depth(self.store, {'post_id': 'x', 'parent_id': 'gone', 'root_post_id': 'root'}), 2)
+
+    def test_deep_targets_are_skipped_unless_a_citizen_answers_us(self):
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('r2')), '')
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('r4')), 'targeting:deep_thread')
+        self.assertEqual(targeting.skip_reason(self.store, self.post('r4')), 'targeting:deep_thread')
+        # r3 is a citizen replying to our r2: allowed until we have answered twice in this thread today.
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('r3')), '')
+        intent(self.store, 'ours', 'a', root='r0'); intent(self.store, 'ours', 'b', root='r0')
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('r3')), 'targeting:deep_thread')
+
+    def test_deeper_targets_rank_lower(self):
+        p = [targeting.audience(self.store, self.post(x))['priority'] for x in ('r0', 'r1')]
+        self.assertGreater(p[0], p[1])
+
+    def test_second_reply_to_the_same_author_waits_thirty_minutes(self):
+        self.store.set_policy('reply_pacing', {'per_hour': 1000, 'min_gap_seconds': 0})
+        intent(self.store, 'a1', 't1', author='npc1', at=time.time() - 600)
+        self.assertEqual(targeting.cap_reason(self.store, target_author='npc1'), 'author_min_gap')
+        self.assertEqual(targeting.cap_reason(self.store, target_author='npc1', now=time.time() + 1300), '')

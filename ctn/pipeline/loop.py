@@ -255,7 +255,7 @@ class BotLoop:
                     elif result.status in ('unknown','simulated'): status=result.status
                     elif result.detail in ('action_succeeded','action_unknown','action_sending','action_claimed'):
                         status='unknown' if result.detail!='action_succeeded' else 'succeeded'
-                    elif result.response.get('failure_category')=='terminal' or result.detail in ('target_edited','duplicate_publication','near_duplicate_publication','rag_snapshot_withdrawn','draft_or_opportunity_expired','author_daily_cap','thread_daily_cap',
+                    elif result.response.get('failure_category')=='terminal' or result.detail in ('target_edited','duplicate_publication','near_duplicate_publication','rag_snapshot_withdrawn','draft_or_opportunity_expired','author_daily_cap','author_min_gap','thread_daily_cap',
                         'like_needs_initialise','like_hourly_cap','like_daily_cap'):
                         status='skipped'
                     else: status='queued'

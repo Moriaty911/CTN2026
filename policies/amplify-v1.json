@@ -19,5 +19,6 @@
   "reply_retry_seconds": 120,
   "max_reply_attempts": 3,
   "max_like_attempts": 6,
+  "max_wait_seconds": 7200,
   "steps_per_tick": 4
 }

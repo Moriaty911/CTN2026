@@ -107,6 +107,37 @@ def replies_to_us(store, post):
     return bool(row and store.get_bot_profile(row['author'])['status'] == 'own_bot')
 
 
+def thread_depth(store, post, limit=4):
+    """0 for a top-level post, 1 for a reply to it, and so on; a missing ancestor counts as at least 2."""
+    depth, parent = 0, str(post.get('parent_id') or '')
+    root = str(post.get('root_post_id') or '')
+    while parent and depth < limit:
+        depth += 1
+        if parent == root:
+            return depth
+        row = store.get_observed_post(parent)
+        if row is None:
+            return max(depth + 1, 2)
+        parent = str(row.get('parent_id') or '')
+    return depth
+
+
+def deep_thread_reason(store, post, now=None):
+    """Skip targets deep in a thread (NPCs rarely reply there), unless a citizen is answering us directly."""
+    rules = POLICY['thread_depth']
+    if thread_depth(store, post) <= int(rules['max_target_depth']):
+        return ''
+    if replies_to_us(store, post):
+        ts = time.time() if now is None else now
+        with store._lock:
+            ours = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE kind='reply' AND status IN ('claimed','sending','unknown','succeeded') "
+                f"AND created_at>=? AND COALESCE(json_extract(metadata_json,'$.root_post_id'),target_id)=? AND {NOT_AMPLIFY}",
+                (sydney_day_start(ts), thread_root(post))).fetchone()[0]
+        if ours < int(rules['followups_when_replying_to_us']):
+            return ''
+    return 'targeting:deep_thread'
+
+
 def post_age(post, now):
     created = float(post.get('created_at') or 0) or float(post.get('first_seen_at') or now)
     return max(0.0, now - created)
@@ -147,7 +178,10 @@ def audience(store, post, now=None):
     raw = (w['author_reader'] * (1 - p_bot) + w['onlooker'] * onlooker + w['replies_to_us'] * to_us
            + w['trending'] * trending + w['verified_author'] * verified + w.get('persuadable', 0) * undecided * (1 - p_bot))
     freshness = 0.5 ** (post_age(post, ts) / POLICY['freshness_half_life_seconds'])
-    return {'own': False, 'p_bot': round(p_bot, 3), 'onlooker': round(onlooker, 3), 'reach': round(reach, 2),
+    factors = POLICY['thread_depth']['factors']
+    depth = thread_depth(store, post)
+    raw *= factors[min(depth, len(factors) - 1)]
+    return {'own': False, 'depth': depth, 'p_bot': round(p_bot, 3), 'onlooker': round(onlooker, 3), 'reach': round(reach, 2),
             'replies_to_us': to_us, 'trending': trending, 'verified': verified, 'persuadable': undecided, 'freshness': round(freshness, 3),
             'priority': round(raw * freshness, 3)}
 
@@ -174,6 +208,9 @@ def initial_schedule(store, post, now=None):
 def skip_reason(store, post, relative_stance=None, now=None):
     """Drop a cold post by a likely bot. Before assessment any stance; after assessment opposing only."""
     ts = time.time() if now is None else now
+    deep = deep_thread_reason(store, post, ts)
+    if deep:
+        return deep
     p_bot = bot_probability(store, post.get('author', ''))
     if p_bot is None or p_bot < POLICY['cold']['min_bot_probability']:
         return ''
@@ -200,6 +237,11 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
                                     f"AND json_extract(metadata_json,'$.target_author')=? AND {NOT_AMPLIFY}", (start, target_author)).fetchone()[0]
             if n >= caps['per_author_per_day']:
                 return 'author_daily_cap'
+            # A citizen just persuaded in a session is less receptive to the same push (organiser note 2026-10-19).
+            last = store._conn.execute(f"SELECT MAX(created_at) FROM action_intents WHERE kind='reply' AND {live} "
+                                       f"AND json_extract(metadata_json,'$.target_author')=? AND {NOT_AMPLIFY}", (target_author,)).fetchone()[0]
+            if last and ts - float(last) < float(caps.get('per_author_min_gap_seconds', 0)):
+                return 'author_min_gap'
         if root_post_id:
             n = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE kind='reply' AND {live} AND created_at>=? "
                                     f"AND COALESCE(json_extract(metadata_json,'$.root_post_id'),target_id)=? AND {NOT_AMPLIFY}",

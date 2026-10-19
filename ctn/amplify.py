@@ -31,7 +31,8 @@ CREATE INDEX IF NOT EXISTS idx_amplify_due ON amplify_plan(status,due_at);
 
 # Results that mean "this account cannot act right now", not "this action is wrong".
 WAIT_REASONS = {'account_min_gap', 'account_hourly_cap', 'account_cooldown', 'account_claimed',
-                'account_occupied_by_reply_slot', 'like_hourly_cap', 'publish_backlog', 'client shutting down'}
+                'account_occupied_by_reply_slot', 'like_hourly_cap', 'publish_backlog', 'client shutting down',
+                'all_accounts_busy'}
 DROP_REASONS = {'account_daily_cap', 'like_daily_cap', 'like_needs_initialise', 'account_disabled',
                 'action_succeeded', 'action_unknown', 'action_sending', 'action_claimed'}
 
@@ -162,13 +163,43 @@ class AmplifyWorker:
 
     def _finish(self, row, status, reason, *, delay=0.0, now=None):
         ts = time.time() if now is None else now
-        limit = int(self.policy['max_reply_attempts'] if row['kind'] == 'reply' else self.policy['max_like_attempts'])
-        if status == 'queued' and row['attempts'] + 1 >= limit:
-            status = 'skipped'
+        if status == 'queued' and reason in WAIT_REASONS:
+            # Waiting for a busy account or a rate window is not a failed attempt; give up only when the post is stale.
+            with self.store._lock:
+                planned = self.store._conn.execute('SELECT planned_at FROM amplify_sources WHERE post_id=?', (row['post_id'],)).fetchone()
+            if planned and ts - float(planned[0]) > float(self.policy['max_wait_seconds']):
+                status, reason = 'skipped', 'stale:' + reason
+        elif status == 'queued':
+            limit = int(self.policy['max_reply_attempts'] if row['kind'] == 'reply' else self.policy['max_like_attempts'])
+            if row['attempts'] + 1 >= limit:
+                status = 'skipped'
         with self.store.batch_transaction():
             self.store._conn.execute('UPDATE amplify_plan SET status=?,reason=?,due_at=due_at+?,updated_at=? WHERE id=?',
                                      (status, reason[:200], delay, ts, row['id']))
         return {'id': row['id'], 'kind': row['kind'], 'status': status, 'reason': reason}
+
+    def _busy(self, account, ts):
+        from ctn.pipeline.targeting import cap_reason
+        with self.store._lock:
+            if cap_reason(self.store, account=account, now=ts):
+                return True
+            return bool(self.store._conn.execute('SELECT 1 FROM account_leases WHERE account_id=? AND lease_until>?', (account, ts)).fetchone())
+
+    def _free_account(self, row, ts):
+        """The planned account if it can post now, else another free one not already replying to this post."""
+        if not self._busy(row['account_id'], ts):
+            return row['account_id']
+        with self.store._lock:
+            author = self.store._conn.execute('SELECT author_account FROM amplify_sources WHERE post_id=?', (row['post_id'],)).fetchone()
+            taken = {r[0] for r in self.store._conn.execute("SELECT account_id FROM amplify_plan WHERE post_id=? AND kind='reply'", (row['post_id'],))}
+        pool = [a for a in amplifiable_accounts(self.store) if a not in taken and (not author or a != author[0])]
+        self.rng.shuffle(pool)
+        for account in pool:
+            if not self._busy(account, ts):
+                with self.store.batch_transaction():
+                    self.store._conn.execute('UPDATE amplify_plan SET account_id=? WHERE id=?', (account, row['id']))
+                return account
+        return None
 
     def _persona(self, account):
         for p in self.router.registry.list_all():
@@ -199,6 +230,14 @@ class AmplifyWorker:
             return self._finish(row, 'queued', 'target_not_mirrored', delay=60, now=ts)
         if await asyncio.to_thread(self.store.request_backlog, 'route:publish', now=ts) > float(self.policy['max_publish_backlog_seconds']):
             return self._finish(row, 'queued', 'publish_backlog', delay=float(self.policy['reply_retry_seconds']), now=ts)
+        # Our accounts' citizen replies keep them inside their pacing most of the time; hand the reply to one that is free.
+        account = await asyncio.to_thread(self._free_account, row, ts)
+        if account is None:
+            return self._finish(row, 'queued', 'all_accounts_busy', delay=float(self.policy['reply_retry_seconds']), now=ts)
+        if account != row['account_id']:
+            row = {**row, 'account_id': account}
+            persona = self._persona(account)
+            context = {**self.router.context_for(persona), 'engine': 'amplify', 'target_stance': 'team'}
         text = await asyncio.to_thread(self._draft, persona, post['text'])
         if not text:
             return self._finish(row, 'failed', 'draft_failed', now=ts)

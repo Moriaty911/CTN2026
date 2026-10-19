@@ -178,16 +178,54 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             await self.worker.step()
         self.assertEqual(self.status('like', self.accounts[1]), ('done', 'ok'))
 
-    async def test_pacing_refusal_requeues_and_gives_up_after_the_attempt_limit(self):
+    async def test_waiting_for_a_rate_window_is_not_a_failure_until_the_post_is_stale(self):
         self.store.set_policy('like_pacing', {'per_hour': 0, 'per_day': 100, 'require_initialised': True})
         self.queue('like', self.accounts[1])
-        for _ in range(amplify.POLICY['max_like_attempts']):
+        with self.store.batch_transaction():
+            self.store._conn.execute("INSERT INTO amplify_sources VALUES('o1',?,'post','high',?)", (self.accounts[0], time.time()))
+        for _ in range(amplify.POLICY['max_like_attempts'] + 2):
             with self.store.batch_transaction():
                 self.store._conn.execute("UPDATE amplify_plan SET due_at=0")
             with patch.object(amplify, 'level', return_value='high'):
                 await self.worker.step()
-        self.assertEqual(self.status('like', self.accounts[1]), ('skipped', 'like_hourly_cap'))
+        self.assertEqual(self.status('like', self.accounts[1]), ('queued', 'like_hourly_cap'))
+        with self.store.batch_transaction():
+            self.store._conn.execute("UPDATE amplify_sources SET planned_at=?", (time.time() - amplify.POLICY['max_wait_seconds'] - 1,))
+            self.store._conn.execute("UPDATE amplify_plan SET due_at=0")
+        with patch.object(amplify, 'level', return_value='high'):
+            await self.worker.step()
+        self.assertEqual(self.status('like', self.accounts[1]), ('skipped', 'stale:like_hourly_cap'))
 
+    async def test_a_busy_replier_hands_the_reply_to_a_free_account(self):
+        busy = self.accounts[2]
+        self.store.set_policy('reply_pacing', {'per_hour': 100, 'min_gap_seconds': 600})
+        with self.store.batch_transaction():
+            self.store._conn.execute("INSERT INTO amplify_sources VALUES('o1',?,'post','high',?)", (self.accounts[0], time.time()))
+            self.store._conn.execute("INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,lease_until,created_at,updated_at,metadata_json) "
+                                     "VALUES('r','r','reply',?,'x','earlier','succeeded','',0,?,?,'{}')", (busy, time.time() - 60, time.time() - 60))
+        self.queue('reply', busy)
+        with patch.object(amplify, 'level', return_value='high'):
+            await self.worker.step()
+        row = self.store._conn.execute("SELECT account_id,status FROM amplify_plan WHERE kind='reply'").fetchone()
+        self.assertEqual(row['status'], 'done')
+        self.assertNotIn(row['account_id'], (busy, self.accounts[0]))
+        sender = self.store._conn.execute("SELECT account_id FROM action_intents WHERE kind='reply' AND id<>'r'").fetchone()[0]
+        self.assertEqual(sender, row['account_id'])
+
+    async def test_all_accounts_busy_waits_without_spending_attempts(self):
+        self.store.set_policy('reply_pacing', {'per_hour': 0, 'min_gap_seconds': 0})
+        with self.store.batch_transaction():
+            self.store._conn.execute("INSERT INTO amplify_sources VALUES('o1',?,'post','high',?)", (self.accounts[0], time.time()))
+            self.store._conn.execute("INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,lease_until,created_at,updated_at,metadata_json) "
+                                     "VALUES('r','r','reply','someone','x','earlier','succeeded','',0,?,?,'{}')", (time.time(), time.time()))
+        self.queue('reply', self.accounts[2])
+        for _ in range(amplify.POLICY['max_reply_attempts'] + 1):
+            with self.store.batch_transaction():
+                self.store._conn.execute("UPDATE amplify_plan SET due_at=0")
+            with patch.object(amplify, 'level', return_value='high'):
+                await self.worker.step()
+        self.assertEqual(self.status('reply', self.accounts[2]), ('queued', 'all_accounts_busy'))
+        self.llm.call.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()
