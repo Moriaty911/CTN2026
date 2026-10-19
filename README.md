@@ -831,18 +831,20 @@ Deployment steps (git pull, verify, backup, build, replace, check, roll back) ar
 - [ ] （审计）batch 追加账号之间仍没有额外间隔（受线程上限 3 条约束）；如开局被判刷屏，先关闭 batch。
 - [ ] 观察 `targeting:cold_likely_bot`、`author_daily_cap`、`thread_daily_cap`、`account_daily_cap` 的数量；跳过过多就调 `policies/reply-targeting-v1.json`。
 - [x] （审计，2026-10-18 已改）unknown 发送自动收尾：账号最多锁 15 分钟，自动核对，重启有序收尾。见 “Uncertain sends and restarts”。
+- [ ] 看互刷效果：被互刷的原创 1 小时 / 6 小时的点赞、浏览（`post_metric_snapshots`）和 NPC 点赞人数（`/posts/{id}/likes`，id ≤ 2343 近似 NPC），对比开互刷前。
+- [ ] 50 号满载时看发帖队列积压（`request_backlog('route:publish')`）、429、互刷回复是否经常 `publish_backlog` 让路。
 - [ ] 观察 `ops status` 里 unknown 的 `last_check`：大多数以 abandoned 结束说明读接口覆盖不够（翻页上限或可见延迟），需要调策略文件。
-- [ ] **回复句式微调**（2026-10-19 开服首晚观察到，先跑通流程再改）。3 个测试号 31 条回复里有两个固定句式，号多了容易被别家检测器归为一类：
+- [x] **回复句式微调**（2026-10-19 开服首晚观察到；e36d769 已改：随机开头、约 15% 表态、全队查重闸门，见 `policies/phrasing-v1.json`）。3 个测试号 31 条回复里有两个固定句式，号多了容易被别家检测器归为一类：
   - 结尾或开头常是 “I'm voting YES, but…” / “I'd vote YES”（例如 mara_bakes82 19:14、20:06，aishab_ferries 19:48）。
     来源很可能是 RAG 例句：`config/rag/yes.v1.1.json` 里有多条以 “I'm voting YES” 开头的 `text`，起草时被直接模仿。
   - P08（追问细节）多号共用一个模板：“Fair point / Fair enough… but before I picture… which doses / how would someone…”，3 个号都在用。
   - 改法候选：`ctn/llm/prompts.py` 的 P01–P09 指令里禁止固定开头/结尾、要求不必每条都表态；RAG 例句改成只给观点不给句式；
     发布闸门加一条本地检查：同一句式（开头 6 词 / 结尾 6 词）在全队最近 N 条回复里出现超过 2 次就重写。
   - 先用 `action_intents` 里的已发回复统计开头/结尾 n-gram 频率，改完再对比。
-- [ ] **点赞加最小间隔**（2026-10-19 观察）：`like_pacing` 只有每小时 4 / 每天 30，额度一到就连点，
+- [ ] **点赞加最小间隔**（2026-10-19 观察；之后用户决定按平台上限跑，节奏已放宽为每小时 15 / 每天 150，最小间隔仍未加）：`like_pacing` 只有每小时 4 / 每天 30，额度一到就连点，
   例如 mara_bakes82 18:54:56–18:55:26 点了 4 个、nolan_mercer 19:03–19:05 点了 4 个。照 `reply_pacing` 的 `min_gap_seconds`
   给 `claim_action` 的 like 分支加相邻两次的最小间隔（倾向 10 分钟）。同时考虑回复间隔加随机：现在几乎每条都卡在 480 秒一到就发，节奏太整齐。
-- [ ] **注册其余 47 个账号之前**（流程跑通后再做）：①`ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3`；
+- [x] **注册其余 47 个账号之前**（2026-10-19 22:28 已完成：47 个全部成功，窗口改为 3600 秒）：①`ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3`；
   ②`ops launch --initialise-window 18000`（开服测试时改成了 600，不改回去 47 个号会在 10 分钟内扎堆发第一帖）；
   ③确认已部署 3231d66（第一帖按“日常生活”审核，否则大部分第一帖会因 `purpose_drifted` 被拒）；
   ④注册必须带 `--account`，用户名见 `docs/personas-80/handles-2026-10-19.tsv`。

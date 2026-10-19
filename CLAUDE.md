@@ -42,7 +42,7 @@
 - **不得分的帖子**：没通过 prompt 注入筛查的帖子会被静默排除出所有 feed，不会有任何通知（转发它的帖子也作废）；编辑帖子会重新筛查。
   **对 NPC（市民）做 prompt 注入违反比赛规则**，可能被处罚；允许的只是对其他队的 AI 注入。
 - 举报：只有前 5 个举报的队伍得分；首次成立 25 分，之后 5 分。对同一目标队伍每天前 5 次满分，之后减半，再之后 10%。
-- 裁决：第一次举报后 24 小时，每多一个不同的队举报就减半（5 队约 1.5 小时）。判“真人”后，**举报过这个帖子的队** 6 小时内不能再举报它。
+- 裁决：第一次举报后 24 小时，每多一个不同的队举报就减半（5 队约 1.5 小时）。判“真人”后，**举报过这个帖子的每个队 6 小时内不能举报任何帖子或账号**（官方原文 “unable to report any post or account for six hours”）。
   裁判约 25% 判错。被判 inauthentic 的帖子永久隐藏；**一个账号 3 帖被隐藏就封号**；5 个队举报同一帖会先临时隐藏。
 - 账号举报（只能选 Inauthentic/Spam）：账号被封时每个举报过的队得 15 分。条件是裁决时这个账号至少 1 帖被版主永久隐藏
   （5 队临时隐藏不算）且账号动作 ≥100，不满足就驳回，事后不补，可以再举报。官方没有“未裁决举报数”上限（我们自设 40 / 同作者 2）。
@@ -50,7 +50,9 @@
 
 **规则**（详见 `docs/competition-rules-reference.md`）：
 - 允许：明知虚假的内容、对其他队 AI 的 prompt 注入、比赛内冒充、队伍间协作（5.2）。
-- 禁止：刷互动、协同造假行为、批量低质内容（LS.5）；关于投票流程的误导（LS.8）；只能在官方 Discord 联系其他队（5.4）；
+- **平台规则（LS.x）和比赛主规则分开**：刷互动、协同造假、批量低质内容只违反平台规则 LS.5.3，后果只在游戏内（隐藏、限流、封号）；
+  主规则 5.2.1 明文允许 “Pushing the boundaries of the fictional social media platform’s own rules”。灰色地带看主规则 5.3（“technically allowed but obviously against the spirit” 算违规，拿不准先问主办方）。
+- 禁止（主规则）：关于投票流程的误导（LS.8 同时适用）；只能在官方 Discord 联系其他队（5.4）；
   攻击平台、绕过限速或日志（5.4、6.2）；仇恨骚扰内容。
 - key 不得泄露到队外，进入 git 历史就算泄露（5.6）；比赛材料不得外泄（5.2）；仓库必须保持私有。
 
@@ -116,12 +118,17 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
 | 多号回同一帖 | `ops launch --batches on` / `off`；不带参数只显示当前值 |
 | 第一帖分散时长 | `ops launch --initialise-window 秒` |
 | 解除某账号降速 | `ops launch --unslow ACCOUNT` |
-| 原创排期 | `ops campaign configure --originals-schedule off`、`--daily-original-limit N` |
+| 原创排期 | `ops campaign configure --originals-schedule off`、`--daily-original-limit N`（固定全队上限，关掉按号数自动算） |
+| **互刷（我们的号互相点赞/回复）** | `ops launch --amplify off` 立即关；`low/high/max` 调强度；`auto` 按阶段。彻底不启动：`.env` 设 `CTN_AMPLIFY=false` 后重启 |
+| 看互刷、节奏、句式统计 | `ops launch`（不带参数）：`amplify`、`like_pacing`、`reply_pacing`、`phrasing` |
+| 注册人设号 | `scripts/register_fleet.sh`（读 `docs/personas-80/handles-2026-10-19.tsv`，已注册的跳过，失败即停）；注册完要重启 fleet |
 | 停用/启用账号 | `ops account ACCOUNT --mode standby` / `active`；`ops persona standby --id P0xx` |
 | 撤回一条新闻事实 | `ops news withdraw CLAIM_ID --reason "..."` |
 
 没有一键命令、要改文件后重启的：按发帖频率判机器人（`policies/launch-v1.json` 的 `frequency_bot`）、
-犹豫者加分（`policies/reply-targeting-v1.json` 的 `persuadable`）、新闻 worker 整体、自动降速整体。
+犹豫者加分（`policies/reply-targeting-v1.json` 的 `persuadable`）、新闻 worker 整体、自动降速整体、
+互刷各阶段强度（`policies/amplify-v1.json`）、原创配额和间隔（`policies/originals-v1.json`）、
+句式套话清单和表态比例（`policies/phrasing-v1.json`）。`like_pacing`、`reply_pacing` 也可以用同名 store policy 运行时覆盖（launch-v1 的说明）。
 
 ## 6. 权限边界
 
@@ -143,24 +150,37 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
 4. `git commit`（说明为什么改），`git push`。遵守 `.gitignore` 的注释：`state/`、`logs/`、比赛材料不能提交。
 5. 重启按 runbook“代码更新与重启”：先备份（`ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3`），
    `./scripts/docker.sh build all`，`./scripts/docker.sh up all`，再看 `ops status`。
+   实测更稳的写法：`docker compose --profile discord up -d fleet macro-agent discord-review`（`up all` 在 fleet 未 healthy 时会把 discord-review 留在 Created）。
+   `scripts/register_fleet.sh` 通过 fleet 容器执行，注册进行中不要重启 fleet。
 6. `state/harness.md`（Pi 的运行指令）不会随代码更新；仓库里的 `harness.md` 只是模板，改了要手动同步。
 
-## 8. 当前状态和已定决策（2026-10-19 开服前）
+## 8. 当前状态和已定决策（2026-10-19 22:50 更新）
 
-- **开局默认**：举报 shadow 开（只记录不举报）；多号回同一帖关；第一帖在开服后 5 小时内分散发；未裁决举报上限 40 / 同作者 2；
-  原创全队每天 10 条（day 2 起 16，day 7 起 24，day 13 起 32），第 0–1 天 80% 是不表态的开场提问（P00）。
-- **新功能冻结**：先看真实数据再决定。系统地图里标“猜测”的模块都是开服前的预判，数据不支持就关掉。
+- **账号**：50 个人设号全部注册并绑定（同时活跃上限 50，总额度 200），用户名见 `docs/personas-80/handles-2026-10-19.tsv`。
+  第一帖窗口 `ops launch --initialise-window 3600`（1 小时）。注册新号后要重启 fleet，新号的通知轮询才生效（账号列表启动时读取）。
+- **发帖量：按平台上限跑**（用户决定，2026-10-19）。官方全队上限：发帖+回复+转发合计 3 条/分钟，点赞、关注、浏览各 30/分钟，
+  注册/登录 5/分钟/IP（官方 Getting Started）。我们的节奏：每号每小时 4 条帖/回复、相邻 ≥5 分钟、每天 ≤80 条；
+  点赞每号每小时 15、每天 150；原创每号每天 ≤4 条、同号间隔随机 1–3 小时、全队上限 = 每号配额 × 可发号数，
+  只在 7:00–24:00 发，时段内随机起点，同一时间只开一个时段；第 0–1 天 80% 是 P00 中立开场提问。
+- **互刷：开**（用户决定，2026-10-19，`ctn/amplify.py`）。依据：被别队刷过的帖平均约 110 赞，其中 12–29 个来自 NPC；
+  普通帖约 2 赞。我们的号之间互相点赞，原创还会收到其他号的短回复（过 JEV），我们的回复会得到几个赞。
+  阶段：开局 high → 10/22 起 low → 10/31 18:00 起 max。**用户说过：若之后明确不允许互刷，要能立刻关**——关法见第 5 节。
+  互刷回复不占“回复市民”的作者 / 帖子上限，但占每号节奏。
+- **长度**：平台实际上限 500 字（实测）；提示词仍要求 ≤280，只有硬检查用 500（`PLATFORM_MAX_CHARS`）。
+- **句式**：每稿随机开头方式，约 15% 允许表态投票；全队最近 40 条查重（套话开头、重复开头 / 结尾、套话再用）会打回重写。
+  `ops launch` 的 `phrasing` 看套话开头和表态比例，目标都 < 10%。
+- **P00 放行**：JEV 的 send_authorization 会因“中立”拒掉 P00，其余各项都过时我们放行（P01 仍需批准）。
+- **举报**：仍是 shadow（只记录），hybrid 模式，未裁决上限 40 / 同作者 2。有一个约 150 号的 YES 方刷帖网络，
+  名单见 `docs/intel/accounts-2026-10-19.md`（推断，未提交 git）。
 - **待用户决定（附当前倾向）**：
-  - 何时关 shadow：看开服后 2–3 小时的候选；误报基本是 AI 腔、自曝身份这类没争议的，就关，先只放开 `leak_behavior` 和 `account`。
-  - 是否联系其他 YES 队：只能通过官方 Discord；倾向只交换“哪些帖值得举报”，不约定互相刷互动（LS.5）。
-  - 宽松渠道（部分账号写假消息）：未定。范围 13 个 gossip 人设还是去掉医院背景的 038/040 后剩 11 个；
-    底线倾向“不编造真实人物原话、不编造腐败指控”；最早 day 2。没批准前不要实现。
-  - 关注（follow）：代码不会主动关注任何人；批量关注属于 LS.5，不做。先看数据，见 README TODO。
-  - 续接回复（市民回了 X，就由 X 接着回）、刷互动检测作为举报证据：冻结。
-  - 第一帖之后账号不再发生活帖，长期只聊公投：先观察别家检测器怎么抓号再定。
-  - 按发帖频率判机器人：看高频作者是不是认证 NPC，是的话就关掉。
-- **已经否掉的**：批量关注；开局多号扎堆回同一帖；按我们自己编的计分公式做优化。
-- 上线后要核对的事项（真实字段、速率、latest 排序等）见 README 末尾“上线后 TODO”。
+  - 何时关 shadow：先只放开 `leak_behavior` 和 `account`；第一批举报 24 小时后才裁决，越早越划算。
+  - 是否举报 YES 方的刷帖网络（同边，但举报能得分、对方 NO 队也会举报）。
+  - 反用 #KeepKingstoniaOpen（“证明要求是为了不再封城”，不承诺一定开门）、GIF（NPC 16% 的帖带 giphy）、原创附新闻链接（平台显示 article 卡片）：方案已提，未批准。
+  - 宽松渠道（部分账号写假消息）：未定，没批准前不要实现。
+  - 关注（follow）：代码不会主动关注任何人；批量关注不做。
+  - 续接回复（市民回了 X，由 X 接着回）：冻结。
+- **已经否掉的**：开局多号扎堆回同一帖（batches 仍关）；按我们自己编的计分公式做优化；另建只点赞的“助推号”（改为 50 个人设号互刷）。
+- 上线后要核对的事项见 README 末尾“上线后 TODO”。
 
 ## 9. 值班日志
 
