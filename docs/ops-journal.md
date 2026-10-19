@@ -2,6 +2,18 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-19 22:20 原创上线、互刷上线、发帖拉到平台上限
+- 现象：排行榜第 1 名 5465 分。平台上有一个约 150 个号的刷帖网络（6 个主号、40 个回复号每隔整 20 秒回复一次、一批点赞号，名单见 `docs/intel/accounts-2026-10-19.md`，未提交）。
+  被刷的帖平均约 110 赞、300 浏览，其中 12–29 个赞来自开服前注册的号（按 id ≤ 2343 认定为 NPC）；同时段普通原创约 2 赞、4 浏览。
+  官方规则：刷互动只违反平台规则 LS.5.3（后果只在游戏内：隐藏、封号），主规则 5.2.1 允许试探平台规则；发帖额度全队每分钟 3 条（官方 Getting Started）。
+- 判断 / 用户决定：用自己的 50 个号互相点赞、回复（不另建助推号，同时活跃上限 50），发帖量拉到平台上限，开局和收尾激进。后期若确认不能互刷，要能随时关掉。
+- 处理：159a737 原创排期（每号配额 × 可发号数、同号间隔 1–3 小时随机、单号每天最多 4 条、7:00–24:00、时段内随机开始）；
+  47f2fe0 互刷（`ctn/amplify.py`、`policies/amplify-v1.json`：开局 high、10/22 起 low、10/31 18:00 起 max），节奏放宽为每号每小时 4 条、每天 80 条、点赞每小时 15 个、每天 150 个；d1d3e33 修复重启后计划行卡在 running（**未部署**，下次重启带上）。
+  `.env.macro` 补了 `DEEPSEEK_API_KEY`（Pi 原来没有 key），`.env` 加了 `CTN_MACRO_LIVE=true`；第一帖窗口改为 3600 秒。备份 `/state/backup-20261019-1113.sqlite3` 后 22:13 部署 fleet、macro-agent、discord-review。
+  22:14 第一条原创 8508（aishab_ferries）发出，互刷计划已排上。
+- 关闭方法：`ops launch --amplify off`（立即生效）；改 `policies/amplify-v1.json`；`.env` 设 `CTN_AMPLIFY=false` 后重启（worker 不启动）。
+- 待办 / 待用户决定：用户运行 `scripts/register_fleet.sh` 注册其余 47 个，之后 build 并重启（带上 d1d3e33，让新号的通知也被轮询）；8508 仍用 “I'm voting YES … #voteyes” 句式（README TODO）；举报 / 是否举报 YES 方刷帖网络仍未定。
+
 ## 2026-10-19 21:02 回复节奏、第一帖审核、互动回读
 - 现象：18:43 两个号约每 2 分钟回一条（nolan_mercer 一小时 10 条），按 35/天的上限 70 分钟就用完；mara_bakes82 的第一帖连续 3 次被 JEV 以 `purpose_drifted` 拒绝。
   20:34 统计：nolan 回复 14 / 赞 14、aisha 回复 11 / 赞 10、mara 回复 6 / 赞 8，全部 succeeded，无 unknown、无隐藏；NPC 在我们帖子下回复 15 条。
