@@ -302,7 +302,7 @@ class RuntimeStoreMixin:
                 rows=self._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' "
                     "AND status IN ('claimed','sending','unknown','succeeded')").fetchall()
                 warmup=meta.get('purpose')=='warmup'
-                limit=self.policy('daily_warmup_limit',15) if warmup else self.policy('daily_original_limit',10)
+                limit=self.policy('daily_warmup_limit',15) if warmup else self.original_daily_limit(ts)
                 if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose') in ('warmup','initialise'))==warmup for r in rows)>=int(limit):
                     return None,'daily_original_limit'
             if kind in ('report','report_account') and meta.get('engine')=='blacklist':
@@ -507,7 +507,7 @@ class RuntimeStoreMixin:
                 others=self._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' "
                     "AND status IN ('claimed','sending','unknown','succeeded') AND id<>?",(ident,)).fetchall()
                 warmup=meta.get('purpose')=='warmup'
-                limit=self.policy('daily_warmup_limit',15) if warmup else self.policy('daily_original_limit',10)
+                limit=self.policy('daily_warmup_limit',15) if warmup else self.original_daily_limit(ts)
                 if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose') in ('warmup','initialise'))==warmup for r in others)>=int(limit):
                     return False,'daily_original_limit'
                 self._conn.execute("UPDATE action_intents SET metadata_json=json_set(metadata_json,'$.execution_day',?) WHERE id=?",(day,ident))
@@ -598,6 +598,14 @@ class RuntimeStoreMixin:
                     target_author=meta.get('target_author',''),target_stance=meta.get('target_stance',''),
                     purpose=meta.get('purpose',''),text=r['text'],now=ts)
             return True
+
+    def original_daily_limit(self, ts):
+        """The same team-wide ceiling the originals scheduler plans with (ctn/macro/schedule.py), so the send gate
+        does not stop the day at the fixed fallback of 10 while the schedule allows quota x accounts. An operator's fixed
+        limit (`ops campaign configure --daily-original-limit`, which turns the schedule off) applies as it is."""
+        from ctn.macro.schedule import effective_limit
+        fixed=int(self.policy('daily_original_limit',10))
+        return max(fixed,effective_limit(self,ts)) if self.policy('originals_schedule',True) else fixed
 
     def get_action(self, ident):
         with self._lock:

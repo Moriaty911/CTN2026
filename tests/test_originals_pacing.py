@@ -299,5 +299,37 @@ class DailyPostTests(unittest.TestCase):
         self.assertLessEqual(max(openings.values()), 6)
 
 
+class SendGateLimitTests(unittest.TestCase):
+    """Live 2026-10-20: the scheduler planned 4 x 50 originals but the send gate still used the fixed fallback of 10,
+    so every slot after the tenth original of the day failed with daily_original_limit."""
+
+    def claim(self, store, n):
+        return store.claim_action('post', f'acct_{n}', text=f'Original number {n} about clinic queues {n * 7}.', metadata={'purpose': 'P01'})
+
+    def test_gate_follows_the_schedule_past_the_fixed_fallback(self):
+        with closing(StateStore()) as store, patch.object(schedule, 'posting_accounts', return_value=8):
+            ts = time.time()
+            limit = schedule.effective_limit(store, ts)
+            self.assertGreater(limit, 10)
+            self.assertEqual(store.original_daily_limit(ts), limit)
+            for n in range(limit):
+                ident, reason = self.claim(store, n)
+                self.assertIsNotNone(ident, (n, reason))
+            self.assertEqual(self.claim(store, limit), (None, 'daily_original_limit'))
+
+    def test_operator_fixed_limit_still_applies(self):
+        with closing(StateStore()) as store, patch.object(schedule, 'posting_accounts', return_value=8):
+            store.configure_campaign(2)
+            self.assertEqual(store.original_daily_limit(time.time()), 2)
+            self.assertIsNotNone(self.claim(store, 0)[0]); self.assertIsNotNone(self.claim(store, 1)[0])
+            self.assertEqual(self.claim(store, 2), (None, 'daily_original_limit'))
+
+    def test_wire_gate_uses_the_same_limit(self):
+        with closing(StateStore()) as store, patch.object(schedule, 'posting_accounts', return_value=8):
+            idents = [self.claim(store, n)[0] for n in range(12)]
+            store.start_action(idents[-1])
+            self.assertTrue(store.guard_wire_action(idents[-1])[0])
+
+
 if __name__ == '__main__':
     unittest.main()
