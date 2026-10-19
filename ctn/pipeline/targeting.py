@@ -208,6 +208,24 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
                                     (account, start)).fetchone()[0]
             if n >= account_daily_cap(store, account):
                 return 'account_daily_cap'
+            paced = account_pacing_reason(store, account, ts)
+            if paced:
+                return paced
+    return ''
+
+
+def account_pacing_reason(store, account, now):
+    """Spread an account's daily volume: a fresh account replying every two minutes reads as a bot."""
+    rule = launch_rule(store, 'reply_pacing')
+    stamps = [r[0] for r in store._conn.execute(
+        "SELECT created_at FROM action_intents WHERE account_id=? AND kind IN ('post','reply') "
+        "AND status IN ('claimed','sending','unknown','succeeded') AND created_at>=? "
+        "AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('initialise','warmup')",
+        (account, now - 3600))]
+    if stamps and now - max(stamps) < float(rule['min_gap_seconds']):
+        return 'account_min_gap'
+    if len(stamps) >= int(rule['per_hour']):
+        return 'account_hourly_cap'
     return ''
 
 
@@ -229,7 +247,8 @@ def accounts_at_daily_cap(store, accounts, now=None):
             "AND status IN ('claimed','sending','unknown','succeeded') AND created_at>=? "
             "AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('initialise','warmup') GROUP BY account_id",
             (*accounts, sydney_day_start(ts))).fetchall()
-    return {r[0] for r in rows if r[1] >= account_daily_cap(store, r[0])}
+        capped = {r[0] for r in rows if r[1] >= account_daily_cap(store, r[0])}
+        return capped | {a for a in accounts if a not in capped and account_pacing_reason(store, a, ts)}
 
 
 def thread_root(post):

@@ -2,6 +2,18 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-19 18:32 开服：3 个测试号上线
+- 现象：注册 nolan_mercer(2374)、aishab_ferries(2611)、mara_bakes82(2639)，显示名为人设真名。18:04 fleet 崩溃循环：
+  自查扫描结果写进了 `self_check` 规则键，第二轮读规则报 KeyError（已修，4cba6f0）。崩溃前 nolan_mercer 在发第一帖前 45 秒内点了 6 个赞，
+  已加 `like_pacing`（发完第一帖才点赞，每号每小时 4、每天 30）。修复后 fleet 稳定；第一帖 3944、4014 能匿名回读。
+  帖子 3910（nolan_mercer，“yes, i support vaccine #h2d2”）是用户手动发的测试帖，不在系统记录里，自查不会盯它。
+  latest 包含回复、trending 只有原帖；最近 15 分钟帖子 id 3832–4027 全部收到（覆盖率 100%，约 14 帖/分钟）。
+- 判断：注册、第一帖、回复、回读链路都通了。回复质量大体可以，但有两点：P02 回复里出现 “I can't tell you why… and I won't guess”，像是把 prompt 指令说了出来；
+  6 条回复里 4 条用 “I'm voting YES / I'd vote YES” 收尾，多号同一句式容易被归为一类。
+- 处理：修了崩溃和点赞节奏。
+- 待办 / 待用户决定：注册其余 47 个之前先 `ops launch --initialise-window 18000`；fleet 健康后用 `up all` 拉起 macro-agent；
+  回复句式问题要不要调 prompt；举报待办（裁决录入、是否排除 YES 方机器人、CLAUDE.md 6 小时停报的写法）仍未处理。
+
 ## 2026-10-19 17:05 部署与账号用户名
 - 现象：已 `prepare` / `build all` / `up all`。`.env` 补了 `CTN_BOT_PASSWORD`（随机生成，所有 bot 共用，注册后不能改）。
   fleet 现在报 `live service needs a bound active account` 后循环重启：这是预期的，第一次注册成功前不会联网写；macro-agent、discord-review 依赖 fleet 健康，停在 Created。

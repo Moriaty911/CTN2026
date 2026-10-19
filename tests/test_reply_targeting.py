@@ -105,6 +105,7 @@ class CapTests(unittest.TestCase):
         self.store = StateStore(); self.addCleanup(self.store.close)
 
     def test_author_thread_and_account_caps(self):
+        self.store.set_policy('reply_pacing', {'per_hour': 1000, 'min_gap_seconds': 0})  # daily caps only; pacing has its own test
         intent(self.store, 'a1', 't1', author='enemy', root='root1')
         self.assertEqual(targeting.cap_reason(self.store, target_author='enemy'), '')
         intent(self.store, 'a2', 't2', author='enemy', root='root2', status='sending')

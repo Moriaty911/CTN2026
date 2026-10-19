@@ -85,6 +85,30 @@ class TargetingTests(unittest.TestCase):
         self.assertEqual(targeting.accounts_at_daily_cap(self.store, ['acct', 'other']), {'acct'})
 
 
+class ReplyPacingTests(unittest.TestCase):
+    # Live 2026-10-19: two fresh accounts replied every ~2 minutes (60 s cooldown + jitter, daily cap only).
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+
+    def sent(self, ident, at, purpose=''):
+        with self.store.batch_transaction():
+            self.store._conn.execute("INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,lease_until,created_at,updated_at,metadata_json) "
+                                     "VALUES(?,?,'reply','acct','t','x','succeeded','o',0,?,?,?)", (ident, ident, at, at, json.dumps({'purpose': purpose})))
+
+    def test_min_gap_and_hourly_cap_spread_an_accounts_replies(self):
+        now = time.time()
+        self.sent('a', now - 120)
+        self.assertEqual(targeting.cap_reason(self.store, account='acct', now=now), 'account_min_gap')
+        self.assertEqual(targeting.accounts_at_daily_cap(self.store, ['acct', 'other'], now=now), {'acct'})
+        self.sent('b', now - 1500); self.sent('c', now - 3000)
+        self.assertEqual(targeting.cap_reason(self.store, account='acct', now=now + 600), 'account_hourly_cap')
+        self.assertEqual(targeting.cap_reason(self.store, account='acct', now=now + 1000), '')
+        # First posts do not count against the pace.
+        fresh = StateStore(); self.addCleanup(fresh.close); self.store, old = fresh, self.store
+        self.sent('i', now - 10, purpose='initialise')
+        self.assertEqual(targeting.cap_reason(self.store, account='acct', now=now), '')
+
+
 class SelfCheckTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.store = StateStore(); self.addCleanup(self.store.close)
