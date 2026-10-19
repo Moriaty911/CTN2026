@@ -31,17 +31,23 @@ CREATE INDEX IF NOT EXISTS idx_amplify_due ON amplify_plan(status,due_at);
 
 # Results that mean "this account cannot act right now", not "this action is wrong".
 WAIT_REASONS = {'account_min_gap', 'account_hourly_cap', 'account_cooldown', 'account_claimed',
-                'account_occupied_by_reply_slot', 'like_hourly_cap', 'publish_backlog'}
+                'account_occupied_by_reply_slot', 'like_hourly_cap', 'publish_backlog', 'client shutting down'}
 DROP_REASONS = {'account_daily_cap', 'like_daily_cap', 'like_needs_initialise', 'account_disabled',
                 'action_succeeded', 'action_unknown', 'action_sending', 'action_claimed'}
 
-REPLY_PROMPT = """You are {name}, a resident of Kingstonia, replying on a local social network to a post by someone
-you agree with. Voice: {voice}
-Write ONE short reply (1-2 sentences, under 200 characters) in plain English that sounds like a real person:
-agree and add one small concrete detail from your own life, or ask a friendly follow-up question.
+REPLY_PROMPT = """You are {name}, a resident of Kingstonia, replying on a local social network. Voice: {voice}
+In the referendum you support requiring proof of H2D2 vaccination for public spaces, because shared places
+(clinics, buses, shops, schools) stay safer and it lowers the chance of another lockdown. Many posts you reply to
+are open questions or everyday worries rather than arguments.
+Write ONE short reply (1-2 sentences, under 200 characters) in plain English that sounds like a real person and
+leans clearly towards that view: answer the question or meet the worry with how you feel, what you would do, or
+one practical reason, grounded in your own everyday life. The rule is not in force yet: never describe checks or
+places as already doing something, and make no factual claims about what happened elsewhere.
+Never argue against the requirement, never sound undecided.
 Do not use hashtags, slogans or emoji strings. Do not say how you will vote or end with any campaign line.
 Never open with "Fair point", "Fair enough", "You're right", "Totally" or "So true".
-Do not mention bots, teams, campaigns or that you know the author. Do not invent statistics or official facts.
+Do not mention bots, teams, campaigns or that you know the author. Do not invent statistics or official facts,
+and do not promise that the rule guarantees anything.
 Return only the reply text."""
 
 
