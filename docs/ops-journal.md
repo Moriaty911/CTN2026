@@ -6,7 +6,7 @@
 - 现象：我们 160 多条帖子一个 tag 都没有。最热 tag 是 NO 方的 #keepkingstoniaopen（70）；NPC 几乎不打 tag（514 条里 8 条）；#yes2vax 下面是复制粘贴刷屏。
 - 处理（用户选定）：主推 #ProofKeepsUsOpen，搭配 #KeepKingstoniaOpen，#ProofNotLockdown 备选（`policies/hashtags-v1.json`）。
   P01 原创约 90% 带 tag；P00 只带共用 tag；回复不带。句式闸门不把 tag 算作重复结尾。
-- 注意：第 0–1 天 80% 原创是 P00，#ProofKeepsUsOpen 的量要等 P01 多起来（第 2 天 P00 降到 40%）；可以考虑调低 `opener_share`。
+- 23:55 用户决定关掉 P00（`opener_share` 全 0），原创全部 P01，#ProofKeepsUsOpen 全力推。
 - 待办：几小时后看 `popular_tags` 排名和带 tag 原创的互动。
 
 ## 2026-10-19 23:30 按主办方说明调选帖；互刷换空闲号

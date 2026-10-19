@@ -65,6 +65,11 @@ class ScheduleTests(unittest.TestCase):
             self.assertIsNone(schedule.slot(at('2026-10-26T05:00:00'), 24))
             self.assertAlmostEqual(schedule.slot(at('2026-10-26T08:00:00'), 16)[2] - schedule.slot(at('2026-10-26T08:00:00'), 16)[1], 3600)
 
+    def test_live_schedule_has_no_opening_questions(self):
+        # Operator decision 2026-10-19: P00 off, every original argues for YES.
+        self.assertEqual({schedule.purpose_for(f'2026-10-20:10:{i}', at('2026-10-20T12:00:00')) for i in range(200)}, {'P01'})
+
+    @patch.dict(schedule.POLICY, {'opener_share': {'0': 0.8, '1': 0.8, '2': 0.4}})
     def test_opening_questions_dominate_the_first_days_then_stop(self):
         day0 = [schedule.purpose_for(f'2026-10-19:10:{i}', at('2026-10-19T12:00:00')) for i in range(400)]
         self.assertTrue(0.7 < day0.count('P00') / 400 < 0.9)

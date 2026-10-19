@@ -19,6 +19,6 @@
     "observe_attempts": 2,
     "min_gap_seconds": 600
   },
-  "opener_share": {"0": 0.8, "1": 0.8, "2": 0.4},
+  "opener_share": {"0": 0.0, "1": 0.0, "2": 0.0},
   "recent_originals_in_prompt": 10
 }
