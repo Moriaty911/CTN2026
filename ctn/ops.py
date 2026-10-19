@@ -109,7 +109,8 @@ def main(argv=None):
                         for row in fleet_plan(args.size,phase=store.effective_phase(),persona_id=args.persona_id,account_id=args.account):
                             if args.account and row['account_id']!=args.account:continue
                             outcome=await register_one(store,client,row['persona_id'],row['account_id'],settings.platform.bot_password,
-                                max_active=settings.fleet.bot_accounts,max_total=settings.fleet.max_total_accounts)
+                                max_active=settings.fleet.bot_accounts,max_total=settings.fleet.max_total_accounts,
+                                display_name=row.get('display_name'))
                             outcomes.append(outcome)
                             if outcome['status'] in ('unknown','failed'):break
                         return {'results':outcomes}

@@ -438,6 +438,6 @@ class ReplacementPlanTests(unittest.TestCase):
         initial={r['persona_id'] for r in fleet_plan(50)}
         replacement=fleet_plan(50,persona_id='yes_080',account_id='replacement_080')
         self.assertNotIn('yes_080',initial)
-        self.assertEqual(replacement,[{'persona_id':'yes_080','account_id':'replacement_080','occupation_group':'independent_commentary'}])
+        self.assertEqual(replacement,[{'persona_id':'yes_080','account_id':'replacement_080','occupation_group':'independent_commentary','display_name':'Zain Porter'}])
         with self.assertRaises(ValueError):fleet_plan(50,persona_id='missing')
         with self.assertRaises(ValueError):fleet_plan(50,persona_id='yes_080',account_id='bad handle')

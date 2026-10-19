@@ -8,6 +8,8 @@
 - 判断：人设库 80 个 `candidate_username` 全是 `kingstonia_名_姓`，别家可以一搜前缀就把我们全部归为一类。改人设库需要升版本（yes.v2 已登记进库），代价太大。
 - 处理：用户确认 50 个新用户名，写在 `docs/personas-80/handles-2026-10-19.tsv`。**注册必须带 `--persona-id X --account Y`**，
   不带 `--account` 会用 kingstonia_ 名字注册。注册后以 `persona_bindings` 为准。
+- 用户批准后执行了 `ops launch --initialise-window 600`（原为 18000），让测试号在 10 分钟内发第一帖。
+  **注册其余 47 个之前必须改回 `--initialise-window 18000`**：发帖时间在账号第一次排队时就固定，改回窗口不影响已排好的号。
 - 待办 / 待用户决定：18:00 后由用户说“注册”，先注册 yes_001/002/010 三个测试号并核对；其余 47 个等用户再说“注册”。discord-review 可以用 `--no-deps` 单独启动（等用户执行）。
 
 ## 2026-10-19 16:30 真实接口字段探测（匿名只读）

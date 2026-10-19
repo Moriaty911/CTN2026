@@ -18,18 +18,19 @@ def fleet_plan(size=30, *, phase='warmup', persona_id=None, account_id=None):
         if not profile:raise ValueError('unknown replacement persona')
         handle=account_id or profile['candidate_username']
         if not re.fullmatch(r'[a-z][a-z0-9_]{2,63}',handle):raise ValueError('invalid account handle')
-        return [{'persona_id':persona_id,'account_id':handle,'occupation_group':profile['occupation_group']}]
+        return [{'persona_id':persona_id,'account_id':handle,'occupation_group':profile['occupation_group'],'display_name':profile['name']}]
     limits=INITIAL if size==30 else EXPANDED
     selected=[];used={}
     for profile in load_catalog()['personas']:
         group=profile['occupation_group']
         if used.get(group,0)>=limits.get(group,0):continue
-        selected.append({'persona_id':profile['persona_id'],'account_id':profile['candidate_username'],'occupation_group':group})
+        selected.append({'persona_id':profile['persona_id'],'account_id':profile['candidate_username'],'occupation_group':group,
+            'display_name':profile['name']})
         used[group]=used.get(group,0)+1
     return selected
 
 
-async def register_one(store,client,persona_id,account_id,password,*,max_active=50,max_total=200):
+async def register_one(store,client,persona_id,account_id,password,*,max_active=50,max_total=200,display_name=None):
     if not password:raise ValueError('registration password is missing')
     with store.batch_transaction():
         if store.get_managed_account(account_id):return {'account':account_id,'status':'exists'}
@@ -48,7 +49,7 @@ async def register_one(store,client,persona_id,account_id,password,*,max_active=
         # Save credentials before sending, so an interrupted response can be reconciled.
         store.set_policy('registration_password:'+account_id,password)
     try:
-        account=await asyncio.to_thread(client.social.register,account_id,password,client.team_key)
+        account=await asyncio.to_thread(client.social.register,account_id,password,client.team_key,display_name=display_name)
         client.bind_account(account_id,account,password=password)
     except Exception as exc:
         translated=client._translate_error(exc,account=account_id)

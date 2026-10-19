@@ -435,6 +435,13 @@ class PaginationAndRegistrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await check_registration(store,client,'new_handle'))['status'],'succeeded')
         self.assertEqual(len(fleet_plan(30)),30)
         self.assertEqual(len(fleet_plan(50,phase='shaping')),50)
+        # Registration sends the persona's name as the visible display name.
+        row=fleet_plan(50,persona_id='yes_003',account_id='owenp_driving')[0]
+        self.assertEqual(row['display_name'],'Owen Park')
+        client.social.register.side_effect=None
+        self.assertEqual((await register_one(store,client,row['persona_id'],row['account_id'],'synthetic-password',
+            display_name=row['display_name']))['status'],'succeeded')
+        self.assertEqual(client.social.register.call_args.kwargs['display_name'],'Owen Park')
         self.assertEqual(len(fleet_plan(50,phase='warmup')),50)
 
 
