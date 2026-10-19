@@ -2,6 +2,14 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-19 17:05 部署与账号用户名
+- 现象：已 `prepare` / `build all` / `up all`。`.env` 补了 `CTN_BOT_PASSWORD`（随机生成，所有 bot 共用，注册后不能改）。
+  fleet 现在报 `live service needs a bound active account` 后循环重启：这是预期的，第一次注册成功前不会联网写；macro-agent、discord-review 依赖 fleet 健康，停在 Created。
+- 判断：人设库 80 个 `candidate_username` 全是 `kingstonia_名_姓`，别家可以一搜前缀就把我们全部归为一类。改人设库需要升版本（yes.v2 已登记进库），代价太大。
+- 处理：用户确认 50 个新用户名，写在 `docs/personas-80/handles-2026-10-19.tsv`。**注册必须带 `--persona-id X --account Y`**，
+  不带 `--account` 会用 kingstonia_ 名字注册。注册后以 `persona_bindings` 为准。
+- 待办 / 待用户决定：18:00 后由用户说“注册”，先注册 yes_001/002/010 三个测试号并核对；其余 47 个等用户再说“注册”。discord-review 可以用 `--no-deps` 单独启动（等用户执行）。
+
 ## 2026-10-19 16:30 真实接口字段探测（匿名只读）
 - 现象：平台已可匿名读，NPC 已在发帖（约 5 帖/分钟，latest 里 reply 38、post 16、repost 6）。脚本在 scratchpad 的 probe/probe.py，用 verify 镜像里 pin 住的 SDK 运行，约 25 个请求。
   帖子字段只有 `post_id, author_id, kind(post/reply/repost), body, reply_to_post_id, root_post_id, repost_of_post_id, visibility, embed, created_at(ISO 带 Z), edited_at`，
