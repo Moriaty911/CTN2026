@@ -170,7 +170,7 @@ class LifecycleStoreMixin:
             # Why reply tasks stopped in the last 24 h (e.g. how many neutral posts the JEV response gate holds back).
             result['reply_reasons_24h']={r[0] or 'none':r[1] for r in self._conn.execute(
                 "SELECT reason,COUNT(*) FROM post_tasks WHERE queued_at>=? GROUP BY reason ORDER BY COUNT(*) DESC LIMIT 15",(time.time()-86400,))}
-        result['self_check']={'scan':self.policy('self_check',{}),'slowed_accounts':self.policy('slowed_accounts',{})}
+        result['self_check']={'scan':self.policy('self_check:scan',{}),'slowed_accounts':self.policy('slowed_accounts',{})}
         try:result['news']=self.news_summary()
         except Exception as exc:result['news']={'error':type(exc).__name__}
         try:result['originals']=self.originals_status()

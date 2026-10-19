@@ -62,7 +62,7 @@ def self_scan(store, *, now=None):
     flagged = {a: v for a, v in report.items() if v['score'] >= rule['alert_score']}
     day = time.strftime('%Y-%m-%d', time.gmtime(ts))
     with store.batch_transaction():
-        store.set_policy('self_check', {'at': ts, 'accounts': report})
+        store.set_policy('self_check:scan', {'at': ts, 'accounts': report})
         for account, detail in flagged.items():
             store.notify_discord(f'self_check:{day}:{account}', {'type': 'alert', 'kind': 'self_check', 'account_id': account, 'detail': detail})
     return report

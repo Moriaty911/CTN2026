@@ -107,6 +107,19 @@ class SelfCheckTests(unittest.IsolatedAsyncioTestCase):
         alerts = {json.loads(r[0])['account_id'] for r in self.store._conn.execute("SELECT payload_json FROM discord_outbox WHERE event_key LIKE 'self_check:%'")}
         self.assertIn('a', alerts)
 
+    async def test_repeated_selfcheck_steps_keep_their_rule(self):
+        # Live 2026-10-19: the scan result overwrote the `self_check` rule and the second step crashed.
+        from ctn.selfcheck import selfcheck_step
+        actuator = SimpleNamespace(get_post=AsyncMock(return_value={}))
+        now = time.time()
+        await selfcheck_step(actuator, self.store, now=now)
+        await selfcheck_step(actuator, self.store, now=now + 4000)
+        self.assertEqual(targeting.launch_rule(self.store, 'self_check')['every_seconds'], 1800)
+        self.assertIn('at', self.store.policy('self_check:scan'))
+        # A database already holding the old scan result under the rule key still runs.
+        self.store.set_policy('self_check', {'at': now, 'accounts': {}})
+        await selfcheck_step(actuator, self.store, now=now + 8000)
+
     async def test_hidden_posts_alert_and_slow_the_account(self):
         now = time.time()
         with self.store.batch_transaction():
@@ -185,3 +198,24 @@ class LockStatsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LikePacingTests(unittest.TestCase):
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+        self.store.set_policy('require_warmup', True)
+
+    def like(self, target, now):
+        return self.store.claim_action('like', 'acct', target, metadata={}, now=now)
+
+    def test_likes_wait_for_the_first_post_then_respect_hourly_and_daily_caps(self):
+        now = time.time()
+        self.assertEqual(self.like('p0', now), (None, 'like_needs_initialise'))
+        with self.store.batch_transaction():
+            self.store._conn.execute("INSERT INTO account_lifecycle(account_id,initialise_status) VALUES('acct','ready')")
+        for i in range(4):
+            ident, reason = self.like(f'p{i}', now + i)
+            self.assertTrue(ident, reason)
+        self.assertEqual(self.like('p4', now + 5), (None, 'like_hourly_cap'))
+        self.store.set_policy('like_pacing', {'per_hour': 100, 'per_day': 4})
+        self.assertEqual(self.like('p5', now + 6), (None, 'like_daily_cap'))

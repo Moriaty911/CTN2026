@@ -28,8 +28,15 @@ LAUNCH = json.loads((Path(__file__).resolve().parents[2] / 'policies/launch-v1.j
 
 
 def launch_rule(store, key):
-    """Launch policy value, overridable at runtime with the store policy of the same key."""
-    return store.policy(key, LAUNCH[key])
+    """Launch policy value, overridable at runtime with the store policy of the same key.
+
+    Dict rules merge the override over the file defaults, so a partial (or stale) stored value
+    never drops a required field.
+    """
+    value = store.policy(key, LAUNCH[key])
+    if isinstance(LAUNCH[key], dict) and isinstance(value, dict):
+        return {**LAUNCH[key], **value}
+    return value
 
 
 def posting_frequency(store, author, now=None):

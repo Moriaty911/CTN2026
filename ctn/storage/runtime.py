@@ -268,6 +268,18 @@ class RuntimeStoreMixin:
                 capped=cap_reason(self,target_author=meta.get('target_author','') if kind=='reply' else '',
                     root_post_id=str(meta.get('root_post_id') or target) if kind=='reply' else '',account=account,now=ts)
                 if capped:return None,capped
+            if kind=='like':
+                # A new account liking every few seconds before its first post reads as a bot,
+                # and likes count towards the 100 actions that make an account suspendable.
+                from ctn.pipeline.targeting import launch_rule
+                rule=launch_rule(self,'like_pacing')
+                if rule['require_initialised'] and self.policy('require_warmup',False) and not self.account_initialise_ready(account,now=ts):
+                    return None,'like_needs_initialise'
+                stamps=[r[0] for r in self._conn.execute("SELECT created_at FROM action_intents WHERE kind='like' AND account_id=? "
+                    "AND status IN ('claimed','sending','unknown','succeeded') AND created_at>=?",(account,ts-86400))]
+                if sum(t>=ts-3600 for t in stamps)>=int(rule['per_hour']):return None,'like_hourly_cap'
+                day=current_sydney_day(ts)
+                if sum(current_sydney_day(t)==day for t in stamps)>=int(rule['per_day']):return None,'like_daily_cap'
             if kind=='reply' and meta.get('target_stance')=='aligned':
                 sent=self.count_recent_allied_replies(now=ts)
                 reserved=self._conn.execute("SELECT COUNT(*) FROM action_intents WHERE kind='reply' "

@@ -156,6 +156,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
                 self.router=legacy_router(store=store)
             async def decide(self,p,commit_state=False):
                 return Decision(p.post_id,p.post_id,Tier.AMPLIFY,'a',JevAnswers(),action=ActionKind.LIKE)
+        self.store.set_policy('like_pacing',{'per_hour':100,'per_day':100})  # this test is about queue persistence
         loop=BotLoop(self.a,side=Side.YES,accounts=['a'],store=self.store,brain=Brain(self.store))
         for i in range(12):
             self.platform.posts[str(i)]=MockPost(str(i),'enemy','ordinary question',time.time())
