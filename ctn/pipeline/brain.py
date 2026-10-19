@@ -476,6 +476,10 @@ class JevLlmBrain:
         frozen=getattr(draft,'frozen_material_json','')
         if not frozen or not self.router.registry.catalog_hash:return
         expansion=expansion_decision(data,material_ready=True)
+        from .targeting import launch_rule
+        if expansion['allowed'] and not launch_rule(self.router.store,'reply_batches_enabled'):
+            # Several of our accounts in one thread is the first thing other teams' detectors look for.
+            expansion={**expansion,'allowed':False,'reason':'batches_disabled_at_launch'}
         requested=REPLY_POLICY['extra_count_max'] if expansion['allowed'] else 0
         extras=self.router.additional_candidates(data,post.text,detail['selected_account'],requested,
             purpose=draft.prompt_type,materials=json.loads(frozen)['materials'])

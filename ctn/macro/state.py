@@ -132,7 +132,7 @@ class MacroStateCollector:
         from ctn.ratelimit import BudgetLedger
         return {
             "requests":self.actuator.ledger.snapshot() if isinstance(self.actuator.ledger,BudgetLedger) else {},
-            "limits":{"daily_original_limit":self.router.store.policy('daily_original_limit',10),
+            "limits":{"daily_original_limit":__import__('ctn.macro.schedule',fromlist=['effective_limit']).effective_limit(self.router.store,time.time()),
                 "max_pending_reports":self.router.store.policy('max_pending_reports',10)},
             "runtime":self.router.store.runtime_metrics(),
             'persona_catalog':{'hash':self.router.registry.catalog_hash,

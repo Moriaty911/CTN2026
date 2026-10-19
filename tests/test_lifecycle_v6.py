@@ -270,7 +270,7 @@ class AsyncIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_fifty_initialise_posts_complete_without_global_daily_limit(self):
         with closing(StateStore()) as store:
             ids=tuple(row['persona_id'] for row in fleet_plan(50))
-            router=bound_router(store,ids);store.set_policy('daily_original_limit',0);store.set_policy('daily_warmup_limit',1)
+            router=bound_router(store,ids);store.set_policy('daily_original_limit',0);store.set_policy('daily_warmup_limit',1);store.set_policy('initialise_spread',{'window_seconds':0,'min_gap_seconds':0})
             client=MockLegitClient(failure_rate=0,latency_ms=(0,0));act=actor(client,store)
             checker=Mock();checker.check.return_value=PostflightVerdict(True,'approved')
             for _ in range(50):
@@ -323,9 +323,11 @@ class AsyncIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(ident)
             runner=AsyncMock()
             worker=MacroWorker(store,Mock(),Mock(default_side='yes'),Mock(),Mock(),pi_runner=runner,collector=Mock())
-            # No account is eligible, so model use is avoided.
+            # No account is eligible, so model use is avoided; the slot is retried later with another persona.
             worker.router.registry.list_by_side.return_value=[]
-            self.assertEqual((await worker.step())['status'],'skipped');runner.assert_not_awaited()
+            self.assertEqual((await worker.step())['status'],'retry');runner.assert_not_awaited()
+            row=store._conn.execute("SELECT status,attempts FROM macro_jobs WHERE id LIKE 'macro:simulated:%'").fetchone()
+            self.assertEqual(tuple(row),('queued',1))
 
 
 class AdditionalFaultTests(unittest.IsolatedAsyncioTestCase):

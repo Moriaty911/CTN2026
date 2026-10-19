@@ -15,11 +15,13 @@ import contextlib
 from datetime import datetime
 import hashlib
 import json
+import logging
 import os
 import weakref
 from pathlib import Path
 import re
 import sqlite3
+import sys
 import threading
 import time
 from typing import Any, Iterable, Iterator
@@ -195,6 +197,7 @@ def current_sydney_day(ts: float | None = None) -> str:
 
 
 from .operations import OperationsStoreMixin
+from .news import NewsStoreMixin
 from .lifecycle import LifecycleStoreMixin
 
 @contextlib.contextmanager
@@ -209,7 +212,77 @@ def _migration_lock(path):
         try:yield
         finally:fcntl.flock(lock,fcntl.LOCK_UN)
 
-class StateStore(LifecycleStoreMixin, OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
+_DB_LOG = logging.getLogger("ctn.db")
+
+
+class LockStats:
+    """Diagnostics for the store lock: how long write transactions wait for it and hold it.
+
+    Workers share one connection behind one lock, so a slow transaction (the detector runs inside the
+    crawlers' page transaction) delays every other worker, including sends. Kept per process in
+    5-minute windows; the fleet heartbeat carries the snapshot and `ops status` shows it as
+    `db_lock`. A transaction that waits or holds for `SLOW_SECONDS` or more is logged with its caller,
+    at most once per `LOG_EVERY` seconds.
+    """
+    WINDOW = 300.0
+    SLOW_SECONDS = 1.0
+    LOG_EVERY = 10.0
+
+    def __init__(self) -> None:
+        self._guard = threading.Lock()
+        self._current = self._empty(time.time())
+        self._previous: dict[str, Any] | None = None
+        self._logged_at = 0.0
+
+    @staticmethod
+    def _empty(start: float) -> dict[str, Any]:
+        return {"started_at": start, "transactions": 0, "held_seconds": 0.0, "max_hold_s": 0.0,
+                "max_wait_s": 0.0, "slow": []}
+
+    @staticmethod
+    def _caller() -> str:
+        frame = sys._getframe(3)
+        while frame is not None:
+            name = frame.f_code.co_filename.replace("\\", "/")
+            if not (name.endswith("contextlib.py") or "/ctn/storage/" in name):
+                return f"{'/'.join(name.split('/')[-2:])}:{frame.f_code.co_name}:{frame.f_lineno}"
+            frame = frame.f_back
+        return "unknown"
+
+    def note(self, wait: float, hold: float) -> None:
+        slow = wait >= self.SLOW_SECONDS or hold >= self.SLOW_SECONDS
+        caller = self._caller() if slow else ""
+        now = time.time()
+        log = False
+        with self._guard:
+            if now - self._current["started_at"] >= self.WINDOW:
+                self._previous, self._current = self._finish(self._current, now), self._empty(now)
+            cur = self._current
+            cur["transactions"] += 1
+            cur["held_seconds"] += hold
+            cur["max_hold_s"] = max(cur["max_hold_s"], hold)
+            cur["max_wait_s"] = max(cur["max_wait_s"], wait)
+            if slow:
+                cur["slow"] = sorted(cur["slow"] + [{"caller": caller, "hold_s": round(hold, 3), "wait_s": round(wait, 3),
+                                                     "at": round(now, 1)}], key=lambda r: -max(r["hold_s"], r["wait_s"]))[:5]
+                if now - self._logged_at >= self.LOG_EVERY:
+                    self._logged_at, log = now, True
+        if log:
+            _DB_LOG.warning("slow db transaction caller=%s hold=%.2fs wait=%.2fs", caller, hold, wait)
+
+    @staticmethod
+    def _finish(window: dict[str, Any], now: float) -> dict[str, Any]:
+        span = max(1e-6, now - window["started_at"])
+        return {"window_seconds": round(span, 1), "transactions": window["transactions"],
+                "hold_share": round(window["held_seconds"] / span, 3), "max_hold_s": round(window["max_hold_s"], 3),
+                "max_wait_s": round(window["max_wait_s"], 3), "slow": list(window["slow"])}
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._guard:
+            return {"current": self._finish(self._current, time.time()), "previous": self._previous}
+
+
+class StateStore(NewsStoreMixin, LifecycleStoreMixin, OperationsStoreMixin, CampaignStoreMixin, RuntimeStoreMixin):
     """SQLite-backed store for account cooldowns, post history mirror, bot intelligence, and reporting gates."""
 
     def __init__(self, db_path: str | Path = ":memory:", *, migrate: bool = True) -> None:
@@ -217,6 +290,7 @@ class StateStore(LifecycleStoreMixin, OperationsStoreMixin, CampaignStoreMixin, 
         self._lock = threading.RLock()
         self._closed = False
         self._batch_depth = 0
+        self._lock_stats = LockStats()
         if self.db_path != ":memory:":
             path = Path(self.db_path)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -253,6 +327,7 @@ class StateStore(LifecycleStoreMixin, OperationsStoreMixin, CampaignStoreMixin, 
                 self.migrate_campaign()
                 self.migrate_operations()
                 self.migrate_lifecycle(version)
+                self.migrate_news()
                 for sql in statements:
                     if sql.startswith('CREATE INDEX'):
                         self._conn.execute(sql)
@@ -278,7 +353,9 @@ class StateStore(LifecycleStoreMixin, OperationsStoreMixin, CampaignStoreMixin, 
     @contextlib.contextmanager
     def batch_transaction(self) -> Iterator[None]:
         """Short write transaction; nested blocks have independent savepoints."""
+        requested = time.perf_counter()
         with self._lock:
+            acquired = time.perf_counter()
             depth = self._batch_depth
             savepoint = f"nested_{depth}"
             if depth == 0:
@@ -304,6 +381,12 @@ class StateStore(LifecycleStoreMixin, OperationsStoreMixin, CampaignStoreMixin, 
                     self._conn.execute(f'RELEASE {savepoint}')
             finally:
                 self._batch_depth = depth
+                if depth == 0:
+                    self._lock_stats.note(acquired - requested, time.perf_counter() - acquired)
+
+    def lock_stats(self) -> dict[str, Any]:
+        """Write-transaction lock wait/hold statistics for this process (see LockStats)."""
+        return self._lock_stats.snapshot()
 
     def _ensure_columns(self) -> None:
         """Ensure newly added columns exist on older SQLite database files."""

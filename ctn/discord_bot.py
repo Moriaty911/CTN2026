@@ -436,6 +436,22 @@ def build_bot(config,store):
                 await channel.send(f"**Uncertain sends: {int(payload['accounts'])} accounts in {int(payload['window_seconds']//60)} minutes.** "
                                    'The platform may be timing out or failing. Each send is checked automatically and released within 15 minutes; '
                                    'run `python -m ctn.ops status` to see the list.')
+            elif payload['type']=='alert' and payload.get('kind')=='news_digest':
+                s=payload['summary']
+                lines=[f"**News digest.** Articles: {s['articles']}. Claims: {s['claims']}."]
+                if s['helps_yes']:lines+=['Helps YES:']+['• '+t for t in s['helps_yes']]
+                if s['hurts_yes']:lines+=['Hurts YES:']+['• '+t for t in s['hurts_yes']]
+                await channel.send('\n'.join(lines)[:1900])
+            elif payload['type']=='alert' and str(payload.get('kind','')).startswith('news_'):
+                labels={'news_conflict':'Conflicting figures in the news; these claims are not used until resolved',
+                        'news_article_quarantined':'An article was quarantined by the injection check and will not be used',
+                        'news_extraction_failed':'Claim extraction failed three times for an article'}
+                await channel.send(f"**{labels.get(payload['kind'],payload['kind'])}.** `{json.dumps(payload.get('detail',{}),ensure_ascii=False)[:1500]}`")
+            elif payload['type']=='alert' and payload.get('kind') in ('self_check','own_post_hidden','account_slowed'):
+                text={'self_check':f"**Self-check: `{payload.get('account_id')}` looks bot-like to a detector.** {json.dumps(payload.get('detail',{}))}",
+                      'own_post_hidden':f"**One of our posts looks hidden or removed** (`{payload.get('account_id')}`, post `{payload.get('post_id')}`): {json.dumps(payload.get('fields',{}),default=str)[:800]}. Three permanently hidden posts suspend an account.",
+                      'account_slowed':f"**`{payload.get('account_id')}` slowed to {payload.get('daily_cap')} posts a day** after {payload.get('hidden_posts')} hidden posts."}[payload['kind']]
+                await channel.send(text[:1900])
             elif payload['type']=='alert' and payload.get('kind')=='initialise_failing':
                 await channel.send(f"**Initialise post rejected twice for `{payload['account_id']}`** (last reason: {payload['reason']}). "
                                    'The next attempt uses a different daily example; check the persona examples if this continues.')

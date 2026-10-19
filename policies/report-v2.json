@@ -1,26 +1,82 @@
 {
   "version": "report-decision.v2",
   "score_is_probability": false,
-  "notes": "p is an estimate that the author is a competitor bot; it is calibrated from rulings. Evidence points are not probabilities.",
-  "moderator": {"upheld_if_bot": 0.75, "upheld_if_citizen": 0.25},
+  "notes": "p is an estimate that the author is a competitor bot; it is calibrated from rulings. Evidence points are not probabilities. max_expected_genuine is the expected number of distinct six-hour stops among unresolved reports (overlapping stops count once).",
+  "moderator": {
+    "upheld_if_bot": 0.75,
+    "upheld_if_citizen": 0.25
+  },
   "p_floor": 0.7,
   "human_review_min_p": 0.5,
   "buckets": {
-    "leak_behavior": {"prior_mean": 0.9, "prior_strength": 10},
-    "leak_only": {"prior_mean": 0.75, "prior_strength": 10},
-    "behavior_only": {"prior_mean": 0.55, "prior_strength": 10},
-    "account": {"prior_mean": 0.9, "prior_strength": 10}
+    "leak_behavior": {
+      "prior_mean": 0.9,
+      "prior_strength": 10
+    },
+    "leak_only": {
+      "prior_mean": 0.75,
+      "prior_strength": 10
+    },
+    "behavior_only": {
+      "prior_mean": 0.55,
+      "prior_strength": 10
+    },
+    "account": {
+      "prior_mean": 0.9,
+      "prior_strength": 10
+    }
   },
-  "points": {"first": 25, "later": 5, "account": 15},
-  "daily_team_multipliers": [[5, 1.0], [10, 0.5], [1000000000, 0.1]],
-  "first_report_decay": [[600, 0.7], [1800, 0.45], [3600, 0.25], [21600, 0.1]],
+  "points": {
+    "first": 25,
+    "later": 5,
+    "account": 15
+  },
+  "daily_team_multipliers": [
+    [
+      5,
+      1.0
+    ],
+    [
+      10,
+      0.5
+    ],
+    [
+      1000000000,
+      0.1
+    ]
+  ],
+  "first_report_decay": [
+    [
+      600,
+      0.7
+    ],
+    [
+      1800,
+      0.45
+    ],
+    [
+      3600,
+      0.25
+    ],
+    [
+      21600,
+      0.1
+    ]
+  ],
   "max_target_age_seconds": 21600,
   "suspension_seconds": 21600,
-  "genuine_cost": {"lookback_seconds": 21600, "default_ruling_delay_seconds": 86400, "floor": 5},
-  "max_expected_genuine": 2.0,
+  "genuine_cost": {
+    "lookback_seconds": 21600,
+    "default_ruling_delay_seconds": 86400,
+    "floor": 5
+  },
+  "max_expected_genuine": 3.0,
   "forbidden_cooldown_seconds": 1800,
   "manual_clearance_ttl_seconds": 3600,
   "activity_check_interval_seconds": 1800,
-  "auto_buckets": ["leak_behavior", "account"],
+  "auto_buckets": [
+    "leak_behavior",
+    "account"
+  ],
   "shadow": true
 }

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,21 @@ def sydney_day_start(ts=None):
     return now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
 
+LAUNCH = json.loads((Path(__file__).resolve().parents[2] / 'policies/launch-v1.json').read_text())
+
+
+def launch_rule(store, key):
+    """Launch policy value, overridable at runtime with the store policy of the same key."""
+    return store.policy(key, LAUNCH[key])
+
+
+def posting_frequency(store, author, now=None):
+    ts = time.time() if now is None else now
+    window = float(launch_rule(store, 'frequency_bot')['window_seconds'])
+    with store._lock:
+        return store._conn.execute('SELECT COUNT(*) FROM observed_posts WHERE author=? AND created_at>=?', (author, ts - window)).fetchone()[0]
+
+
 def bot_probability(store, author):
     """Ordering prior that the author is a competitor bot. None for our own accounts."""
     if not author:
@@ -35,6 +51,11 @@ def bot_probability(store, author):
     p = POLICY['bot_prior'].get(prof['status'], POLICY['bot_prior']['unknown'])
     if int(prof.get('upheld_strikes') or 0) >= 1:
         p = max(p, POLICY['bot_prior']['upheld_author'])
+    rule = launch_rule(store, 'frequency_bot')
+    # Citizens rarely post several times an hour; a flood of new bot accounts would otherwise cost JEV
+    # calls until the detector has gathered evidence. Ordering only: this never feeds a report.
+    if p < rule['p_bot'] and posting_frequency(store, author) >= int(rule['min_posts']):
+        p = float(rule['p_bot'])
     return p
 
 
@@ -92,6 +113,17 @@ def is_cold(store, post, now=None):
             and not is_trending(store, post['post_id'], ts))
 
 
+_PERSUADABLE = re.compile(r"\b(not sure|unsure|undecided|on the fence|can'?t decide|haven'?t decided|torn|"
+                          r"what do (you|people) think|convince me|genuine question|honest question|which way|"
+                          r"leaning|still deciding|mixed feelings|don'?t know (how|what|whether))\b", re.I)
+
+
+def persuadable(post):
+    """A question or open hesitation: the undecided readers the client brief asks us to find."""
+    text = str(post.get('text', ''))
+    return bool(_PERSUADABLE.search(text)) or text.rstrip().endswith('?')
+
+
 def audience(store, post, now=None):
     """Components and an ordinal priority for one observed post (dict as stored in observed_posts)."""
     ts = time.time() if now is None else now
@@ -104,11 +136,12 @@ def audience(store, post, now=None):
     onlooker = math.log1p(max(engagement(post), reach))
     to_us = replies_to_us(store, post)
     verified = p_bot == 0.0
+    undecided = persuadable(post)
     raw = (w['author_reader'] * (1 - p_bot) + w['onlooker'] * onlooker + w['replies_to_us'] * to_us
-           + w['trending'] * trending + w['verified_author'] * verified)
+           + w['trending'] * trending + w['verified_author'] * verified + w.get('persuadable', 0) * undecided * (1 - p_bot))
     freshness = 0.5 ** (post_age(post, ts) / POLICY['freshness_half_life_seconds'])
     return {'own': False, 'p_bot': round(p_bot, 3), 'onlooker': round(onlooker, 3), 'reach': round(reach, 2),
-            'replies_to_us': to_us, 'trending': trending, 'verified': verified, 'freshness': round(freshness, 3),
+            'replies_to_us': to_us, 'trending': trending, 'verified': verified, 'persuadable': undecided, 'freshness': round(freshness, 3),
             'priority': round(raw * freshness, 3)}
 
 
@@ -166,9 +199,15 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
             n = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE account_id=? AND kind IN ('post','reply') AND {live} "
                                     "AND created_at>=? AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('initialise','warmup')",
                                     (account, start)).fetchone()[0]
-            if n >= caps['per_account_per_day']:
+            if n >= account_daily_cap(store, account):
                 return 'account_daily_cap'
     return ''
+
+
+def account_daily_cap(store, account):
+    """Accounts with posts hidden by moderators are slowed down so a third hide does not suspend them."""
+    slowed = store.policy('slowed_accounts', {}) or {}
+    return int(slowed[account]) if account in slowed else int(POLICY['caps']['per_account_per_day'])
 
 
 def accounts_at_daily_cap(store, accounts, now=None):
@@ -183,7 +222,7 @@ def accounts_at_daily_cap(store, accounts, now=None):
             "AND status IN ('claimed','sending','unknown','succeeded') AND created_at>=? "
             "AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('initialise','warmup') GROUP BY account_id",
             (*accounts, sydney_day_start(ts))).fetchall()
-    return {r[0] for r in rows if r[1] >= POLICY['caps']['per_account_per_day']}
+    return {r[0] for r in rows if r[1] >= account_daily_cap(store, r[0])}
 
 
 def thread_root(post):

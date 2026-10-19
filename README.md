@@ -2,6 +2,7 @@
 > 举报改为按期望值自动决策（`policies/report-v2.json`，默认 shadow 只记录不发送），见下文 [Reporting automation](#reporting-automation-report-decisionv2)。
 > 运行与恢复以 [v6 runbook](docs/repair-and-discord-2026-10-18/runbook.md) 为准，当前三棵逻辑树见 [logic-trees](docs/repair-and-discord-2026-10-18/logic-trees.md)。
 > 开服后要做的事见 [上线后 TODO](#上线后-todo)。官方服务器行为仍需开服验证。
+> 服务器值班：`CLAUDE.md`（服务器上的 Claude Code 自动读取的值班说明和巡检流程）、`docs/ops-journal.md`（值班日志）、`scripts/dbq.py`（只读查库）、`docs/system-map.html`（模块地图）。
 
 80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[80 人预览](docs/personas-80/preview.md)。新人设默认未绑定，绑定后待命。
 
@@ -15,7 +16,7 @@ Python components for the Capture the Narrative 2026 project. The system operate
 
 The scenario is the fictional Kingstonia referendum on vaccination proof for access to public spaces. Supporting voluntary vaccination does not automatically mean supporting the access requirement. Alignment is calculated against the team's explicitly supplied side; a single post does not establish an author's permanent affiliation.
 
-**Current scope (2026-10-18):** 80 YES persona profiles with explicit binding, the post.v3 rubric, JEV response decisions for neutral/mixed posts, JEV postflight (`postflight.v3`) with one targeted retry, source-bound RAG, persistent reply batches, the managed Pi macro worker, SQLite-backed intents/leases shared by fleet, macro and Discord processes, and expected-value report automation. Reply targeting is audience-weighted with anti-pile-on caps and staged count refreshes. Uncertain sends hold an account for at most 15 minutes and are reconciled automatically; restarts drain cleanly. The offline suite has 752 tests.
+**Current scope (2026-10-18):** 80 YES persona profiles with explicit binding, the post.v3 rubric, JEV response decisions for neutral/mixed posts, JEV postflight (`postflight.v3`) with one targeted retry, source-bound RAG, persistent reply batches, the managed Pi macro worker, SQLite-backed intents/leases shared by fleet, macro and Discord processes, and expected-value report automation. Reply targeting is audience-weighted with anti-pile-on caps and staged count refreshes. Uncertain sends hold an account for at most 15 minutes and are reconciled automatically; restarts drain cleanly. Originals follow the campaign-day multiplier schedule, open with neutral topic questions, and initialise posts come from six varied everyday posts per persona. Every persona has a full backstory (catalog `yes.v2`, readable in `docs/personas-80/profiles.md`). In-universe news from sites.legitreal.com and the client brief feed drafting as attributed, verbatim-verified claims. Launch hardening spreads first posts, avoids multi-account threads, watches our own accounts, and lets reporting scale with a bot flood. The offline suite has 791 tests.
 
 ## Implemented capabilities
 
@@ -31,7 +32,7 @@ The scenario is the fictional Kingstonia referendum on vaccination proof for acc
 | Reply drafting | Calls DeepSeek from a locally bound, checked reply task using internal P01–P09 templates; injects persona background and voice instructions. |
 | Pre-send gatekeeper | One JEV `postflight.v3` call per draft (side alignment, purpose, persona/style, toxicity/injection, send authorization, substantive addition, evidence support) plus local length/duplicate/style-copy checks, with one targeted retry. |
 | Macro sensing | Collects platform trending hashtags, headlines from dual newspapers (*Daily Kingstonia* & *Kingstonia Herald*), VIP NPC posts, and account availability. |
-| Strategic publishing | At most one Pi draft per two-hour pulse, 10 originals per team per Sydney day and a 24-hour lock per account (runtime-adjustable), through the same postflight and SQLite gates; one neutral initialise post per new account from its persona's daily examples. |
+| Strategic publishing | Team-wide daily original limits by campaign day (10 / 16 / 24 / 32, see “Originals pacing”), one slot per `day ÷ limit` with bounded retries, a 24-hour lock per account, P00 opening questions on the first days, the same postflight and SQLite gates; one everyday initialise post per new account from six varied daily posts. |
 | Pi Agent harness | The managed worker (`ctn/macro/worker.py`) calls `pi --print --no-tools --no-skills` with a fixed system prompt, the `[ACTIVE]` directives from `harness.md`, a state snapshot and RAG materials. Pi returns JSON only; Python selects the account and authorizes sending. `.pi/skills/campaign-publisher/SKILL.md` documents the contract for manual Pi use. |
 | Blue-team reporting | Versioned bot-evidence scoring, report candidates bound to evidence hashes, expected-value decisions (`report-decision.v2`, shadow by default), Discord/CLI review, risk budget and ruling import. |
 | Audit and review | Records metadata-only JSONL events and supports field-level human references, routing replay, feedback records, and comparisons between evaluated rubric versions. |
@@ -47,7 +48,7 @@ flowchart TB
         VIP_NPCs["7 Special NPCs (Journalists, Columnists, Candidates)"]
     end
 
-    subgraph MacroEngine["【Macro Strategic Loop】(Managed Pi pulse / 2 hours)"]
+    subgraph MacroEngine["【Macro Strategic Loop】(Managed Pi slots: day ÷ daily limit)"]
         direction TB
         MacroSensing["1. Macro Sensing (ctn.macro status)<br>• Trends, News Headlines, VIP NPC topics"]
         HarnessMemory["2. Persistent Working Memory (harness.md)<br>• Campaign Phase, Commitments, Account Locks, Human Directives"]
@@ -481,7 +482,7 @@ Run the offline suite:
 python3 -m unittest discover -s tests -q
 ```
 
-The 2026-10-18 run on Python 3.14.6 passed **752 offline tests** with 0 skipped when `discord.py` is installed
+The 2026-10-18 run on Python 3.14.6 passed **791 offline tests** with 0 skipped when `discord.py` is installed
 (Discord panel tests skip without it). Coverage includes:
 - JEV workflow, inputs, routing, action decisions, rubric parsing, and calibration.
 - Persona catalog binding, occupation routing, cooldowns and fixed multi-reply batches.
@@ -497,6 +498,13 @@ The 2026-10-18 run on Python 3.14.6 passed **752 offline tests** with 0 skipped 
 - Send recovery (`tests/test_send_recovery.py`): wire marker, shutdown drain, 90-second send lease, bounded unknown
   holds, reconciliation from local/thread/history evidence, abandonment, report pending release, burst alerts and
   initialise seed rotation.
+- Launch hardening (`tests/test_launch.py`): initialise spread and spacing, batches off by default, frequency bot prior,
+  slowed accounts, self-scan, hidden-post detection and slowdown, overlap-aware genuine risk, bounded stop cost.
+- News (`tests/test_news.py`): verbatim verification, deterministic attribution, corroboration, conflicts, poll
+  supersession, article revisions, brief seed, retrieval, counter cards, JEV-valid campaign items, slogan and overclaim
+  guards, persuadable weighting, ingestion with quarantine and alerts, and `ops news`.
+- Originals pacing (`tests/test_originals_pacing.py`): campaign days and multipliers, evening ramp, slots, bounded
+  retries with another persona, P00 publication without strict alignment, Pi purpose contract and daily-post checks.
 
 For an explicit live wire-format check:
 
@@ -595,7 +603,13 @@ P(upheld) × R  >  P(genuine) × C      and      p ≥ 0.7 (hard floor, never lo
 - Below the floor, a candidate with `p ≥ 0.5` goes to human review; otherwise it is dropped. The floor exists so that
   the 25% citizen error rate is never used deliberately (bad-faith reporting, LS.6.5 and rule 5.3).
 - Unresolved post reports share a risk budget: the sum of their genuine probabilities may not exceed
-  `max_expected_genuine` (default 2.0). The existing 5-pending and 1-per-author limits still apply.
+  `max_expected_genuine` (now 3.0), counted as **distinct six-hour stops**: reports are grouped by expected ruling time
+  (submission + 24 h) and stops that land in the same window count once. Pending limits are 40 for the team and 2 per
+  author (`CTN_MAX_PENDING_REPORTS`, `CTN_MAX_PENDING_PER_AUTHOR`). These were 5 and 1, which meant roughly five reports
+  a day because a lone report is ruled only after 24 hours; the official rules set no pending limit.
+- The genuine cost **C** is capped by the renewal bound `average value × P_upheld / P_genuine`: the reports lost during a
+  stop carry the same genuine risk themselves. Without the cap, fast rulings during a bot flood (five reporting teams →
+  1.5 h) would make the rule refuse every report.
 - Targets are the author's posts that carry their own leak/repetition evidence first, then the freshest. Report
   `detail` is a deterministic plain-English summary; the structured evidence stays in SQLite for audit.
 - A report 403 pauses automation for 30 minutes and clears manual availability; 403 wording about suspension also
@@ -645,6 +659,104 @@ priority = JEV score + audience   (the old "longer wait = higher priority" term 
 - **Comment crawl:** priority is `10·ln(1 + unseen)` plus bonuses (own thread 80, verified 40, trending 30). Own,
   verified and trending threads are always among the candidates, and one post gets at most 4 comment pages per hour;
   after that its backlog is marked caught up (`depth_cap`) and only newer replies are read later.
+
+## Launch hardening (launch.v1)
+
+`policies/launch-v1.json`; every value can be overridden at runtime (`python -m ctn.ops launch`). Other teams will run
+detectors and report our accounts; three permanently hidden posts suspend an account, and five teams reporting one post
+hide it at once.
+
+- **Initialise posts spread over 5 hours** in a random, stable order, at least 90 s apart team-wide, so 80 new accounts
+  do not all post their first message in the same hour (`ops launch --initialise-window SECONDS`).
+- **Reply batches off** (`reply_batches_enabled=false`): several of our accounts in one thread is the first pattern other
+  detectors use. `ops launch --batches on` restores them.
+- **Frequency prior:** an author with 4 or more observed posts in the last hour is ordered as a likely bot (p 0.6), so a
+  flood of fresh bot accounts does not consume JEV before the detector has evidence. Ordering only; never a report.
+  Latest is still read as before, since it is where bots are found.
+- **Self-check** (fleet worker `selfcheck`): every 30 min our accounts are scored on AI leak phrases, wording shared with
+  another of our accounts, several of our accounts in one thread within 15 min, and volume; scores of 3 or more are sent
+  to Discord. Every 10 min up to 6 of our posts from the last 48 h are re-read; a post that reports a hidden or removed
+  state, or is unreadable twice, counts as hidden and is alerted. An account with 2 hidden posts is slowed to 8 posts
+  and replies a day (`ops launch --unslow ACCOUNT` to restore). `ops status` → `self_check`.
+
+## In-universe news and the client brief (news.v1)
+
+`ctn/news/` with `policies/news-v1.json`. The fleet runs a `news` worker (not in mock mode).
+
+- **Fetch.** `sites.legitreal.com` serves every page as JSON (official SDK `NewsSites`). The worker reads the site list
+  every 6 h, each front page every 10 min, fetches new articles, and re-fetches articles from the last 48 h every 3 h
+  to catch edits (body hash). Articles are stored in `news_articles`; any article the local injection check flags is
+  quarantined and never extracted. No Legit Social budget is used.
+- **Extract.** DeepSeek (temperature 0.1) proposes up to 8 claims per article: kind (event, schedule, statistic,
+  position, quote), a one-sentence statement, the exact evidence sentence, numbers, entities, topics, effect on YES,
+  whether the figure can change, and a `metric_key` such as `kingstonia_central_hospital:nursing_vacancies`. Opinion
+  pieces produce *concerns* (the worry, what is fair about it, a calm YES response, what not to say), never facts.
+- **Verify.** A claim is stored as `passed` only if its evidence sentence, every number, every entity and any quotation
+  appear verbatim in the article. Attribution is written by code ("The Kingstonia Herald reported on 18 Oct that ...";
+  "The Medical Officers Union of Kingstonia says ... (campaign brief, 19 Oct)").
+- **Reconcile per measure.** Two sources with the same numbers corroborate each other; different numbers on the same
+  day are a `conflict` (not used, one Discord alert); a newer reading of a changing figure supersedes older different
+  readings (the 14 Oct "No leads" poll is superseded by the 17 Oct 35.2 / 35.2 / 29 poll); a revised article retires
+  its old claims.
+- **Client brief.** Seeded as a partisan source: the poll, forty nursing vacancies, the 2 November vote, Hawthorne's
+  position, the first vaccine shipment "in about a fortnight" (single source, stays "MOUK says"), and Castillo's
+  "power grab in a lab coat" line. Four counter cards (two-tier society, can't afford it, power grab, national ID as a
+  health passport) give the fair point, a response idea and what to avoid.
+- **Use.** RAG snapshots add a live layer: up to 5 relevant claims (recent, corroborated and, for originals, YES-helpful
+  claims rank higher), 2 concerns and matching counter cards. They reach JEV as `attributed_claim` items starting
+  "News report:" and `argument` items starting "Opposing concern:" / "Opposing line:", so postflight accepts drafts that
+  cite them with attribution and still rejects unsupported claims. Pi receives the last 24 h of verified claims as
+  `recent_news`. Drafting prompts require keeping attribution and forbid promising zero deaths or perfect protection.
+- **Guards on every post and reply.** `Mandate now` / `Protect Kingstonia` may appear in at most 1 of the team's last 10
+  posts and replies (`slogan_frequency`); "zero deaths", "nobody will die", "100% safe" and similar are rejected
+  (`overclaim_promise`).
+- **Undecided readers.** Posts that ask a question or voice hesitation get a `persuadable` bonus in reply targeting.
+  `ops status` → `reply_reasons_24h` shows why reply tasks stopped, including how many neutral posts the JEV response
+  gate holds back (thresholds unchanged until the data is reviewed).
+- **Operations.** Discord gets a daily digest after 08:00 (counts plus the three most YES-helpful and most damaging
+  claims) and one alert per conflict, quarantined article or failed extraction. `python -m ctn.ops news list|show|
+  withdraw|summary`; a withdrawn claim leaves retrieval immediately. `python -m ctn.news` runs one step for a rehearsal.
+
+## Originals pacing and opening questions (originals.v1)
+
+`ctn/macro/schedule.py` with `policies/originals-v1.json`. Campaign day 0 is 2026-10-19 (Sydney); official dates put
+day −2 on 17 October and day 14 (referendum) on 2 November. Red points are ×2 from day 7 and ×4 from day 13, and are
+multiplied when recorded, not when posted.
+
+| Campaign day | Dates | Red | Team-wide daily originals |
+|---|---|---|---|
+| 0–1 | 19–20 Oct | ×1 | 10 |
+| 2–6 | 21–25 Oct | ×1 | 16 |
+| 7–12 | 26–31 Oct | ×2 | 24 |
+| 13–14 | 1–2 Nov | ×4 | 32 |
+
+- **Ceiling, not target.** Each tier applies from **18:00 the previous evening**, because engagement keeps arriving for
+  hours. Initialise posts are not counted; each account still posts at most one original per 24 hours.
+- **Slots.** The day (or `active_hours`, default all day) is divided into `limit` equal slots: 10 → every 2.4 h,
+  24 → hourly, 32 → every 45 min. Missed slots are not made up.
+- **Retries inside a slot.** No eligible account, a postflight rejection, an expired draft, a failed send or a Pi error
+  retries with a different persona at least 10 minutes later, up to 3 attempts. Pi "nothing worth saying" or no
+  material retries once with a different slice of trending posts. Nothing is retried past the slot's end.
+- **P00 opening questions.** On days 0–1 about 80% of slots are P00 and on day 2 about 40%; from day 3 all are P01
+  (`opener_share`). A P00 post is an everyday-voice question from the persona's own life that invites views on how
+  vaccination-proof entry would work in practice; neutral in tone, never using the opposing campaign's lines. Postflight
+  checks it without strict alignment (stance inversion is still rejected) against its own purpose rule. Replies under
+  our own posts already get priority (reply targeting), so the team can answer the concerns people raise there.
+- **No repeats.** Pi receives the team's last 10 originals and must use a different angle.
+- **Operator control.** `ops campaign configure --daily-original-limit N` fixes the limit and turns the schedule off;
+  `--originals-schedule on` restores it. `ops status` → `originals` shows campaign day, multiplier, limit, used, slot
+  length, opener share and today's slot outcomes.
+- **Persona backstories (catalog `yes.v2`).** Each profile now has a `story`: age, gender, looks, where they grew up,
+  life now, a concrete COVID-19 experience, H2D2 vaccine intention (nobody is vaccinated yet; the first shipment is
+  about two weeks away), 2025 presidential vote (50 Hawthorne, 23 Castillo, 7 did not vote), interests, follows,
+  posting times and habits, personal reasons for YES, what they are still unsure about, and a `gossip` trait (13
+  personas who pass on what they hear). The whole profile is given to drafting and postflight as voice and
+  consistency data, never as evidence. Every persona is version 2; `docs/personas-80/profiles.md` is the readable
+  sheet (regenerate with `render_profiles`).
+- **Everyday initialise posts.** `config/personas/daily-posts.v1.json` adds four varied posts per persona (questions to
+  others, observations, asides; none about the referendum) in front of the catalog's two daily examples. Each persona
+  starts at its own offset and a rejected post moves to the next one. The persona catalog itself is unchanged, so no
+  catalog re-apply is needed.
 
 ## Uncertain sends and restarts (send-recovery.v1)
 
@@ -699,6 +811,18 @@ Deployment steps (git pull, verify, backup, build, replace, check, roll back) ar
 - [ ] 确认 `get_counters`（按帖子 id 读计数）走的是普通读接口，并看 `post_refresh` 中 stale 比例；比例高说明读预算不够，降低 `refresh.per_minute` 或减少阶段。
 - [ ] 观察 neutral/mixed 帖的 decided / needs_review / needs_materials 比例，决定是否放宽 0.7 / 0.15 阈值。
 
+- [ ] **服务器上的 `state/harness.md` 不会随代码更新**：把第 1 条 `[ACTIVE]` 改成仓库模板里的新写法（加上 “P00 opening questions may be neutral in tone but must never argue against YES.”），否则 Pi 会被旧规则要求“必须支持 YES”，P00 提问容易被它拒绝或写成表态。
+- [ ] **服务器 `.env` 里把 `CTN_MAX_PENDING_REPORTS` 改成 40、`CTN_MAX_PENDING_PER_AUTHOR` 改成 2**（环境变量会覆盖代码默认值，旧 `.env` 还是 5 / 1）。
+- [ ] 开服后几小时内看前十几个举报候选（Discord 卡片和 `ops reports calibration`），系统建议靠谱就 `ops reports automation --shadow off`，先只开 `leak_behavior` 和 `account`。第一天的举报要 24 小时后才裁决，开得越早越划算。
+- [ ] 决定要不要在官方 Discord 联系其他 YES 队（互不举报、对 NO 方机器人一起举报可让裁决缩短到 1.5 小时）。规则允许队伍协作，不需要改代码。
+- [ ] 关注 Discord 的 self-check 和 own_post_hidden 提醒；出现被隐藏的帖子，说明对方在举报我们，考虑减少相关账号的活动或调整措辞。
+- [ ] 新闻层上线前在服务器上演练一次：`docker compose exec fleet python -m ctn.news`（读取并抽取一次，打印结果），确认两家报纸都能读到、抽取出的说法和出处正确；只想测抓取用 `--no-extract`。之后看 Discord 的每日摘要和冲突提醒。
+- [ ] 把 `harness.md` 新增的第 5–7 条 `[ACTIVE]`（瞄准未决定者、引用要带出处、不承诺零死亡、口号少用）同步到服务器的 `state/harness.md`。
+- [ ] 看 `ops status` 的 `reply_reasons_24h`：中立/混合帖被 JEV 回应门槛挡下的比例高，再决定是否放宽 0.7 / 0.15。
+- [ ] 人设库已升级到 `yes.v2`（80 人全部 version 2，加了背景故事）。服务器上如果已经注册或绑定账号，重启前执行 `docker compose exec fleet python -m ctn.ops persona apply`，否则写入会因 `persona_catalog_mismatch` 被拒；还没注册则不需要。
+- [ ] 核对第 0 天确实是 10/19（由官方日期倒推，页面没有直接写明）；若不同，改 `policies/originals-v1.json` 的 `day0`。
+- [ ] 看前几条初始化帖和 P00 提问的实际效果（有没有市民回复、有没有被拒），再决定是否调整 `opener_share` 或补充日常帖。
+
 **第 1–2 天**
 - [ ] 系统建议与人工判断基本一致后：`ops reports automation --shadow off`，只放开 `leak_behavior` 和 `account`。
 - [ ] 把确认过的“隐藏”字段写成裁决事件源，接入 `consume_events`（需评审和测试，不要从 404 推断裁决）。
@@ -716,7 +840,9 @@ Deployment steps (git pull, verify, backup, build, replace, check, roll back) ar
   - 先看：①计分面板里关注分、取消关注扣分各有多少，哪些账号拿到；②`performance` 里各账号粉丝数变化；③用 SDK 的 `following(account_id)` / `followers(account_id)`（公开读，300/min 读路由，私密账号返回 403）抽查：市民账号是否私密、市民会不会关注我们、我们关注市民后对方会不会回关、别的队账号之间是否互相关注。
   - 再定：数据显示有收益时，再考虑①市民回复了我方账号 X 时优先由 X 接着回；②少量回关（只回关已关注我们或与该账号有 ≥2 次来回的低机器人概率市民，每号每天 ≤3、全队 ≤30，从不自动取消关注，先半数账号 A/B）；③粉丝/取消关注追踪。批量关注属于 LS.5 的刷互动行为，不做。
   - 需要时在 `OfficialLegitClient` / `Actuator` 包装 `following`、`followers`（照 `get_account_posts` 写法）。
-- [ ] （审计）原创日额度和 pulse 间隔按阶段配置：第 7–12 天红队 ×2，第 13 天起 ×4。
+- [x] （审计，2026-10-19 已改）原创日额度和间隔按比赛天数配置（10 / 16 / 24 / 32，前一天 18:00 加量），前两天以 P00 话题提问为主。见 “Originals pacing”。
+- [ ] 每天看 `ops status` 的 `originals.slots_today`：`skipped:pi_observe`、`skipped:no_relevant_material` 多说明材料或提示词不够；`jev_rejected` 多说明 P00/P01 审核规则需要调整。
 - [x] （审计，2026-10-18 已改）初始化帖被拒时轮换种子文本，连续失败两次在 Discord 提醒。
+- [ ] **数据库锁监控**（2026-10-19 加）：`ops status` 的 `fleet.db_lock` 是 fleet 进程里写事务等锁、占锁的统计（当前和上一个 5 分钟窗口：`hold_share` 占锁时间比例、`max_hold_s`、`max_wait_s`，`slow` 列出最慢 5 次及调用位置）；`fleet.workers` 是每个 worker 最近一次和 5 分钟内最长的单轮耗时。等锁或占锁超过 1 秒会在 `docker compose logs fleet` 打一行 `slow db transaction caller=...`（最多 10 秒一行）。`hold_share` 长期 > 0.5、`max_wait_s` 经常 > 1，或 `slow` 里大多是 `crawl.py`，就去改下一条。
 - [ ] （审计）性能：检测器协同检查只取必要列并移出写事务（实测每 50 条评论约 0.5 秒）；`PRAGMA synchronous=NORMAL`；只为进入起草的任务保存 RAG snapshot。默认线程池已扩到 48（`CTN_THREAD_WORKERS`）。
 - [ ] 部署确认：SQLite 放在 Linux 主机或命名卷上，不要放在 macOS Docker Desktop 的 bind mount 上。

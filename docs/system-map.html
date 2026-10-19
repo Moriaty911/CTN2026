@@ -1,0 +1,357 @@
+<title>CNT2026 系统地图</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: control-room map — summary strip, four lanes of modules, then cards with switch + where to look */
+:root{
+  --bg:#f5f6f4; --panel:#ffffff; --ink:#1b2321; --muted:#5d6865; --line:#d9dedb;
+  --accent:#1f6f6a;
+  --core:#2f7d4f; --core-bg:#e6f2ea;
+  --useful:#2c5d9e; --useful-bg:#e5edf8;
+  --guess:#a36412; --guess-bg:#f8eedd;
+  --gap:#b23b32; --gap-bg:#f9e6e4;
+  --code-bg:#eef1ef;
+  --sans:"IBM Plex Sans","PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121715; --panel:#1a211f; --ink:#e3e9e6; --muted:#9aa6a2; --line:#2c3633;
+  --accent:#5cc0b8;
+  --core:#6fcf93; --core-bg:#1d3326; --useful:#86b3ef; --useful-bg:#1c2a40;
+  --guess:#e7ab5a; --guess-bg:#3a2c17; --gap:#f08a80; --gap-bg:#3d1f1c; --code-bg:#232c29; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121715; --panel:#1a211f; --ink:#e3e9e6; --muted:#9aa6a2; --line:#2c3633;
+  --accent:#5cc0b8;
+  --core:#6fcf93; --core-bg:#1d3326; --useful:#86b3ef; --useful-bg:#1c2a40;
+  --guess:#e7ab5a; --guess-bg:#3a2c17; --gap:#f08a80; --gap-bg:#3d1f1c; --code-bg:#232c29; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.wrap{max-width:1120px;margin:0 auto;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:36px}
+h1{font-size:1.75rem;font-weight:600;margin:0;text-wrap:balance}
+h2{font-size:1.2rem;font-weight:600;margin:0 0 12px;text-wrap:balance}
+h3{font-size:1rem;font-weight:600;margin:0}
+p{margin:0}
+.lede{color:var(--muted);max-width:68ch;margin-top:8px}
+code,.cmd{font-family:var(--mono);font-size:.84rem}
+code{background:var(--code-bg);padding:1px 5px;border-radius:4px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:4px 12px;font:inherit;font-size:.85rem;cursor:pointer}
+.chip[aria-pressed="false"]{opacity:.45}
+.chip:focus-visible,.copy:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.core .dot,.dot.core{background:var(--core)} .useful .dot,.dot.useful{background:var(--useful)} .guess .dot,.dot.guess{background:var(--guess)}
+.prefix{margin-top:14px;font-size:.85rem;color:var(--muted)}
+
+/* summary */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.sum{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:grid;gap:6px;min-width:0}
+.sum b{font-size:1.5rem;font-weight:600;font-variant-numeric:tabular-nums}
+.sum.core b{color:var(--core)} .sum.useful b{color:var(--useful)} .sum.guess b{color:var(--guess)} .sum.gap b{color:var(--gap)}
+.sum span{color:var(--muted);font-size:.88rem}
+
+/* lanes */
+.lanes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.lanes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.lanes{grid-template-columns:1fr}}
+.lane{display:grid;align-content:start;gap:8px;min-width:0}
+.lane-h{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:0 2px}
+.lane-h small{display:block;text-transform:none;letter-spacing:0;font-weight:400}
+.node{display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:6px;padding:8px 10px;font-size:.9rem;min-width:0}
+.node:hover{background:var(--cbg)}
+.node .st{margin-left:auto;font-size:.72rem;color:var(--muted);white-space:nowrap}
+.arrow{color:var(--muted);text-align:center;font-size:.8rem;line-height:1}
+.core{--c:var(--core);--cbg:var(--core-bg)} .useful{--c:var(--useful);--cbg:var(--useful-bg)} .guess{--c:var(--guess);--cbg:var(--guess-bg)}
+
+/* cards */
+.cards{display:grid;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:grid;gap:10px;scroll-margin-top:16px}
+.card:target{box-shadow:0 0 0 2px var(--accent)}
+.card-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.tag{font-size:.75rem;padding:2px 9px;border-radius:999px;background:var(--cbg);color:var(--c);font-weight:500}
+.state{font-size:.8rem;color:var(--muted)}
+.kv{display:grid;grid-template-columns:7em minmax(0,1fr);gap:6px 14px;font-size:.92rem}
+@media (max-width:520px){.kv{grid-template-columns:1fr;gap:2px}.kv dt{margin-top:6px}}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;min-width:0}
+.cmdline{display:flex;align-items:flex-start;gap:8px;background:var(--code-bg);border-radius:6px;padding:6px 8px;margin-top:4px}
+.cmdline .cmd{flex:1;min-width:0;overflow-wrap:anywhere}
+.copy{flex:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:4px;font:inherit;font-size:.72rem;padding:1px 8px;cursor:pointer}
+.nosw{color:var(--gap);background:var(--gap-bg);border-radius:4px;padding:1px 6px;font-size:.85rem}
+
+/* lists */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
+.box ol,.box ul{margin:0;padding-left:1.3em;display:grid;gap:6px}
+.box li::marker{color:var(--muted)}
+.gaplist li{color:var(--ink)}
+.note{font-size:.85rem;color:var(--muted);margin-top:10px}
+@media (prefers-reduced-motion:no-preference){.node,.chip{transition:background .15s,opacity .15s}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>CNT2026 系统地图</h1>
+  <p class="lede">现在服务器上跑着的每一块：它干什么、属于哪一类、开局是什么状态、怎么关、出事看哪。点上面的方块跳到对应说明，点颜色标签可以只看某一类。</p>
+  <div class="legend" role="group" aria-label="按类别筛选">
+    <button class="chip core" data-f="core" aria-pressed="true"><span class="dot"></span>地基：必须有，不用管</button>
+    <button class="chip useful" data-f="useful" aria-pressed="true"><span class="dot"></span>有用：留着，偶尔看</button>
+    <button class="chip guess" data-f="guess" aria-pressed="true"><span class="dot"></span>猜测：开服前预判写的，看数据再定</button>
+  </div>
+  <p class="prefix">下文命令里的 <code>ops</code> 都是 <code>docker compose exec fleet python -m ctn.ops</code> 的简写，在服务器项目目录里执行。</p>
+</header>
+
+<section class="summary" aria-label="概览">
+  <div class="sum core"><b>10</b><span>块地基。发帖、回复、举报、发送不丢不重，这些是骨架。</span></div>
+  <div class="sum useful"><b>4</b><span>块有用的。新闻、被隐藏提醒、自动降速、发布闸门里的口号检查。</span></div>
+  <div class="sum guess"><b>6</b><span>块猜测。复杂度主要在这里，第一天看数据决定留不留。</span></div>
+  <div class="sum gap"><b>4</b><span>块目前没有一键关闭的命令，要改策略文件或数据库，见页面底部。</span></div>
+</section>
+
+<section>
+  <h2>四条线</h2>
+  <div class="lanes">
+    <div class="lane">
+      <div class="lane-h">回复线<small>看到帖子 → 回一条</small></div>
+      <a class="node core" href="#read" data-c="core">读帖 / 读评论 / 回读<span class="st">常开</span></a><div class="arrow">↓</div>
+      <a class="node core" href="#target" data-c="core">选帖打分<span class="st">常开</span></a>
+      <a class="node guess" href="#freq" data-c="guess">按发帖频率判机器人<span class="st">开</span></a>
+      <a class="node guess" href="#persuade" data-c="guess">犹豫者加分<span class="st">开</span></a><div class="arrow">↓</div>
+      <a class="node core" href="#write" data-c="core">写回复（persona + JEV）<span class="st">常开</span></a><div class="arrow">↓</div>
+      <a class="node core" href="#gate" data-c="core">发布闸门<span class="st">常开</span></a>
+      <a class="node guess" href="#batch" data-c="guess">多号回同一帖<span class="st">关</span></a>
+    </div>
+    <div class="lane">
+      <div class="lane-h">原创线<small>账号自己发帖</small></div>
+      <a class="node core" href="#persona" data-c="core">80 个人设 + 背景故事<span class="st">常开</span></a><div class="arrow">↓</div>
+      <a class="node core" href="#init" data-c="core">初始化第一帖<span class="st">5 小时内分散</span></a><div class="arrow">↓</div>
+      <a class="node core" href="#orig" data-c="core">原创节奏<span class="st">10/16/24/32</span></a>
+      <a class="node useful" href="#news" data-c="useful">新闻层<span class="st">开</span></a>
+    </div>
+    <div class="lane">
+      <div class="lane-h">举报线<small>发现机器人 → 举报</small></div>
+      <a class="node core" href="#detect" data-c="core">检测器 + 候选<span class="st">常开</span></a><div class="arrow">↓</div>
+      <a class="node core" href="#decide" data-c="core">举报决策<span class="st">常开</span></a>
+      <a class="node guess" href="#risk" data-c="guess">风险预算 / 停报代价<span class="st">开</span></a><div class="arrow">↓</div>
+      <a class="node core" href="#shadow" data-c="core">shadow 开关<span class="st">开（只记录）</span></a>
+    </div>
+    <div class="lane">
+      <div class="lane-h">守护<small>保证不出事、出事知道</small></div>
+      <a class="node core" href="#send" data-c="core">发送恢复 + 安全停机<span class="st">自动</span></a>
+      <a class="node core" href="#cap" data-c="core">每号每日上限<span class="st">常开</span></a>
+      <a class="node useful" href="#slow" data-c="useful">被隐藏 → 自动降速<span class="st">开</span></a>
+      <a class="node useful" href="#hidden" data-c="useful">回读自己的帖子<span class="st">提醒</span></a>
+      <a class="node guess" href="#scan" data-c="guess">自查评分<span class="st">只提醒</span></a>
+      <a class="node core" href="#discord" data-c="core">Discord 提醒 / 审核<span class="st">常开</span></a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>每一块的说明</h2>
+  <div class="cards">
+
+  <article class="card core" id="read" data-c="core">
+    <div class="card-top"><h3>读帖 / 读评论 / 回读</h3><span class="tag">地基</span><span class="state">每 1.5 秒读首页，每 2.5 秒读评论，每 5 秒回读互动数</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>把平台上的帖子和评论存进本地库，后面所有模块都靠它。读请求有配额，超了会自动等。</dd>
+    <dt>开关</dt><dd>不需要关。</dd>
+    <dt>出事看</dt><dd><code>ops status</code> 里各 worker 的心跳时间；心跳停了说明进程卡住，先看 <code>docker compose logs fleet --tail 200</code>。</dd></dl>
+  </article>
+
+  <article class="card core" id="target" data-c="core">
+    <div class="card-top"><h3>选帖打分</h3><span class="tag">地基</span><span class="state">开</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>给每个新帖打分：新不新、热不热、是不是在回我们、作者像不像机器人。分高的先回。</dd>
+    <dt>开关</dt><dd>权重在 <code>policies/reply-targeting-v1.json</code>，改完要重启 fleet。</dd>
+    <dt>出事看</dt><dd><code>ops status</code> 的 <code>reply_reasons_24h</code>：每条回复是因为什么被选中的。</dd></dl>
+  </article>
+
+  <article class="card guess" id="freq" data-c="guess">
+    <div class="card-top"><h3>按发帖频率判机器人</h3><span class="tag">猜测</span><span class="state">开</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>一小时发 4 帖以上的作者当成 60% 像机器人，排到后面，少花 JEV。只影响先回谁，不会因此去举报。</dd>
+    <dt>为什么是猜测</dt><dd>假设市民 NPC 发帖不频繁。如果 NPC 本身就发得很勤，这条会把真市民排到后面。</dd>
+    <dt>开关</dt><dd><span class="nosw">没有一键命令</span> 只能改 <code>policies/launch-v1.json</code> 的 <code>frequency_bot.min_posts</code> 调大后重启。</dd>
+    <dt>第一天看</dt><dd>挑几个高频作者，看是不是认证 NPC。如果是，就关掉。</dd></dl>
+  </article>
+
+  <article class="card guess" id="persuade" data-c="guess">
+    <div class="card-top"><h3>犹豫者加分</h3><span class="tag">猜测</span><span class="state">开，权重 8</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>帖子里出现 "not sure / undecided / torn" 或以问号结尾，就优先回。</dd>
+    <dt>为什么是猜测</dt><dd>假设犹豫的人更容易被说服、也更算分。实际计分只看互动，不看对方改没改主意。</dd>
+    <dt>开关</dt><dd><span class="nosw">没有一键命令</span> 改 <code>reply-targeting-v1.json</code> 里 <code>persuadable</code> 为 0 后重启。</dd></dl>
+  </article>
+
+  <article class="card core" id="write" data-c="core">
+    <div class="card-top"><h3>写回复</h3><span class="tag">地基</span><span class="state">开</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>按账号人设、对方原帖、资料库和已核实的新闻写一条回复。</dd>
+    <dt>开关</dt><dd>单个账号停用：<div class="cmdline"><span class="cmd">ops account yes_0xx --mode standby</span><button class="copy">复制</button></div></dd>
+    <dt>出事看</dt><dd>Discord 里的回复样本；内容不对劲先停这个号，再看 <code>logs/</code>。</dd></dl>
+  </article>
+
+  <article class="card core" id="gate" data-c="core">
+    <div class="card-top"><h3>发布闸门</h3><span class="tag">地基</span><span class="state">开</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>发之前拦一道：AI 腔、和自己别的号措辞太像、重复口号、断言说过头。被拦的不发。</dd>
+    <dt>开关</dt><dd>不建议关。口号和过度断言的规则在 <code>policies/news-v1.json</code>。</dd>
+    <dt>出事看</dt><dd>如果回复量突然很低，看 <code>ops status</code> 里被拦的原因。</dd></dl>
+  </article>
+
+  <article class="card guess" id="batch" data-c="guess">
+    <div class="card-top"><h3>多号回同一帖</h3><span class="tag">猜测</span><span class="state">开局关</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>热帖下面安排 2–3 个号接力回复，看起来像真讨论。</dd>
+    <dt>为什么是猜测</dt><dd>能多拿互动，但也是别家检测器最容易抓的"协同"信号。</dd>
+    <dt>开关</dt><dd><div class="cmdline"><span class="cmd">ops launch --batches on</span><button class="copy">复制</button></div><div class="cmdline"><span class="cmd">ops launch --batches off</span><button class="copy">复制</button></div></dd>
+    <dt>第一天看</dt><dd>别的队有没有大面积举报，我们的号有没有被隐藏。都没有再打开。</dd></dl>
+  </article>
+
+  <article class="card core" id="persona" data-c="core">
+    <div class="card-top"><h3>80 个人设 + 背景故事</h3><span class="tag">地基</span><span class="state">yes.v2</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>每个号的年龄、职业、经历、关心的事、说话习惯。原创帖和回复都按这个写。</dd>
+    <dt>开关</dt><dd><div class="cmdline"><span class="cmd">ops persona standby --id P0xx</span><button class="copy">复制</button></div><div class="cmdline"><span class="cmd">ops persona activate --id P0xx</span><button class="copy">复制</button></div></dd>
+    <dt>还要做</dt><dd>账号绑定后在服务器跑一次 <code>ops persona apply</code>。</dd></dl>
+  </article>
+
+  <article class="card core" id="init" data-c="core">
+    <div class="card-top"><h3>初始化第一帖</h3><span class="tag">地基</span><span class="state">5 小时内随机分散，每帖间隔至少 90 秒</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>每个号的第一条帖子，是和政治无关的生活内容，之后才进入正常节奏。</dd>
+    <dt>开关</dt><dd>改分散时长（秒）：<div class="cmdline"><span class="cmd">ops launch --initialise-window 14400</span><button class="copy">复制</button></div></dd>
+    <dt>出事看</dt><dd><code>ops status</code> 里 initialise 的进度。</dd></dl>
+  </article>
+
+  <article class="card core" id="orig" data-c="core">
+    <div class="card-top"><h3>原创节奏</h3><span class="tag">地基</span><span class="state">全队每日上限 10 / 16 / 24 / 32，18:00 后加速</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>macro-agent 容器按天数排期，给不同账号分配原创帖，失败最多重试 3 次。</dd>
+    <dt>开关</dt><dd>关掉排期：<div class="cmdline"><span class="cmd">ops campaign configure --originals-schedule off</span><button class="copy">复制</button></div>改成固定上限：<div class="cmdline"><span class="cmd">ops campaign configure --daily-original-limit 12</span><button class="copy">复制</button></div></dd>
+    <dt>出事看</dt><dd><code>ops campaign show</code></dd></dl>
+  </article>
+
+  <article class="card useful" id="news" data-c="useful">
+    <div class="card-top"><h3>新闻层</h3><span class="tag">有用</span><span class="state">开，每 10 分钟查一次新闻站</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>抓赛方新闻站的文章，抽出可以引用的事实，写回复时带"据某报道"。有冲突或被注入的文章会提醒。</dd>
+    <dt>开关</dt><dd>撤回一条事实：<div class="cmdline"><span class="cmd">ops news withdraw CLAIM_ID --reason "..."</span><button class="copy">复制</button></div><span class="nosw">没有整体关闭命令</span></dd>
+    <dt>出事看</dt><dd><code>ops news summary</code>、Discord 新闻日报。</dd></dl>
+  </article>
+
+  <article class="card core" id="detect" data-c="core">
+    <div class="card-top"><h3>检测器 + 举报候选</h3><span class="tag">地基</span><span class="state">开</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>根据 AI 腔、自曝身份、刷屏、成群互动等证据，给作者和帖子打"像机器人"的分，生成举报候选。</dd>
+    <dt>出事看</dt><dd><code>ops reports list</code></dd></dl>
+  </article>
+
+  <article class="card core" id="decide" data-c="core">
+    <div class="card-top"><h3>举报决策</h3><span class="tag">地基</span><span class="state">未裁决总上限 40，同作者 2</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>算一条举报值不值：被判成立的概率 × 分数，减去判错的代价。</dd>
+    <dt>开关</dt><dd>上限在 <code>.env</code>：<code>CTN_MAX_PENDING_REPORTS</code>、<code>CTN_MAX_PENDING_PER_AUTHOR</code>（本地已改，服务器要同步）。</dd>
+    <dt>出事看</dt><dd><code>ops reports calibration</code></dd></dl>
+  </article>
+
+  <article class="card guess" id="risk" data-c="guess">
+    <div class="card-top"><h3>风险预算 / 停报代价</h3><span class="tag">猜测</span><span class="state">预算 3.0</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>举报一旦被判"真人"，我们 6 小时内不能再举报那个帖子。这块估算停报会损失多少，同一时段多次停报只算一次。</dd>
+    <dt>为什么是猜测</dt><dd>依赖对裁判错误率（约 25%）和裁决速度的估计，开服前没有真实数据。</dd>
+    <dt>开关</dt><dd><div class="cmdline"><span class="cmd">ops reports automation --max-expected-genuine 5</span><button class="copy">复制</button></div></dd></dl>
+  </article>
+
+  <article class="card core" id="shadow" data-c="core">
+    <div class="card-top"><h3>shadow 开关</h3><span class="tag">地基</span><span class="state">开：只记录决策，不真的举报</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>举报自动化的总闸。开着的时候系统只记下"本来会举报谁"，你看过觉得准再关。</dd>
+    <dt>开关</dt><dd><div class="cmdline"><span class="cmd">ops reports automation --shadow off</span><button class="copy">复制</button></div><div class="cmdline"><span class="cmd">ops reports automation --shadow on</span><button class="copy">复制</button></div>紧急全部暂停：<div class="cmdline"><span class="cmd">ops reports pause</span><button class="copy">复制</button></div></dd>
+    <dt>建议</dt><dd>开服后看 2–3 小时的候选。误报基本都是 AI 腔、自曝身份这类没争议的，就关掉。</dd></dl>
+  </article>
+
+  <article class="card core" id="send" data-c="core">
+    <div class="card-top"><h3>发送恢复 + 安全停机</h3><span class="tag">地基</span><span class="state">自动</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>发出去没收到回应的帖子，在 1/3/8/14 分钟查一次，确认没发出去才重发，不会重复发。重启前先把正在发的请求等完。</dd>
+    <dt>开关</dt><dd>不需要。重启照常用 <code>git pull</code> 后 <code>docker compose up -d --build</code>，runbook 里有步骤。</dd>
+    <dt>出事看</dt><dd>Discord 的 unknown 提醒。</dd></dl>
+  </article>
+
+  <article class="card core" id="cap" data-c="core">
+    <div class="card-top"><h3>每号每日上限</h3><span class="tag">地基</span><span class="state">开</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>限制每个号每天发多少，防止单号刷屏被盯上。</dd>
+    <dt>开关</dt><dd>在 <code>reply-targeting-v1.json</code> 的 <code>caps</code>。</dd></dl>
+  </article>
+
+  <article class="card useful" id="slow" data-c="useful">
+    <div class="card-top"><h3>被隐藏 → 自动降速</h3><span class="tag">有用</span><span class="state">2 帖被隐藏 → 每天最多 8 条</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>3 帖被永久隐藏就封号，所以第 2 帖被隐藏时先给这个号降速。</dd>
+    <dt>开关</dt><dd>解除单个号：<div class="cmdline"><span class="cmd">ops launch --unslow yes_0xx</span><button class="copy">复制</button></div><span class="nosw">没有整体关闭命令</span></dd></dl>
+  </article>
+
+  <article class="card useful" id="hidden" data-c="useful">
+    <div class="card-top"><h3>回读自己的帖子</h3><span class="tag">有用</span><span class="state">每 10 分钟，最近 48 小时</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>检查我们的帖子还在不在。显示被隐藏，或连续两次读不到，就算被隐藏，发提醒。</dd>
+    <dt>出事看</dt><dd>Discord 的 own_post_hidden 提醒。</dd></dl>
+  </article>
+
+  <article class="card guess" id="scan" data-c="guess">
+    <div class="card-top"><h3>自查评分</h3><span class="tag">猜测</span><span class="state">每 30 分钟，只提醒，不自动处理</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>用别家检测器可能用的标准扫我们自己：AI 腔、号之间措辞雷同、几个号扎堆进同一帖、发帖过多。</dd>
+    <dt>为什么是猜测</dt><dd>我们并不知道别家检测器看什么。不过它只发提醒，猜错了也没有副作用。</dd>
+    <dt>出事看</dt><dd><code>ops status</code> 的 <code>self_check</code>。</dd></dl>
+  </article>
+
+  <article class="card core" id="discord" data-c="core">
+    <div class="card-top"><h3>Discord 提醒 / 审核</h3><span class="tag">地基</span><span class="state">开</span></div>
+    <dl class="kv"><dt>干什么</dt><dd>所有提醒都汇总到这里：发送异常、被隐藏、降速、新闻冲突、自查、举报待审。</dd>
+    <dt>出事看</dt><dd>提醒发不出来：<code>docker compose logs discord-review</code>。</dd></dl>
+  </article>
+
+  </div>
+</section>
+
+<section class="two">
+  <div class="box">
+    <h2>开局最简配置</h2>
+    <ol>
+      <li>初始化帖、原创节奏、单号回复：开</li>
+      <li>多号回同一帖：关（已是默认）</li>
+      <li>举报：shadow 开着，只看不报（已是默认）</li>
+      <li>服务器 <code>.env</code> 同步 40 / 2</li>
+      <li>其余猜测类模块先不动，它们只影响排序或者只发提醒</li>
+    </ol>
+  </div>
+  <div class="box">
+    <h2>第一天只看这几个数</h2>
+    <ol>
+      <li>我们的帖子有没有被隐藏：Discord 提醒</li>
+      <li>市民有没有点赞、回复、关注我们：<code>ops performance</code></li>
+      <li>举报候选准不准：<code>ops reports list</code></li>
+      <li>别的队在干什么：刷屏多少、有没有成群互动</li>
+      <li>高频作者是不是认证 NPC：决定频率判机器人留不留</li>
+    </ol>
+  </div>
+</section>
+
+<section class="box">
+  <h2>目前没有一键关闭命令的 4 块</h2>
+  <ul class="gaplist">
+    <li><b>按发帖频率判机器人</b>：改 <code>launch-v1.json</code> 后重启</li>
+    <li><b>犹豫者加分</b>：改 <code>reply-targeting-v1.json</code> 后重启</li>
+    <li><b>新闻层整体</b>：只能逐条撤回事实，worker 本身一直在跑</li>
+    <li><b>自动降速整体</b>：只能逐个号解除</li>
+  </ul>
+  <p class="note">四块都不危险：前两块只影响先回谁，新闻层有逐条撤回，降速只会让号发得更少。真要关，改文件后重启就行，大约 1 分钟。</p>
+</section>
+</div>
+
+<script>
+(function(){
+  var chips=[].slice.call(document.querySelectorAll('.chip[data-f]'));
+  var items=[].slice.call(document.querySelectorAll('[data-c]'));
+  function apply(){
+    var on={};chips.forEach(function(c){on[c.dataset.f]=c.getAttribute('aria-pressed')==='true'});
+    items.forEach(function(el){el.hidden=!on[el.dataset.c]});
+    try{localStorage.setItem('cnt-map-filter',JSON.stringify(on))}catch(e){}
+  }
+  try{var saved=JSON.parse(localStorage.getItem('cnt-map-filter')||'null');
+    if(saved)chips.forEach(function(c){if(saved[c.dataset.f]===false)c.setAttribute('aria-pressed','false')});}catch(e){}
+  chips.forEach(function(c){c.addEventListener('click',function(){
+    c.setAttribute('aria-pressed',c.getAttribute('aria-pressed')==='true'?'false':'true');apply();})});
+  apply();
+  document.querySelectorAll('.copy').forEach(function(b){b.addEventListener('click',function(){
+    var t=b.previousElementSibling.textContent;
+    var done=function(){b.textContent='已复制';setTimeout(function(){b.textContent='复制'},1200)};
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){sel(b.previousElementSibling)})}else sel(b.previousElementSibling);
+  })});
+  function sel(el){var r=document.createRange();r.selectNodeContents(el);var s=getSelection();s.removeAllRanges();s.addRange(r)}
+})();
+</script>

@@ -382,8 +382,9 @@ class Settings:
     auto_reports: bool = False
     report_mode: str = "off"
     rag_corpus: str = ""
-    max_pending_reports: int = 5
-    max_pending_per_author: int = 1
+    # Not official limits: the moderator rules 24 h after a lone report, so a cap of 5 meant ~5 reports a day.
+    max_pending_reports: int = 40
+    max_pending_per_author: int = 2
 
     # ---- lifecycle ------------------------------------------------------- #
     @classmethod
@@ -424,8 +425,8 @@ class Settings:
             auto_reports=_env_bool("CTN_AUTO_REPORTS", False),
             report_mode=_env_str("CTN_REPORT_MODE", "off"),
             rag_corpus=_env_str("CTN_RAG_CORPUS"),
-            max_pending_reports=_env_int("CTN_MAX_PENDING_REPORTS",5),
-            max_pending_per_author=_env_int("CTN_MAX_PENDING_PER_AUTHOR",1),
+            max_pending_reports=_env_int("CTN_MAX_PENDING_REPORTS",40),
+            max_pending_per_author=_env_int("CTN_MAX_PENDING_PER_AUTHOR",2),
         )
         if settings.report_mode not in {"off","manual","hybrid"}:
             raise ValueError("CTN_REPORT_MODE must be off, manual or hybrid")

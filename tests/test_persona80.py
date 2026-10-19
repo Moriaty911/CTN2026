@@ -69,6 +69,14 @@ class CatalogAndRoutingTests(unittest.TestCase):
     def setUp(self):
         self.store=StateStore();self.addCleanup(self.store.close)
 
+    def test_every_persona_has_a_valid_backstory(self):
+        from ctn.persona.catalog import validate_story
+        catalog=load_catalog()
+        self.assertTrue(all(row['version']==2 and 'story' in row for row in catalog['personas']))
+        for row in catalog['personas']:validate_story(row['story'])
+        broken=deepcopy(catalog['personas'][0]['story']);broken['vote_2025']='Somebody'
+        with self.assertRaises(ValueError):validate_story(broken)
+
     def test_exact_roster_and_preview(self):
         catalog=load_catalog()
         self.assertEqual(Counter(p['occupation_group'] for p in catalog['personas']),Counter(GROUP_ALLOCATION))
@@ -150,7 +158,7 @@ class CatalogAndRoutingTests(unittest.TestCase):
     def test_catalog_version_mismatch_blocks_new_writes_and_keeps_state(self):
         router=bound_router(self.store,('yes_001',))
         old_hash=router.registry.catalog_hash
-        new=deepcopy(router.registry.catalog);new['catalog_version']='yes.v2';new['personas'][0]['version']=2
+        new=deepcopy(router.registry.catalog);new['catalog_version']='yes.v3';new['personas'][0]['version']=3
         self.store.register_persona_catalog(new,activate=True)
         with self.assertRaises(ValueError):router.route({},'bus')
         ident,reason=self.store.claim_action('post','fresh_yes_001',text='example',metadata={'catalog_hash':old_hash})
@@ -284,6 +292,7 @@ class PersistentBatchTests(unittest.TestCase):
 class BatchEndToEndTests(unittest.IsolatedAsyncioTestCase):
     async def make_loop(self,*,dry=False,probability=.9,duplicate=False):
         store=StateStore();self.addCleanup(store.close);router=bound_router(store)
+        store.set_policy('reply_batches_enabled',True)
         class Three(random.Random):
             def randint(self,a,b):return 3
         router.rng=Three(5)
@@ -380,7 +389,7 @@ class PerformanceTests(unittest.TestCase):
         self.store.finish_action(ident,'succeeded',response={'post_id':'own-post','created_at':now},now=now+20)
         self.assertFalse(self.store.finish_action(ident,'succeeded',response={'post_id':'own-post'},now=now+30))
         row=dict(self.store._conn.execute('SELECT * FROM publications').fetchone())
-        self.assertEqual((row['persona_id'],row['persona_version'],row['occupation_group']),('yes_001',1,'transport_logistics'))
+        self.assertEqual((row['persona_id'],row['persona_version'],row['occupation_group']),('yes_001',2,'transport_logistics'))
         self.assertEqual(row['confirmed_at'],now+20)
         self.assertEqual([r[0] for r in self.store._conn.execute('SELECT window_s FROM performance_jobs ORDER BY window_s')],[300,900,3600,21600,86400])
 

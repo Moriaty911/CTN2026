@@ -12,7 +12,8 @@
     "onlooker": 4.0,
     "replies_to_us": 15.0,
     "trending": 6.0,
-    "verified_author": 6.0
+    "verified_author": 6.0,
+    "persuadable": 8.0
   },
   "freshness_half_life_seconds": 1800,
   "author_history_posts": 20,

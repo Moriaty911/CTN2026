@@ -34,6 +34,27 @@ def _unique_keys(pairs):
     return result
 
 
+STORY_FIELDS = {"age","gender","look","grew_up","life","covid","vaccine","vote_2025","interests","follows",
+                "posting","personal_reasons","still_unsure","gossip"}
+
+
+def validate_story(story):
+    """Optional backstory: voice and consistency data only, never evidence."""
+    if type(story) is not dict or set(story) != STORY_FIELDS:
+        raise ValueError("invalid persona story fields")
+    if type(story["age"]) is not int or not 18 <= story["age"] <= 90 or type(story["gossip"]) is not bool:
+        raise ValueError("invalid persona story age or trait")
+    if story["vote_2025"] not in ("Hawthorne","Castillo","did not vote"):
+        raise ValueError("invalid 2025 vote")
+    for key in ("gender","look","grew_up","life","covid","vaccine","still_unsure"):
+        if not isinstance(story[key],str) or not story[key].strip():raise ValueError("missing persona story "+key)
+    for key in ("interests","follows","personal_reasons"):
+        if type(story[key]) is not list or not story[key] or any(type(s) is not str or not s.strip() for s in story[key]):
+            raise ValueError("missing persona story "+key)
+    if type(story["posting"]) is not dict or set(story["posting"]) != {"when","habits"}:
+        raise ValueError("invalid persona posting habits")
+
+
 def load_catalog(path=None):
     path = Path(path or os.environ.get("CTN_PERSONA_FILE") or DEFAULT_CATALOG)
     data = json.loads(path.read_text(), object_pairs_hook=_unique_keys)
@@ -50,8 +71,9 @@ def load_catalog(path=None):
               "identity","stance","voice","topic_tags","knowledge_boundaries","example_posts"}
     ids, names, handles, examples = set(), set(), set(), set()
     for row in rows:
-        if type(row) is not dict or set(row) != fields:
+        if type(row) is not dict or not (fields <= set(row) <= fields | {"story"}):
             raise ValueError("invalid persona profile fields")
+        if "story" in row:validate_story(row["story"])
         for key, seen in (("persona_id",ids),("name",names),("candidate_username",handles)):
             value = row[key]
             if not isinstance(value,str) or not value.strip() or value.casefold() in seen:
@@ -117,5 +139,53 @@ def render_preview(data):
         lines += ["", row["voice"]["instructions"], "", "Examples:"]
         lines += [f"- [{p['kind']}] {p['text']}" for p in row["example_posts"]]
         lines += ['', 'Knowledge boundaries:']+['- '+s for s in row['knowledge_boundaries']]
+        story=row.get('story')
+        if story:
+            lines += ['', f"Story: {story['age']}, {story['gender']}; 2025 vote: {story['vote_2025']}; gossip: {'yes' if story['gossip'] else 'no'}",
+                      '', story['grew_up']+' '+story['life'], '', 'COVID: '+story['covid'], '', 'Vaccine: '+story['vaccine'],
+                      '', 'Personal reasons:']+['- '+s for s in story['personal_reasons']]+['', 'Still unsure: '+story['still_unsure']]
         lines += [""]
+    return "\n".join(lines)+"\n"
+
+
+def render_profiles(data, daily_posts=None):
+    """Readable profile sheet in the style of the organisers' citizen profiles."""
+    daily_posts=daily_posts or {}
+    groups={}
+    for row in data["personas"]:groups.setdefault(row["occupation_group"],[]).append(row)
+    lines=["# 80 YES personas: profiles", "",
+           f"Catalog `{data['catalog_version']}`. Generated from `config/personas/yes.v1.json` and "
+           "`config/personas/daily-posts.v1.json`; edit the JSON, not this file. Backstories are fictional voice "
+           "and consistency data, never evidence.", "", "## Overview", "",
+           "| ID | Name | Age | Job | Home | 2025 vote | Gossip |", "|---|---|---|---|---|---|---|"]
+    for row in data["personas"]:
+        s=row.get("story") or {}
+        lines.append(f"| {row['persona_id']} | {row['name']} | {s.get('age','')} | {row['identity']['occupation']} | {row['identity']['home']} | {s.get('vote_2025','')} | {'yes' if s.get('gossip') else ''} |")
+    lines.append("")
+    for group,rows in groups.items():
+        lines += [f"## {group.replace('_',' ').title()}", ""]
+        for row in rows:
+            s=row.get("story") or {};ident=row["identity"]
+            lines += [f"### {row['persona_id']} · {row['name']}", "",
+                      f"@{row['candidate_username']} · {ident['occupation']} · {ident['home']}", "",
+                      "| | |", "|---|---|",
+                      f"| **Age / gender** | {s.get('age','')} / {s.get('gender','')} |",
+                      f"| **Looks** | {s.get('look','')} |",
+                      f"| **Household** | {ident['household']} |",
+                      f"| **Grew up** | {s.get('grew_up','')} |",
+                      f"| **Life now** | {s.get('life','')} |",
+                      f"| **COVID-19** | {s.get('covid','')} |",
+                      f"| **H2D2 vaccine** | {s.get('vaccine','')} |",
+                      f"| **2025 presidential vote** | {s.get('vote_2025','')} |",
+                      f"| **Interests** | {', '.join(s.get('interests',[]))} |",
+                      f"| **Follows** | {', '.join(s.get('follows',[]))} |",
+                      f"| **Posts when** | {(s.get('posting') or {}).get('when','')} |",
+                      f"| **Posting style** | {row['voice']['style']}: {(s.get('posting') or {}).get('habits','')} {row['voice']['instructions']} |",
+                      f"| **Passes on rumours** | {'yes' if s.get('gossip') else 'no'} |", "",
+                      "**Why YES**", ""]
+            lines += ["- "+t for t in row["stance"]["main_reasons"]+s.get("personal_reasons",[])]
+            lines += ["", "**Still unsure about**", "", "- "+s.get("still_unsure",""), "",
+                      "**Everyday posts (initialise)**", ""]
+            lines += ["- "+t for t in list(daily_posts.get(row["persona_id"],[]))+[p["text"] for p in row["example_posts"] if p["kind"]=="daily"]]
+            lines += ["", "**Referendum examples**", ""]+["- "+p["text"] for p in row["example_posts"] if p["kind"]=="referendum"]+[""]
     return "\n".join(lines)+"\n"

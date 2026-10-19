@@ -299,15 +299,15 @@ class RuntimeStoreMixin:
                 intents=self._conn.execute("SELECT metadata_json FROM action_intents WHERE kind IN ('report','report_account') "
                     "AND (status IN ('claimed','sending') OR (status='unknown' AND updated_at>?))",(ts-SEND_RECOVERY['report_unknown_release_seconds'],)).fetchall()
                 authors=[r[0] for r in pending]+[json.loads(r[0]).get('target_author') for r in intents]
-                if len(authors)>=int(self.policy('max_pending_reports',5)):
+                if len(authors)>=int(self.policy('max_pending_reports',40)):
                     return None,'pending_team_limit'
-                if authors.count(author)>=int(self.policy('max_pending_per_author',1)):
+                if authors.count(author)>=int(self.policy('max_pending_per_author',2)):
                     return None,'pending_author_limit'
                 if kind=='report':
                     # Every unresolved post report can still come back genuine and stop reporting for six hours.
                     from ctn.moderation.decision import policy as decision_policy,expected_genuine
                     rules=decision_policy(self)
-                    if expected_genuine(self,rules,extra_p=meta.get('decision_p',rules['p_floor']))>float(rules['max_expected_genuine'])+1e-9:
+                    if expected_genuine(self,rules,extra_p=meta.get('decision_p',rules['p_floor']),now=ts)>float(rules['max_expected_genuine'])+1e-9:
                         return None,'genuine_risk_budget'
             if kind in ('report','report_account'):
                 if kind=='report' and self._conn.execute("SELECT 1 FROM action_intents WHERE kind='report' AND target_id=? AND status!='failed' LIMIT 1",(target,)).fetchone():return None,'report_target_already_claimed'

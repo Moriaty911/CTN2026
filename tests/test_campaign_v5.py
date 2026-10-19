@@ -393,7 +393,7 @@ class PaginationAndRegistrationTests(unittest.IsolatedAsyncioTestCase):
         from ctn.jev.postflight import PostflightVerdict
         store=StateStore();self.addCleanup(store.close)
         router=bound_router(store,('yes_001','yes_002'))
-        store.set_policy('require_warmup',True)
+        store.set_policy('require_warmup',True);store.set_policy('initialise_spread',{'window_seconds':0,'min_gap_seconds':0})
         platform=MockLegitClient(failure_rate=0,latency_ms=(0,0));act=actor(platform,store)
         first=router.registry.get('yes_001')
         blocked=await act.reply(first.account_id,'p','A response before readiness.',context=router.context_for(first))
@@ -443,6 +443,7 @@ class MultiprocessReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path=Path(td)/'state.db';store=StateStore(path)
             strong_evidence(store);store.set_policy('report_mode','manual');clearance(store,live=False)
+            store.set_policy('max_pending_per_author',1)
             contexts=[]
             for target in ('leak','behavior1'):
                 payload=candidate_payload(store,'post',target,'enemy')

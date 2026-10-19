@@ -61,6 +61,20 @@ class RagSnapshot:
         for row in data['unknowns']:
             text = '\n'.join(row[k] for k in ('question','safe_response','do_not_infer'))
             items.append(dict(reference_id=row['id'], kind='unknown', text=text, source_id=row['source_id']))
+        news = data.get('news') or {}
+        for row in news.get('claims', []):
+            # Always quoted with its attribution; never an unattributed fact.
+            # JEV accepts four campaign kinds; a news report is an attributed claim.
+            items.append(dict(reference_id='N:'+row['id'], kind='attributed_claim', text='News report: '+row['text'], source_id=row['source']))
+        for row in news.get('concerns', []):
+            extra = row.get('extra') or {}
+            text = '\n'.join(['Opposing concern: '+row['text'], 'Fair point: '+extra.get('fair_part',''),
+                              'Possible response: '+extra.get('response',''), 'Avoid: '+'; '.join(extra.get('avoid',[]))])
+            items.append(dict(reference_id='N:'+row['id'], kind='argument', text=text, source_id=row['source']))
+        for card in news.get('counter_cards', []):
+            text = '\n'.join(['Opposing line: '+card['concern'], 'Fair point: '+card['fair_part'],
+                              'Response idea (use your own words): '+card['response'], 'Avoid: '+'; '.join(card['avoid'])])
+            items.append(dict(reference_id=card['id'], kind='argument', text=text, source_id='editorial'))
         return items
 
 
@@ -88,6 +102,8 @@ class Corpus:
                 if hashlib.sha256(path.read_bytes()).hexdigest()!=source['sha256']:
                     raise ValueError('original source hash changed')
                 store.archive_source(source['id'],source['sha256'],body,source)
+        # Live layer: verified, attributed news claims stored by ctn.news (policies/news-v1.json).
+        self.live_store = store
 
     def retrieve(self, text, *, purpose=None, target_id='', target_version=1, style=True):
         query = tokens(text)
@@ -97,8 +113,10 @@ class Corpus:
             topics = tokens(' '.join(row.get('topics', [])))
             body = tokens(' '.join(str(row.get(k, '')) for k in ('text','claim','question','safe_response')))
             return 4*len(query & topics) + 2*len(query & body) + len(expanded & (topics | body))
+        # P00 opening questions draw on the same material as P01 originals.
+        eligible_purpose = 'P01' if purpose == 'P00' else purpose
         def ranked(rows, limit):
-            eligible = [r for r in rows if not purpose or 'purposes' not in r or purpose in r['purposes']]
+            eligible = [r for r in rows if not eligible_purpose or 'purposes' not in r or eligible_purpose in r['purposes']]
             return [r for r in sorted(eligible, key=lambda r: (-score(r), r['id'])) if score(r)>0][:limit]
         from .relevance import concept_ids
         concept_facts,concept_unknowns=concept_ids(text)
@@ -114,6 +132,9 @@ class Corpus:
             fs.update((i, self.facts[i]) for i in a['fact_ids'])
             us.update((i, self.unknowns[i]) for i in a['unknown_ids'])
         styles = ranked(self.data['style_examples'], 1) if style else []
+        live = getattr(self, 'live_store', None)
+        news = live.news_retrieve(text, purpose=purpose) if live is not None and hasattr(live, 'news_retrieve') else None
+        extra = {'news': news} if news and any(news.values()) else {}
         return RagSnapshot(json.dumps(dict(schema_version='ctn-rag-snapshot.v1',
             corpus_version=self.data['corpus_version'], corpus_hash=self.hash,
             retrieval_version=RETRIEVAL_VERSION, target_id=target_id, target_version=target_version,
@@ -121,7 +142,9 @@ class Corpus:
             unknowns=list(us.values()), styles=styles,
             constraints=['Preserve attribution, dates, uncertainty and all required qualifiers.',
                 'Arguments are judgments; unknown is not evidence that a provision does not exist.',
-                'Style reference only: do not copy. Persona voice takes priority.']), ensure_ascii=False))
+                'Style reference only: do not copy. Persona voice takes priority.']+
+                (['News items are reports: always keep their attribution ("the Herald reported ..."), never state them as settled fact.'] if extra else []),
+                **extra), ensure_ascii=False))
 
 
 def too_close(text, references, threshold=.82):

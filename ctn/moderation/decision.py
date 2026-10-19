@@ -176,29 +176,50 @@ def estimate_cost(store, pol, now):
     values = [float(r[0]) for r in rows]
     if not values:
         return float(cfg['floor'])
+    with store._lock:
+        pu_bar = store._conn.execute("SELECT AVG(p_upheld) FROM report_decisions WHERE updated_at>=? AND reward>0 AND subject_kind='post' AND p>=?",
+                                     (now - lookback, pol['p_floor'])).fetchone()[0] or upheld_probability(0.9, pol)
     delay = (sum(d[0] for d in delays) / len(delays)) if len(delays) >= 3 else float(cfg['default_ruling_delay_seconds'])
-    capacity = int(store.policy('max_pending_reports', 5)) * window / max(delay, 60.0)
+    capacity = int(store.policy('max_pending_reports', 40)) * window / max(delay, 60.0)
     expected_candidates = len(values) * window / lookback
-    cost = min(expected_candidates, capacity) * (sum(values) / len(values))
+    average = sum(values) / len(values)
+    cost = min(expected_candidates, capacity) * average
+    # Renewal bound: the opportunities lost in a stop carry the same genuine risk themselves, so under an
+    # abundance of targets a stop costs about (P_upheld / P_genuine) average reports, not every candidate seen.
+    # Without this cap, fast rulings during a bot flood would make the rule refuse every report.
+    pu_bar = min(max(float(pu_bar), 0.05), 0.95)
+    cost = min(cost, average * pu_bar / (1 - pu_bar))
     return round(max(float(cfg['floor']), cost), 3)
 
 
-def expected_genuine(store, pol=None, *, extra_p=None):
-    """Expected number of genuine rulings among unresolved post reports."""
+def expected_genuine(store, pol=None, *, extra_p=None, now=None):
+    """Expected number of distinct six-hour reporting stops among unresolved post reports.
+
+    A genuine ruling stops reporting for six hours from the ruling, and stops that land close together
+    overlap. Reports are grouped by their expected ruling time (submission + ruling delay) into
+    suspension-length windows; each window contributes P(at least one genuine ruling in it).
+    """
     pol = pol or policy(store)
+    ts = time.time() if now is None else now
+    window = float(pol['suspension_seconds'])
+    delay = float(pol['genuine_cost']['default_ruling_delay_seconds'])
     with store._lock:
-        rows = store._conn.execute("SELECT payload_json FROM report_attempts WHERE subject_kind='post' "
+        rows = store._conn.execute("SELECT payload_json,submitted_at FROM report_attempts WHERE subject_kind='post' "
                                    "AND status IN ('claimed','sending','pending','unknown')").fetchall()
-    total = 0.0
+    survive = {}
+    entries = []
     for row in rows:
         try:
             p = float(json.loads(row[0]).get('decision_p', pol['p_floor']))
         except (TypeError, ValueError):
             p = pol['p_floor']
-        total += 1 - upheld_probability(p, pol)
+        entries.append((p, float(row[1] or 0) or ts))
     if extra_p is not None:
-        total += 1 - upheld_probability(float(extra_p), pol)
-    return round(total, 4)
+        entries.append((float(extra_p), ts))
+    for p, submitted in entries:
+        bucket = int((submitted + delay) // window)
+        survive[bucket] = survive.get(bucket, 1.0) * upheld_probability(p, pol)
+    return round(sum(1 - s for s in survive.values()), 4)
 
 
 def automatic_ready(store, *, now=None):

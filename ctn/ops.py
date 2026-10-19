@@ -30,6 +30,8 @@ def main(argv=None):
     p.add_argument('--p-floor',type=float,help='automation: raise the minimum bot probability (never below 0.7)')
     p.add_argument('--max-expected-genuine',type=float,help='automation: risk budget for unresolved post reports')
     p.add_argument('--candidate');p.add_argument('--source');p.add_argument('--reason',default='');p.add_argument('--revision',type=int);p.add_argument('--resume-at',type=float)
+    p=subs.add_parser('launch');p.add_argument('--batches',choices=['on','off']);p.add_argument('--initialise-window',type=int,help='seconds to spread initialise posts over');p.add_argument('--unslow',help='restore the normal daily cap for an account')
+    p=subs.add_parser('news');p.add_argument('operation',choices=['list','show','withdraw','summary']);p.add_argument('claim_id',nargs='?');p.add_argument('--status');p.add_argument('--limit',type=int,default=30);p.add_argument('--reason',default='')
     p=subs.add_parser('rag-withdraw');p.add_argument('snapshot_id',nargs='?');p.add_argument('--reference');p.add_argument('--corpus-hash')
     p=subs.add_parser('account');p.add_argument('account_id');p.add_argument('--mode',choices=['active','standby','dormant'])
     p.add_argument('--tier',choices=['standard','high']);p.add_argument('--original-locked-until',type=float)
@@ -39,7 +41,7 @@ def main(argv=None):
     p=subs.add_parser('background');p.add_argument('source',help='operator-verified BackgroundReference JSON array')
     p=subs.add_parser('resolve-action');p.add_argument('action_id');p.add_argument('evidence',help='explicit operator review JSON')
     p=subs.add_parser('phase');p.add_argument('phase',choices=['startup','warmup','shaping','climax','auto']);p.add_argument('--until',help='ISO timestamp including timezone; required for override')
-    p=subs.add_parser('campaign');p.add_argument('operation',choices=['configure','show']);p.add_argument('--daily-original-limit',type=int);p.add_argument('--ends-at',help='official end time with timezone')
+    p=subs.add_parser('campaign');p.add_argument('operation',choices=['configure','show']);p.add_argument('--daily-original-limit',type=int,help='fixed team-wide limit; turns the campaign-day schedule off');p.add_argument('--originals-schedule',choices=['on','off']);p.add_argument('--ends-at',help='official end time with timezone')
     p=subs.add_parser('maintenance');p.add_argument('operation',choices=['list','recommend','admit','release']);p.add_argument('--account');p.add_argument('--reason',default='')
     p=subs.add_parser('performance');p.add_argument('--group-by',choices=['persona_id','occupation_group','kind','slot'],default='occupation_group')
     p.add_argument('--hours',type=float,default=24);p.add_argument('--format',choices=['json','markdown'],default='json')
@@ -140,6 +142,25 @@ def main(argv=None):
                 service.affiliation(proof['author'],proof['side'],proof.get('team_id',''),proof['source'],proof.get('observed_at'))
                 result={'imported':True}
             else:result=service.dashboard()
+        elif args.command=='launch':
+            from ctn.pipeline.targeting import launch_rule
+            with store.batch_transaction():
+                if args.batches:store.set_policy('reply_batches_enabled',args.batches=='on')
+                if args.initialise_window is not None:
+                    if args.initialise_window<0:parser.error('window must be non-negative')
+                    store.set_policy('initialise_spread',{**launch_rule(store,'initialise_spread'),'window_seconds':args.initialise_window})
+                if args.unslow:
+                    slowed=dict(store.policy('slowed_accounts',{}) or {});slowed.pop(args.unslow,None);store.set_policy('slowed_accounts',slowed)
+                store.audit_operation('cli','launch_settings','policy',{'batches':args.batches,'initialise_window':args.initialise_window,'unslow':args.unslow})
+            result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown')}
+            result['slowed_accounts']=store.policy('slowed_accounts',{})
+        elif args.command=='news':
+            if args.operation=='list':result=store.news_list(status=args.status,limit=args.limit)
+            elif args.operation=='summary':result=store.news_summary()
+            else:
+                if not args.claim_id:parser.error('claim_id required')
+                if args.operation=='show':result=store.news_show(args.claim_id) or {'error':'not found'}
+                else:result={'withdrawn':store.news_withdraw(args.claim_id,reason=args.reason)}
         elif args.command=='rag-withdraw':
             if args.reference:
                 if args.snapshot_id or not args.corpus_hash:parser.error('reference withdrawal requires --corpus-hash and no snapshot ID')
@@ -169,12 +190,16 @@ def main(argv=None):
         elif args.command=='campaign':
             if args.operation=='configure':
                 if args.daily_original_limit is not None:store.configure_campaign(args.daily_original_limit)
+                if args.originals_schedule:
+                    with store.batch_transaction():
+                        store.set_policy('originals_schedule',args.originals_schedule=='on')
+                        store.audit_operation('cli','originals_schedule','campaign',{'value':args.originals_schedule})
                 if args.ends_at:
                     from datetime import datetime
                     at=datetime.fromisoformat(args.ends_at.replace('Z','+00:00'))
                     if at.tzinfo is None:parser.error('--ends-at must include timezone')
                     store.set_policy('campaign_ends_at',at.timestamp())
-            result={'phase':store.effective_phase(),'phase_override':store.policy('phase_override',{}),'phase_times':store.policy('phase_times'),'daily_original_limit':store.policy('daily_original_limit',10),'original_lock_seconds':store.policy('original_lock_seconds',86400),'ends_at':store.policy('campaign_ends_at')}
+            result={'phase':store.effective_phase(),'phase_override':store.policy('phase_override',{}),'phase_times':store.policy('phase_times'),'daily_original_limit':store.policy('daily_original_limit',10),'originals':store.originals_status(),'original_lock_seconds':store.policy('original_lock_seconds',86400),'ends_at':store.policy('campaign_ends_at')}
         elif args.command=='maintenance':
             if args.operation in ('admit','release'):
                 if not args.account:parser.error('--account required')
@@ -264,6 +289,11 @@ def main(argv=None):
                 {**{k:r[k] for k in ('id','kind','account_id','target_id','created_at','wire_at','detail')},
                  'check_state':checks.get(r['id'],{}).get('state',''),'checks':checks.get(r['id'],{}).get('checks',0),
                  'last_check':checks.get(r['id'],{}).get('last_detail','')} for r in store.list_actions('unknown')]}
+            # Live process diagnostics come from the fleet heartbeat (this CLI is a separate process).
+            try:fleet=json.loads((settings.state_dir/'heartbeat').read_text())
+            except (OSError,ValueError):fleet={}
+            result['fleet']={'heartbeat_at':fleet.get('timestamp'),'db_lock':fleet.get('db_lock'),
+                             'workers':{k:{f:v.get(f) for f in ('last_duration_s','max_duration_s','error')} for k,v in (fleet.get('workers') or {}).items()}}
         print(json.dumps(result,ensure_ascii=False,indent=2));return 0
     except ValueError as exc:
         parser.error(str(exc))

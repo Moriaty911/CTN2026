@@ -57,6 +57,12 @@ PURPOSE_RULES: dict[str, str] = {
         "specific policy detail, condition, or evidence without conceding to opposing claims."
     ),
     # Macro proactive original post / allied support branches
+    "P00": (
+        "Purpose P00 (Open Topic Question): An everyday-voice question that invites people to share views on "
+        "the vaccination-proof referendum, grounded in the persona's own life. Neutral in tone; no stance "
+        "declaration required. The framing must not argue against our side or use the opposing campaign's "
+        "attack lines, and must not assert facts beyond supplied materials."
+    ),
     "P01": "Proactive original post or allied reply clearly supporting our referendum stance in a natural voice.",
     "branch_A": (
         "Branch A (Majority Momentum): Expand our lead around a top trending tag and an eye-catching "

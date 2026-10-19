@@ -54,6 +54,10 @@ class LifecycleStoreMixin:
                           'audience':'REAL NOT NULL DEFAULT 0','jev_score':'REAL NOT NULL DEFAULT 0'}.items():
             if name not in columns:self._conn.execute(f'ALTER TABLE post_tasks ADD COLUMN {name} {ddl}')
         self._conn.execute('CREATE INDEX IF NOT EXISTS idx_tasks_priority ON post_tasks(status,next_attempt_at,priority)')
+        macro_columns={r['name'] for r in self._conn.execute('PRAGMA table_info(macro_jobs)')}
+        for name,ddl in (('attempts','INTEGER NOT NULL DEFAULT 0'),('slot_end','REAL NOT NULL DEFAULT 0'),('next_attempt_at','REAL NOT NULL DEFAULT 0'),
+                         ('purpose',"TEXT NOT NULL DEFAULT 'P01'"),('tried_json',"TEXT NOT NULL DEFAULT '[]'")):
+            if name not in macro_columns:self._conn.execute(f'ALTER TABLE macro_jobs ADD COLUMN {name} {ddl}')
         if 'initialise_failures' not in {r['name'] for r in self._conn.execute('PRAGMA table_info(account_lifecycle)')}:
             self._conn.execute('ALTER TABLE account_lifecycle ADD COLUMN initialise_failures INTEGER NOT NULL DEFAULT 0')
         if old_version < 6:
@@ -105,6 +109,8 @@ class LifecycleStoreMixin:
         if type(daily_original_limit) is not int or daily_original_limit<0:raise ValueError('nonnegative integer daily limit required')
         with self.batch_transaction():
             self.set_policy('daily_original_limit',daily_original_limit)
+            # An explicit limit fixes the ceiling; `--originals-schedule on` returns to the campaign-day schedule.
+            self.set_policy('originals_schedule',False)
             self.audit_operation(actor,'daily_original_limit','campaign',{'value':daily_original_limit})
 
     def set_account_policy(self, account, *, mode=None, capability_tier=None, original_locked_until=None):
@@ -160,6 +166,15 @@ class LifecycleStoreMixin:
             for key,table,column in [('initialisation','account_lifecycle','initialise_status'),('macro_jobs','macro_jobs','status'),('report_reviews','report_reviews','status')]:
                 result[key]={r[0]:r[1] for r in self._conn.execute(f'SELECT {column},COUNT(*) FROM {table} GROUP BY {column}')}
         result['phase']=self.effective_phase()
+        with self._lock:
+            # Why reply tasks stopped in the last 24 h (e.g. how many neutral posts the JEV response gate holds back).
+            result['reply_reasons_24h']={r[0] or 'none':r[1] for r in self._conn.execute(
+                "SELECT reason,COUNT(*) FROM post_tasks WHERE queued_at>=? GROUP BY reason ORDER BY COUNT(*) DESC LIMIT 15",(time.time()-86400,))}
+        result['self_check']={'scan':self.policy('self_check',{}),'slowed_accounts':self.policy('slowed_accounts',{})}
+        try:result['news']=self.news_summary()
+        except Exception as exc:result['news']={'error':type(exc).__name__}
+        try:result['originals']=self.originals_status()
+        except Exception as exc:result['originals']={'error':type(exc).__name__}
         return result
 
     def maintenance_recommendations(self):
@@ -320,19 +335,59 @@ class LifecycleStoreMixin:
             raise
 
     def claim_macro_job(self, *, now=None, mode="live"):
+        """Claim the current originals slot (ctn/macro/schedule.py) or a due retry."""
+        from ctn.macro import schedule
         ts=time.time() if now is None else now
-        bucket=int(ts//7200)
         if mode not in ('live','simulated'):raise ValueError('invalid macro execution mode')
-        ident=f'macro:{mode}:{bucket}'
+        current=schedule.slot(ts,schedule.effective_limit(self,ts))
         with self.batch_transaction():
-            self._conn.execute("UPDATE macro_jobs SET status='expired',reason='pulse_expired' WHERE status='queued' AND scheduled_at<?",(bucket*7200,))
+            self._conn.execute("UPDATE macro_jobs SET status='expired',reason='slot_expired' WHERE status='queued' AND slot_end>0 AND slot_end<=?",(ts,))
+            self._conn.execute("UPDATE macro_jobs SET status='expired',reason='pulse_expired' WHERE status='queued' AND slot_end=0 AND scheduled_at<?",(ts-7200,))
             self._conn.execute("UPDATE macro_jobs SET status='queued',reason='worker_recovered' WHERE status='claimed' AND lease_until<=?",(ts,))
-            self._conn.execute('INSERT OR IGNORE INTO macro_jobs(id,scheduled_at) VALUES(?,?)',(ident,ts))
-            row=self._conn.execute("SELECT * FROM macro_jobs WHERE status='queued' AND id LIKE ? ORDER BY scheduled_at LIMIT 1",(f'macro:{mode}:%',)).fetchone()
+            if current:
+                suffix,start,end=current
+                self._conn.execute('INSERT OR IGNORE INTO macro_jobs(id,scheduled_at,slot_end,next_attempt_at,purpose) VALUES(?,?,?,?,?)',
+                    (f'macro:{mode}:{suffix}',ts,end,ts,schedule.purpose_for(suffix,ts)))
+            row=self._conn.execute("SELECT * FROM macro_jobs WHERE status='queued' AND next_attempt_at<=? AND id LIKE ? ORDER BY scheduled_at LIMIT 1",(ts,f'macro:{mode}:%')).fetchone()
             if not row:return None
             owner=uuid.uuid4().hex
             self._conn.execute("UPDATE macro_jobs SET status='claimed',owner=?,lease_until=? WHERE id=?",(owner,ts+600,row['id']))
             return {**dict(row),'owner':owner}
+
+    def retry_macro_job(self, job, reason, *, observe=False, tried=(), now=None):
+        """Requeue a slot for another attempt (different persona or topic), or close it when spent."""
+        from ctn.macro.schedule import POLICY
+        ts=time.time() if now is None else now
+        rules=POLICY['retries'];attempts=int(job.get('attempts') or 0)+1
+        limit=int(rules['observe_attempts'] if observe else rules['max_attempts'])
+        due=ts+float(rules['min_gap_seconds'])
+        slot_end=float(job.get('slot_end') or 0)
+        if attempts>=limit or (slot_end and due>=slot_end):
+            return 'skipped' if self.finish_macro_job(job,'skipped',reason=reason) else 'lost'
+        with self.batch_transaction():
+            changed=self._conn.execute("UPDATE macro_jobs SET status='queued',owner='',lease_until=0,payload_json='{}',attempts=?,next_attempt_at=?,tried_json=?,reason=? "
+                "WHERE id=? AND owner=? AND status='claimed'",(attempts,due,_json(sorted(set(tried))),'retry:'+reason,job['id'],job['owner'])).rowcount
+        return 'retry' if changed else 'lost'
+
+    def originals_status(self, *, now=None):
+        from ctn.macro import schedule
+        from ctn.storage.sqlite_store import current_sydney_day
+        ts=time.time() if now is None else now
+        day=current_sydney_day(ts)
+        with self._lock:
+            rows=self._conn.execute("SELECT created_at,metadata_json FROM action_intents WHERE kind='post' AND status IN ('claimed','sending','unknown','succeeded') "
+                "AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('warmup','initialise')").fetchall()
+            jobs=self._conn.execute("SELECT status,reason,purpose FROM macro_jobs WHERE id LIKE ?",(f'macro:%:{day}:%',)).fetchall()
+        used=sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day for r in rows)
+        limit=schedule.effective_limit(self,ts);current=schedule.slot(ts,limit)
+        outcomes={}
+        for j in jobs:
+            key=j['status'] if j['status'] in ('succeeded','unknown','simulated','queued','claimed') else f"{j['status']}:{(j['reason'] or '').split(':')[0]}"
+            outcomes[key]=outcomes.get(key,0)+1
+        return {'campaign_day':schedule.campaign_day(ts),'red_multiplier':schedule.red_multiplier(ts),
+                'schedule':'auto' if self.policy('originals_schedule',True) else 'operator_fixed','limit':limit,'used':used,
+                'slot_minutes':round((current[2]-current[1])/60,1) if current else None,'opener_share':schedule.opener_share(ts),
+                'slots_today':outcomes}
 
     def finish_macro_job(self, job, status, payload=None, reason=''):
         if status not in ('succeeded','skipped','failed','unknown','simulated'):raise ValueError('invalid macro result')

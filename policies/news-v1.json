@@ -1,0 +1,72 @@
+{
+  "version": "news.v1",
+  "notes": "In-universe news (sites.legitreal.com) as attributed, verbatim-verified claims. Claims are quoted as reports, never upgraded to unattributed fact.",
+  "base_url": "https://sites.legitreal.com",
+  "intervals": {
+    "front_page_seconds": 600,
+    "site_list_seconds": 21600,
+    "recheck_recent_seconds": 10800,
+    "recheck_window_seconds": 172800,
+    "articles_per_step": 4,
+    "extractions_per_step": 2,
+    "extraction_max_attempts": 3
+  },
+  "opinion_categories": ["opinion", "editorial", "comment", "letters"],
+  "retrieval": {
+    "max_claims": 5,
+    "max_concerns": 2,
+    "max_counter_cards": 2,
+    "recent_hours": 72,
+    "recent_bonus": 2,
+    "corroborated_bonus": 2,
+    "helps_bonus_for_originals": 2
+  },
+  "pi_recent_hours": 24,
+  "pi_max_claims": 8,
+  "seed_sources": [
+    {
+      "id": "mouk_brief_2026_10_19",
+      "kind": "client_brief",
+      "name": "MOUK campaign brief",
+      "attribution": "The Medical Officers Union of Kingstonia",
+      "published_at": "2026-10-19T08:00:00+11:00",
+      "note": "Partisan client brief. Use only with attribution; single-source items stay attributed until news corroborates them.",
+      "claims": [
+        {"kind": "statistic", "statement": "a poll shows Yes on 35.2%, No on 35.2% and 29% unsure", "metric_key": "referendum_poll:yes_no_unsure", "numbers": ["35.2", "29"], "topics": ["poll", "referendum", "undecided"], "yes_effect": "neutral", "time_varying": true},
+        {"kind": "statistic", "statement": "Kingstonia Central Hospital has forty empty nursing posts", "metric_key": "kingstonia_central_hospital:nursing_vacancies", "numbers": ["forty"], "topics": ["hospital_capacity", "staffing", "nurses"], "yes_effect": "helps", "time_varying": true},
+        {"kind": "schedule", "statement": "the first H2D2 vaccine shipment is due to land in about a fortnight", "metric_key": "vaccine_supply:first_shipment", "numbers": [], "topics": ["vaccine", "supply", "timeline"], "yes_effect": "helps", "time_varying": true},
+        {"kind": "schedule", "statement": "the referendum vote is on 2 November", "metric_key": "referendum:vote_date", "numbers": ["2"], "topics": ["referendum", "date"], "yes_effect": "neutral", "time_varying": false},
+        {"kind": "position", "statement": "President Hawthorne is voting Yes and roughly half his party is voting with him", "metric_key": "hawthorne:position", "numbers": [], "topics": ["president", "politics", "party"], "yes_effect": "helps", "time_varying": false},
+        {"kind": "campaign_line", "statement": "Marina Castillo called the referendum a power grab in a lab coat on Kingstonia Tonight", "metric_key": "castillo:framing", "numbers": [], "topics": ["opposition", "framing", "castillo"], "yes_effect": "hurts", "time_varying": false}
+      ]
+    }
+  ],
+  "counter_cards": [
+    {"id": "CC001", "triggers": ["two-tier", "two tier", "second-class", "segregat", "discriminat"],
+     "concern": "A proof requirement creates a two-tier society.",
+     "fair_part": "Rules that limit access do burden people who cannot or will not comply, and that deserves an honest answer.",
+     "response": "There is one hospital system, and it is already forty nurses short; an entry rule is about keeping that one system working for everyone, including people who cannot be vaccinated.",
+     "avoid": ["Do not say the hospital is full; the reported fact is forty nurse vacancies.", "Do not call opponents selfish."]},
+    {"id": "CC002", "triggers": ["afford", "cost", "business", "employer", "tourism", "jobs", "economy"],
+     "concern": "Employers and tourism businesses say they cannot afford it.",
+     "fair_part": "Checks add work for small businesses, and the last pandemic hurt tourism badly.",
+     "response": "The expensive outcome is another outbreak and another closure; a clear rule now is cheaper than shutting doors later.",
+     "avoid": ["Do not invent cost figures.", "Do not dismiss small-business concerns."]},
+    {"id": "CC003", "triggers": ["power grab", "lab coat", "overreach", "authoritarian", "emergency powers"],
+     "concern": "The mandate is a power grab in a lab coat.",
+     "fair_part": "Emergency powers can be abused, and people are right to ask how long a rule lasts.",
+     "response": "This is a public referendum, not an emergency decree; voters decide, and the government has said it will respect the result.",
+     "avoid": ["Do not attack Marina Castillo personally.", "Do not claim details about a sunset clause that have not been published."]},
+    {"id": "CC004", "triggers": ["national id", "id card", "health passport", "privacy", "biometric", "surveillance", "track"],
+     "concern": "The new national ID could become a health passport that tracks people.",
+     "fair_part": "Privacy questions about linking health data to ID cards are legitimate and still being debated.",
+     "response": "Supporting proof at entry does not require backing every possible data system; ask for clear limits on what is stored and who can see it.",
+     "avoid": ["Do not claim how the ID system will work; that is not settled.", "Do not dismiss privacy worries."]}
+  ],
+  "slogan": {
+    "patterns": ["mandate now", "protect kingstonia"],
+    "window_posts": 10,
+    "max_in_window": 1
+  },
+  "overclaim_patterns": ["\\bzero (deaths|cases|infections)\\b", "\\bno ?one will (die|get sick)\\b", "\\bnobody will (die|get sick)\\b", "\\b100% (safe|effective)\\b", "\\bcompletely safe\\b"]
+}

@@ -184,7 +184,7 @@ class StrategicPublisher:
                 assigned_side=self.side,
                 intended_purpose=resolved_purpose,
                 persona_profile=persona_profile,
-                strict_alignment=(purpose not in ('warmup','initialise')),
+                strict_alignment=(purpose not in ('warmup','initialise','P00')),
                 approved_materials=approved_materials,
             )
             postflight_dict = verdict.to_dict()

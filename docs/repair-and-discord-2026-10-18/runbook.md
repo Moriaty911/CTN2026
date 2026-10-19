@@ -52,13 +52,13 @@ python -m ctn.ops --state-file state/ctn.sqlite3 maintenance admit --account HAN
 python -m ctn.ops --state-file state/ctn.sqlite3 maintenance release --account HANDLE --reason '持续表现下降，回普通待遇观察'
 ```
 
-`CTN_DAILY_ORIGINAL_LIMIT=10`仅为新库缺省值；已有库以运行时政策为准。调额不清空已用数量，降到已用数量以下会停止新增战略原创。24小时战略原创间隔保持不变。
+原创日额度默认按比赛天数自动计算（10 / 16 / 24 / 32，见 README “Originals pacing”）。`campaign configure --daily-original-limit N` 会固定为 N 并关闭自动计算，`campaign configure --originals-schedule on` 恢复。调额不清空已用数量，降到已用数量以下会停止新增战略原创。24小时战略原创间隔保持不变。`CTN_DAILY_ORIGINAL_LIMIT` 只在关闭自动计算时作为新库缺省值。
 
 `account HANDLE --mode standby` 是人工停用；正向注册检查不会清除这个标记。能力使用已有 `account HANDLE --tier high` 经人工确认配置；职业、粉丝和初始化均不自动授予high。预检列出高能力供应不足。
 
 ## 管理式 Pi 原创
 
-独立worker默认两小时一次，先检查额度和可用账号，再收集材料。Pi通过无工具、无扩展的一次性CLI调用返回结构化草稿；Python选账号、绑定快照、审核并执行。失败和未发送不会记成功；发送不明以action_intents为对账依据。模拟与真实宏观任务使用不同任务ID。
+独立worker按“一天 ÷ 当日额度”切分时段（额度 10 约每 2.4 小时一次，32 约每 45 分钟一次），先检查额度和可用账号，再收集材料；同一时段内失败可换人设重试，最多 3 次。Pi通过无工具、无扩展的一次性CLI调用返回结构化草稿；Python选账号、绑定快照、审核并执行。失败和未发送不会记成功；发送不明以action_intents为对账依据。模拟与真实宏观任务使用不同任务ID。
 
 ```sh
 python -m ctn.macro.worker --state-file state/ctn.sqlite3 --once
@@ -128,11 +128,11 @@ python -m ctn.ops reports affiliation --source affiliation.json
 
 裁决导入必须绑定attempt或唯一report ID；不是把报告批准当裁决。未知阵营、队伍、举报顺位保持未知；排序为明确NO、未知、明确YES。本队及已验证NPC受保护。账号举报需要已成立隐藏记录，活动量由公开读取的帖子和点赞数自动统计（`api_count:posts+likes`），也可继续用 `account-activity` 人工录入。
 
-全队最多五个pending，同作者一个，且所有pending帖子举报被判genuine的概率之和不超过 `max_expected_genuine`（默认2.0）；超过24小时只提醒一次，不自动超时释放。帖子genuine裁决触发六小时停报；账号dismissed不产生倒补得分。结束时刻可由 `campaign configure --ends-at ISO_TIME` 设置；未确认时界面显示时窗未知。
+全队最多40个pending，同作者两个（官方没有上限；旧值5/1意味着每天约5个举报），且未裁决举报按预计裁决时间分到6小时窗口，预计的不同停报次数不超过 `max_expected_genuine`（默认3.0，重叠的停报只算一次）；超过24小时只提醒一次，不自动超时释放。帖子genuine裁决触发六小时停报；账号dismissed不产生倒补得分。结束时刻可由 `campaign configure --ends-at ISO_TIME` 设置；未确认时界面显示时窗未知。
 
 ## 容器、监测与恢复
 
-服务器只需Docker与Compose，不需安装Python、Node、Pi或cron。Pi1.3.0和Node24已包含在macro镜像；worker常驻运行，由SQLite任务租约负责每两小时一次的检查。一次检查最多提出一条草稿，不保证每两小时发布，也不会为补满额度而强行发帖。
+服务器只需Docker与Compose，不需安装Python、Node、Pi或cron。Pi1.3.0和Node24已包含在macro镜像；worker常驻运行，由SQLite任务租约负责每个时段的检查。每个时段最多发一条，不保证每个时段都发布，也不会为补满额度而强行发帖。
 
 首次准备：
 

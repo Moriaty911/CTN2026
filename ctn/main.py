@@ -108,7 +108,7 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             'business_stalled':bool((counts.get('queued',0) or runtime['reply_slots'].get('pending',0)) and process_replies and
                 now-(store.get_counter('business_progress_ms')/1000 or started_at)>300),
             'last_business_progress_at':store.get_counter('business_progress_ms')/1000 or started_at,
-            'requests':actuator.ledger.snapshot()}
+            'requests':actuator.ledger.snapshot(),'db_lock':store.lock_stats()}
         heartbeat.parent.mkdir(parents=True,exist_ok=True)
         tmp=heartbeat.with_suffix('.tmp')
         tmp.write_text(json.dumps(payload),encoding='utf-8');tmp.chmod(0o600);tmp.replace(heartbeat)
@@ -126,8 +126,13 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
                     raise
                 progress[name]['error']=type(exc).__name__
                 telemetry.error('worker dependency failed',worker=name,error=type(exc).__name__)
-            telemetry.metric('worker',worker=name,duration_s=round(time.monotonic()-start,3))
-            progress[name]['attempted_at']=time.time()
+            duration=round(time.monotonic()-start,3)
+            telemetry.metric('worker',worker=name,duration_s=duration)
+            # Last and 5-minute max step duration, for `ops status` (lock contention shows up here first).
+            entry=progress[name]
+            if time.time()-entry.get('max_since',0)>=300:entry['max_since'],entry['max_duration_s']=time.time(),0.0
+            entry['last_duration_s']=duration;entry['max_duration_s']=max(entry.get('max_duration_s',0.0),duration)
+            entry['attempted_at']=time.time()
             if once: return
             try: await asyncio.wait_for(stop.wait(),timeout=max(.01,interval-(time.monotonic()-start)))
             except asyncio.TimeoutError: pass
@@ -174,6 +179,16 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         from .pipeline.refresh import refresh_step
         tasks.append(asyncio.create_task(worker('refresh',lambda:refresh_step(actuator,store),5)))
         if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),30)))
+        if mode!='mock':
+            # In-universe news -> attributed, verified claims (policies/news-v1.json). Extraction needs the DeepSeek key.
+            from dataclasses import replace as _replace
+            from .news.ingest import NewsIngestor
+            from .news.extract import ClaimExtractor
+            extractor=ClaimExtractor(DeepSeekClient(_replace(settings.llm,max_tokens=4096,temperature=0.1))) if settings.llm.api_key else None
+            ingestor=NewsIngestor(store,extractor=extractor)
+            tasks.append(asyncio.create_task(worker('news',ingestor.step,60)))
+            from .selfcheck import selfcheck_step
+            tasks.append(asyncio.create_task(worker('selfcheck',lambda:selfcheck_step(actuator,store),60)))
         stopper=asyncio.create_task(shutdown_after_signal())
         await asyncio.gather(*tasks)
     except asyncio.CancelledError:

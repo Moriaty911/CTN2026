@@ -224,6 +224,113 @@
                 "minContains": 2
               }
             ]
+          },
+          "story": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "age",
+              "covid",
+              "follows",
+              "gender",
+              "gossip",
+              "grew_up",
+              "interests",
+              "life",
+              "look",
+              "personal_reasons",
+              "posting",
+              "still_unsure",
+              "vaccine",
+              "vote_2025"
+            ],
+            "properties": {
+              "age": {
+                "type": "integer",
+                "minimum": 18,
+                "maximum": 90
+              },
+              "gender": {
+                "type": "string",
+                "minLength": 1
+              },
+              "look": {
+                "type": "string",
+                "minLength": 1
+              },
+              "grew_up": {
+                "type": "string",
+                "minLength": 1
+              },
+              "life": {
+                "type": "string",
+                "minLength": 1
+              },
+              "covid": {
+                "type": "string",
+                "minLength": 1
+              },
+              "vaccine": {
+                "type": "string",
+                "minLength": 1
+              },
+              "vote_2025": {
+                "enum": [
+                  "Hawthorne",
+                  "Castillo",
+                  "did not vote"
+                ]
+              },
+              "interests": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "follows": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "posting": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "habits",
+                  "when"
+                ],
+                "properties": {
+                  "when": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "habits": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "personal_reasons": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "still_unsure": {
+                "type": "string",
+                "minLength": 1
+              },
+              "gossip": {
+                "type": "boolean"
+              }
+            }
           }
         }
       },

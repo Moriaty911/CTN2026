@@ -158,6 +158,8 @@ class OperationsStoreMixin:
         from ctn.storage.sqlite_store import normalize_text
         from ctn.rag.corpus import too_close
         if not text.strip() or len(text)>280: return False,'text_constraint'
+        ok,reason=self.message_policy_gate(text,exclude_action=exclude_action)
+        if not ok:return False,reason
         normalized=normalize_text(text)
         fingerprint=hashlib.sha256(normalized.encode()).hexdigest()
         if self._conn.execute("SELECT 1 FROM publication_texts t JOIN action_intents a ON a.id=t.action_id WHERE t.text_hash=? AND a.id<>? AND a.status IN ('claimed','sending','unknown','succeeded') LIMIT 1",(fingerprint,exclude_action)).fetchone():

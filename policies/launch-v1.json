@@ -1,0 +1,10 @@
+{
+  "version": "launch.v1",
+  "notes": "Launch-day hardening against mass reporting and bot floods. Every value can be overridden at runtime with the store policy of the same key.",
+  "initialise_spread": {"window_seconds": 18000, "min_gap_seconds": 90},
+  "reply_batches_enabled": false,
+  "frequency_bot": {"window_seconds": 3600, "min_posts": 4, "p_bot": 0.6},
+  "self_check": {"every_seconds": 1800, "lookback_seconds": 86400, "thread_window_seconds": 900, "alert_score": 3},
+  "own_posts": {"every_seconds": 600, "lookback_seconds": 172800, "checks_per_step": 6, "recheck_seconds": 3600, "missing_confirmations": 2},
+  "hidden_slowdown": {"hidden_posts": 2, "daily_cap": 8}
+}

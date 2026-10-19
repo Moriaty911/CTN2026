@@ -74,7 +74,10 @@ def build_messages(
     if rag:
         system += ("\nCampaign items retain their explicit kind: official_fact, attributed_claim, argument or unknown. "
             "Arguments are policy judgments, not established outcomes. Unknown provisions must remain unknown. "
-            "Style is a voice reference only: do not copy; persona voice takes priority.")
+            "Style is a voice reference only: do not copy; persona voice takes priority. "
+            "Items starting 'News report:' are newspaper or campaign reports: keep the attribution in your own words (\"the Herald reported...\"), never as settled fact. "
+            "Items starting 'Opposing concern:' or 'Opposing line:' describe the other side and a possible response: answer the concern, never adopt their wording as our view. "
+            "Never promise zero deaths, zero cases or perfect protection.")
         # Evidence already lives in evaluated_materials. Never restore an omitted record from the full snapshot.
         observations['rag_identity']={k:rag[k] for k in ('corpus_hash','corpus_version','retrieval_version')}
         observations['style_reference']=[s for s in rag['styles'] if purpose in s['purposes']][:1]

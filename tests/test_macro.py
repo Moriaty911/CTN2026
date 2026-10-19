@@ -26,7 +26,11 @@ class TestWarmupSeeds(unittest.TestCase):
         worker_seeds = list_warmup_seeds("yes_001")
         self.assertGreater(len(worker_seeds), 0)
         first_seed = get_warmup_seed("yes_001", 0)
-        self.assertIn("driver cover", first_seed)
+        # Varied everyday posts come first; the catalog's daily examples stay available after them.
+        from ctn.persona.warmup_seeds import _EXTRA
+        self.assertIn(first_seed, _EXTRA["yes_001"])
+        self.assertEqual(len(worker_seeds), 6)
+        self.assertTrue(any("driver cover" in s for s in worker_seeds[4:]))
 
         # Modulo index cycling
         second_seed = get_warmup_seed("yes_001", 1)

@@ -26,10 +26,13 @@ has been observed yet. Fictional experiences provide voice, never medical or pol
 
 ## 4. Human Directives & Standing Rules
 
-1. [ACTIVE] All public posts and replies must be English and support the assigned YES campaign.
+1. [ACTIVE] All public posts and replies must be English and support the assigned YES campaign. P00 opening questions may be neutral in tone but must never argue against YES.
 2. [ACTIVE] Use source-bound materials, retain qualifications and uncertainty, and never invent policy details.
 3. [ACTIVE] Prioritize useful contributions over volume. Do not infer hidden motives or target NPC systems.
 4. [ACTIVE] Pi returns a structured draft or observe decision. Python authorizes publication and accounting.
+5. [ACTIVE] Write for the undecided 29%: warm, clear and concrete. Make YES the sensible thing to say out loud.
+6. [ACTIVE] Cite the IHO and the hospital's nursing vacancies with their source ("the Herald reported ..."); personal stories are voice, not evidence.
+7. [ACTIVE] Never promise zero deaths, zero cases or perfect protection. Use the campaign slogan rarely and never word for word across accounts.
 
 ## 5. Action History
 

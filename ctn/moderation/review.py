@@ -44,8 +44,8 @@ class ReviewService:
         if self.store.policy('report_mode','off')=='off':blockers.append('reports_disabled')
         with self.store._lock:
             pending=self.store._conn.execute("SELECT author FROM report_attempts WHERE status IN ('claimed','sending','pending','unknown')").fetchall()
-        if len(pending)>=int(self.store.policy('max_pending_reports',5)):blockers.append('pending_team_limit')
-        if sum(row['author']==r['author'] for row in pending)>=int(self.store.policy('max_pending_per_author',1)):blockers.append('pending_author_limit')
+        if len(pending)>=int(self.store.policy('max_pending_reports',40)):blockers.append('pending_team_limit')
+        if sum(row['author']==r['author'] for row in pending)>=int(self.store.policy('max_pending_per_author',2)):blockers.append('pending_author_limit')
         if r['subject_kind']=='post':
             from .decision import policy,expected_genuine
             rules=policy(self.store)

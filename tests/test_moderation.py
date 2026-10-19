@@ -124,6 +124,7 @@ class BlueTeamReporterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.approved_sweep()).submitted_count,0)
 
     async def test_pending_cap_releases_after_ruling_without_daily_hoarding(self):
+        self.store.set_policy('max_pending_reports',5)
         for i in range(6): await self.seed('enemy'+str(i),1)
         batch=await self.approved_sweep()
         self.assertEqual(batch.submitted_count,5)

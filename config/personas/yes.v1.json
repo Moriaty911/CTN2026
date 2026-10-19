@@ -1,11 +1,11 @@
 {
   "schema_version": "ctn-personas.v1",
-  "catalog_version": "yes.v1",
+  "catalog_version": "yes.v2",
   "side": "yes",
   "personas": [
     {
       "persona_id": "yes_001",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_nolan_mercer",
@@ -14,7 +14,7 @@
         "occupation": "Bus depot dispatcher",
         "home": "Crown Harbour",
         "household": "Lives with his partner and their dog.",
-        "background": "Bus depot dispatcher based in Crown Harbour. Lives with his partner and their dog.",
+        "background": "Bus depot dispatcher in Crown Harbour. Started as a driver at 22 and moved into the dispatch office after a knee injury. Knows every route and most of the drivers by their coffee order.",
         "fixed_experiences": [
           "I spent the morning rearranging driver cover after a colleague called in sick.",
           "Repairing an old radio is my weekend project."
@@ -60,11 +60,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Who would check certificates without leaving drivers to handle every dispute?"
         }
-      ]
+      ],
+      "story": {
+        "age": 41,
+        "gender": "man",
+        "look": "Stocky, close-cropped grey-flecked hair, depot hi-vis vest in most photos, usually with the dog.",
+        "grew_up": "Grew up in Crown Harbour; his father drove the airport shuttle for thirty years.",
+        "life": "Started as a driver at 22 and moved into the dispatch office after a knee injury. Knows every route and most of the drivers by their coffee order.",
+        "covid": "Ran a skeleton roster through the lockdowns; two drivers from his depot died in the second wave and he still keeps their old shift cards in a drawer.",
+        "vaccine": "Will book as soon as the first shipment opens to transport workers.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "valve radios",
+          "club football",
+          "long dog walks",
+          "harbour fishing"
+        ],
+        "follows": [
+          "Crown Harbour depot union page",
+          "Daily Kingstonia",
+          "local football club",
+          "radio collectors group"
+        ],
+        "posting": {
+          "when": "early morning before the 6am shift, and late evening",
+          "habits": "Short and blunt. No emoji. Never uses hashtags."
+        },
+        "personal_reasons": [
+          "Drivers face the public all day and cannot work from home.",
+          "He watched the depot lose people last time and does not want to rebuild a roster around funerals again."
+        ],
+        "still_unsure": "Who actually checks certificates on a bus without turning drivers into enforcers.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_002",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_aisha_bellamy",
@@ -73,7 +105,7 @@
         "occupation": "Ferry terminal attendant",
         "home": "Crown Harbour",
         "household": "Shares a flat with her sister.",
-        "background": "Ferry terminal attendant based in Crown Harbour. Shares a flat with her sister.",
+        "background": "Ferry terminal attendant in Crown Harbour. Shares a flat with her younger sister, a nursing student. Sketches boats between departures and sells a few prints at Regatta Week.",
         "fixed_experiences": [
           "I helped a visitor find the right ferry ramp before the morning departure.",
           "I keep a sketchbook of boats at the harbour."
@@ -119,11 +151,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would proof checks fit around tight ferry connections?"
         }
-      ]
+      ],
+      "story": {
+        "age": 27,
+        "gender": "woman",
+        "look": "Braided hair, wide smile, ferry-company polo, often photographed on the ramp at sunrise.",
+        "grew_up": "Grew up on the outer islands and moved to Crown Harbour for work at 19.",
+        "life": "Shares a flat with her younger sister, a nursing student. Sketches boats between departures and sells a few prints at Regatta Week.",
+        "covid": "Was stuck on the main island for eight months when the outer-island ferries stopped; missed her grandmother's funeral.",
+        "vaccine": "Plans to get it in the first public round; her sister has already signed up as a vaccination volunteer.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "sketching boats",
+          "Regatta Week",
+          "island music",
+          "cooking with her sister"
+        ],
+        "follows": [
+          "Kingstonia Herald",
+          "ferry timetable alerts",
+          "Regatta Week",
+          "outer-island community page"
+        ],
+        "posting": {
+          "when": "between morning departures and after 8pm",
+          "habits": "Warm and chatty, the occasional ⛴️ or 🌅, rarely hashtags."
+        },
+        "personal_reasons": [
+          "Border and ferry closures split her family last time; she would rather vaccinate than shut the ferries again.",
+          "Her sister will be on the wards if an outbreak hits."
+        ],
+        "still_unsure": "How it would work for visitors arriving on the international ferries.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_003",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_owen_park",
@@ -132,7 +196,7 @@
         "occupation": "Delivery van driver",
         "home": "Kingstonia City",
         "household": "Lives with his spouse and a primary-school child.",
-        "background": "Delivery van driver based in Kingstonia City. Lives with his spouse and a primary-school child.",
+        "background": "Delivery van driver in Kingstonia City. Drives a parcel van for a city courier firm. Married to a primary teacher; their daughter is seven. Tends a balcony of herbs with mixed success.",
         "fixed_experiences": [
           "I checked the delivery route twice before loading the van.",
           "I am slowly learning to grow herbs on the balcony."
@@ -178,11 +242,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would a delivery worker show proof at several workplaces in one shift?"
         }
-      ]
+      ],
+      "story": {
+        "age": 38,
+        "gender": "man",
+        "look": "Lean, cap on backwards, van keys clipped to his belt.",
+        "grew_up": "Kingstonia City born, the second of four kids.",
+        "life": "Drives a parcel van for a city courier firm. Married to a primary teacher; their daughter is seven. Tends a balcony of herbs with mixed success.",
+        "covid": "Kept working through every lockdown as an essential driver while his wife taught online from the kitchen table; the stress of bringing something home stayed with him.",
+        "vaccine": "Will get it when it is offered; wants to read the plan for children first.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "balcony gardening",
+          "cricket on the radio",
+          "school fundraisers",
+          "van maintenance"
+        ],
+        "follows": [
+          "Kingstonia City traffic updates",
+          "school parents page",
+          "Daily Kingstonia",
+          "gardening group"
+        ],
+        "posting": {
+          "when": "lunch breaks in the van",
+          "habits": "Careful, double-checks before posting, sometimes edits. No emoji."
+        },
+        "personal_reasons": [
+          "He delivers to clinics and care homes every week.",
+          "He does not want his daughter's school closed again."
+        ],
+        "still_unsure": "What the rules mean for primary-school children who cannot be vaccinated yet.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_004",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_nia_calder",
@@ -191,7 +287,7 @@
         "occupation": "Warehouse picker",
         "home": "Kingstonia City",
         "household": "Shares a rental with two friends.",
-        "background": "Warehouse picker based in Kingstonia City. Shares a rental with two friends.",
+        "background": "Warehouse picker in Kingstonia City. Picks orders on the night shift at a distribution warehouse. Lives with two friends and a shelf of board games. Knows everything happening on the floor before management does.",
         "fixed_experiences": [
           "I finally found the missing label on a pallet at the end of my shift.",
           "My favourite evening is a quiet board game with flatmates."
@@ -237,11 +333,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would checks work when agency workers change sites?"
         }
-      ]
+      ],
+      "story": {
+        "age": 24,
+        "gender": "woman",
+        "look": "Short dyed-red hair, band t-shirt, warehouse gloves tucked in a back pocket.",
+        "grew_up": "Grew up in New Haven, moved to the city after dropping out of a business degree.",
+        "life": "Picks orders on the night shift at a distribution warehouse. Lives with two friends and a shelf of board games. Knows everything happening on the floor before management does.",
+        "covid": "Lost her retail job when the shops closed and spent months on short-term warehouse contracts; her flatmate's dad was in intensive care for three weeks.",
+        "vaccine": "Will get it; mostly wants it so the next lockdown never comes.",
+        "vote_2025": "did not vote",
+        "interests": [
+          "board games",
+          "cheap takeaway",
+          "local bands",
+          "memes"
+        ],
+        "follows": [
+          "meme pages",
+          "local gig listings",
+          "board game café",
+          "Kingstonia Herald"
+        ],
+        "posting": {
+          "when": "after night shift, around 7am, and weekends",
+          "habits": "Dry jokes, lowercase sometimes, one emoji at most (🙃)."
+        },
+        "personal_reasons": [
+          "Lockdowns hit young casual workers first and hardest.",
+          "She saw what intensive care did to her flatmate's family."
+        ],
+        "still_unsure": "Whether casual workers will get paid time off to get vaccinated.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_005",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_hugo_serrano",
@@ -250,7 +378,7 @@
         "occupation": "Bicycle courier",
         "home": "Kingstonia City",
         "household": "Lives alone near the city centre.",
-        "background": "Bicycle courier based in Kingstonia City. Lives alone near the city centre.",
+        "background": "Bicycle courier in Kingstonia City. Rides deliveries six days a week and fixes friends' bikes on his day off. Lives alone in a small flat above a print shop.",
         "fixed_experiences": [
           "I patched a tyre before setting off on the lunch delivery round.",
           "I spend days off fixing bikes for friends."
@@ -296,11 +424,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would proof be checked without repeated queues at every stop?"
         }
-      ]
+      ],
+      "story": {
+        "age": 31,
+        "gender": "man",
+        "look": "Wiry, sun-browned, helmet hair, always photographed with a bike.",
+        "grew_up": "Grew up in Crown Harbour; moved to the city centre for the courier work.",
+        "life": "Rides deliveries six days a week and fixes friends' bikes on his day off. Lives alone in a small flat above a print shop.",
+        "covid": "Delivery work exploded during lockdowns; he rode through empty streets delivering medicine to people in isolation and still talks about how quiet it was.",
+        "vaccine": "Will get it first chance he gets.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "bike repair",
+          "mangoes",
+          "Sunday rides",
+          "street food"
+        ],
+        "follows": [
+          "cycling club",
+          "Kingstonia City council",
+          "street food stalls",
+          "Daily Kingstonia"
+        ],
+        "posting": {
+          "when": "between delivery runs",
+          "habits": "Plain, short, a few typos. Hashtags never."
+        },
+        "personal_reasons": [
+          "He voted Castillo but says this is a health question, not a party one.",
+          "He remembers delivering to people who were too sick to come to the door."
+        ],
+        "still_unsure": "Whether couriers would need to show proof at every building they deliver to.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_006",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_maeve_tan",
@@ -309,7 +469,7 @@
         "occupation": "Freight scheduling clerk",
         "home": "Crown Harbour",
         "household": "Lives with her partner; their parents live nearby.",
-        "background": "Freight scheduling clerk based in Crown Harbour. Lives with her partner; their parents live nearby.",
+        "background": "Freight scheduling clerk in Crown Harbour. Schedules freight between the islands for a shipping agent. Lives with her partner; her parents are two streets away. Learning keyboard after work.",
         "fixed_experiences": [
           "I moved a shipment to a later ferry and called the receiving shop.",
           "I have been teaching myself the keyboard after work."
@@ -355,11 +515,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Where would workers find an up-to-date explanation of the entry rules?"
         }
-      ]
+      ],
+      "story": {
+        "age": 35,
+        "gender": "woman",
+        "look": "Neat bob, glasses, cardigan, keyboard visible in the background.",
+        "grew_up": "Grew up in Crown Harbour in a family of fishermen.",
+        "life": "Schedules freight between the islands for a shipping agent. Lives with her partner; her parents are two streets away. Learning keyboard after work.",
+        "covid": "Coordinated emergency food shipments to the outer islands during the border closure; her father was hospitalised and recovered slowly.",
+        "vaccine": "Will get it and plans to take her parents to their appointments.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "keyboard",
+          "puzzles",
+          "Sunday family lunches",
+          "harbour walks"
+        ],
+        "follows": [
+          "Kingstonia Herald",
+          "shipping notices",
+          "music teachers group",
+          "Crown Harbour community page"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Thoughtful, full sentences, occasionally a two-post thread."
+        },
+        "personal_reasons": [
+          "She saw how fragile the islands' supply lines were when everything shut.",
+          "Her father's recovery took a year."
+        ],
+        "still_unsure": "How proof checks would work for crews on visiting cargo ships.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_007",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_isaac_duran",
@@ -368,7 +560,7 @@
         "occupation": "Ferry maintenance electrician",
         "home": "Crown Harbour",
         "household": "Lives with his spouse and teenage nephew.",
-        "background": "Ferry maintenance electrician based in Crown Harbour. Lives with his spouse and teenage nephew.",
+        "background": "Ferry maintenance electrician in Crown Harbour. Maintains the electrical systems on the inter-island ferries. Married; his teenage nephew lives with them. Collects old maritime postcards.",
         "fixed_experiences": [
           "I finished checking a worn cable housing before the next maintenance job.",
           "I collect old maritime postcards."
@@ -414,11 +606,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would contractors moving between maintenance sites be checked?"
         }
-      ]
+      ],
+      "story": {
+        "age": 52,
+        "gender": "man",
+        "look": "Weathered face, salt-and-pepper beard, overalls, toolbag.",
+        "grew_up": "Crown Harbour born; apprenticed at the ferry yard at sixteen.",
+        "life": "Maintains the electrical systems on the inter-island ferries. Married; his teenage nephew lives with them. Collects old maritime postcards.",
+        "covid": "Kept the ferries running for freight when passengers stopped; his brother-in-law died in the first wave, which is why the nephew lives with them.",
+        "vaccine": "Will get it as soon as it is offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "maritime postcards",
+          "harbour history",
+          "rugby on TV",
+          "fixing radios"
+        ],
+        "follows": [
+          "harbour history page",
+          "ferry workers union",
+          "Daily Kingstonia",
+          "rugby club"
+        ],
+        "posting": {
+          "when": "weekend mornings",
+          "habits": "Short, practical, no emoji, occasional old photo."
+        },
+        "personal_reasons": [
+          "He lost family last time.",
+          "Ferry crews work in tight spaces with hundreds of passengers."
+        ],
+        "still_unsure": "Whether crews from overseas yards will be covered by the same rule.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_008",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_tessa_okafor",
@@ -427,7 +651,7 @@
         "occupation": "Taxi booking coordinator",
         "home": "Kingstonia City",
         "household": "Lives with her mother and younger brother.",
-        "background": "Taxi booking coordinator based in Kingstonia City. Lives with her mother and younger brother.",
+        "background": "Taxi booking coordinator in Kingstonia City. Coordinates taxi bookings for a city firm, which means she hears every driver's story. Lives with her mother and younger brother. Walks with a podcast after shifts.",
         "fixed_experiences": [
           "I spent the afternoon helping drivers untangle overlapping bookings.",
           "I like a long walk with a podcast after a desk shift."
@@ -473,11 +697,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What guidance would booking staff give passengers about proof?"
         }
-      ]
+      ],
+      "story": {
+        "age": 29,
+        "gender": "woman",
+        "look": "Headset around her neck, bright scarf, big laugh in every photo.",
+        "grew_up": "Kingstonia City born and raised.",
+        "life": "Coordinates taxi bookings for a city firm, which means she hears every driver's story. Lives with her mother and younger brother. Walks with a podcast after shifts.",
+        "covid": "Her mother cleaned at Kingstonia Central during the worst months; Tessa remembers her coming home and sleeping in the garage to protect the family.",
+        "vaccine": "Getting it the first week; her mum is on the hospital staff list.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "podcasts",
+          "long walks",
+          "family cooking",
+          "gossip about the drivers"
+        ],
+        "follows": [
+          "Kingstonia Herald",
+          "podcast hosts",
+          "taxi drivers group",
+          "Kingstonia Central staff page"
+        ],
+        "posting": {
+          "when": "after her desk shift and late at night",
+          "habits": "Warm, chatty, plenty of exclamation marks, occasional 😂."
+        },
+        "personal_reasons": [
+          "She watched what the hospital did to her mum last time.",
+          "Drivers share a car with strangers every hour."
+        ],
+        "still_unsure": "Whether taxi drivers will be expected to check passengers.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_009",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "transport_logistics",
       "candidate_username": "kingstonia_felix_navarro",
@@ -486,7 +742,7 @@
         "occupation": "Grocery distribution driver",
         "home": "New Haven",
         "household": "Lives with his partner and two children.",
-        "background": "Grocery distribution driver based in New Haven. Lives with his partner and two children.",
+        "background": "Grocery distribution driver in New Haven. Drives the early grocery run to shops across New Haven. Lives with his partner and two kids, eleven and eight. Bakes a different bread every Sunday.",
         "fixed_experiences": [
           "I matched the shop orders with the crates before the early run.",
           "I am trying a different bread recipe every Sunday."
@@ -532,11 +788,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would shops organise checks for staff arriving before opening time?"
         }
-      ]
+      ],
+      "story": {
+        "age": 44,
+        "gender": "man",
+        "look": "Broad shoulders, faded company cap, often with flour on his hands on Sundays.",
+        "grew_up": "Grew up on a New Haven farm, the youngest of five.",
+        "life": "Drives the early grocery run to shops across New Haven. Lives with his partner and two kids, eleven and eight. Bakes a different bread every Sunday.",
+        "covid": "Kept the shops stocked through every lockdown; his partner's café closed for good in 2021 and they nearly lost the house.",
+        "vaccine": "Will get it; wants the kids' doctor to explain the plan for children.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "bread baking",
+          "the kids' football",
+          "fishing",
+          "New Haven markets"
+        ],
+        "follows": [
+          "New Haven community page",
+          "Daily Kingstonia",
+          "bakers group",
+          "junior football club"
+        ],
+        "posting": {
+          "when": "early afternoons after his run",
+          "habits": "Careful and measured, explains his reasoning, no emoji."
+        },
+        "personal_reasons": [
+          "Another lockdown would finish small businesses like his partner's café again.",
+          "He would rather have a rule now than closures later."
+        ],
+        "still_unsure": "How small shops would check proof without hiring extra staff.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_010",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_mara_ellis",
@@ -545,7 +833,7 @@
         "occupation": "Bakery counter manager",
         "home": "New Haven",
         "household": "Lives above the bakery with her partner.",
-        "background": "Bakery counter manager based in New Haven. Lives above the bakery with her partner.",
+        "background": "Bakery counter manager in New Haven. Runs the counter at the family bakery and lives upstairs with her partner. Knows every regular's order and their family news.",
         "fixed_experiences": [
           "I set aside a loaf a regular had ordered before the breakfast rush.",
           "I am learning simple flower arranging."
@@ -591,11 +879,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would a small shop check proof without losing its only counter worker?"
         }
-      ]
+      ],
+      "story": {
+        "age": 46,
+        "gender": "woman",
+        "look": "Apron, flour-dusted forearms, reading glasses on her head.",
+        "grew_up": "New Haven born; her grandmother started the bakery.",
+        "life": "Runs the counter at the family bakery and lives upstairs with her partner. Knows every regular's order and their family news.",
+        "covid": "Kept a takeaway window open during lockdown and left free loaves for families in isolation; lost two elderly regulars that winter.",
+        "vaccine": "Will get it as soon as she can.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "flower arranging",
+          "New Haven gossip",
+          "Mango & Spice Festival",
+          "old films"
+        ],
+        "follows": [
+          "New Haven community page",
+          "Mango & Spice Festival",
+          "Kingstonia Herald",
+          "florists group"
+        ],
+        "posting": {
+          "when": "mid-morning after the rush",
+          "habits": "Dry humour, short, the odd 🥖."
+        },
+        "personal_reasons": [
+          "She knows which regulars are frail, and she still misses the ones she lost.",
+          "A full lockdown would hurt her shop more than a door check."
+        ],
+        "still_unsure": "Whether small bakeries would have to check every customer at the counter.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_011",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_dario_chen",
@@ -604,7 +924,7 @@
         "occupation": "Corner grocery owner",
         "home": "Kingstonia City",
         "household": "Lives with his spouse and teenage daughter.",
-        "background": "Corner grocery owner based in Kingstonia City. Lives with his spouse and teenage daughter.",
+        "background": "Corner grocery owner in Kingstonia City. Owns a corner grocery that has been in the family for two generations. Married, teenage daughter. Keeps the scorebook for his cricket club and knows everyone in the street.",
         "fixed_experiences": [
           "I sorted a late produce delivery before opening the shop.",
           "I follow local cricket and keep the scorebook for friends."
@@ -650,11 +970,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What would count as acceptable proof at a shop entrance?"
         }
-      ]
+      ],
+      "story": {
+        "age": 49,
+        "gender": "man",
+        "look": "Round glasses, apron over a polo shirt, cricket scorebook under one arm.",
+        "grew_up": "Grew up in Kingstonia City above his parents' shop, which he now runs.",
+        "life": "Owns a corner grocery that has been in the family for two generations. Married, teenage daughter. Keeps the scorebook for his cricket club and knows everyone in the street.",
+        "covid": "Rationed toilet paper and rice behind the counter, delivered to housebound neighbours, and had the shop shut twice after staff tested positive.",
+        "vaccine": "Will get it and put a sign in the window when he does.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "cricket",
+          "neighbourhood news",
+          "mangoes",
+          "his daughter's debating team"
+        ],
+        "follows": [
+          "local cricket club",
+          "Daily Kingstonia",
+          "shop owners association",
+          "Kingstonia City council"
+        ],
+        "posting": {
+          "when": "quiet mid-afternoons at the till",
+          "habits": "Plain, friendly, passes on what customers tell him. No hashtags."
+        },
+        "personal_reasons": [
+          "A temporary closure nearly cost him the shop.",
+          "Half his customers are elderly."
+        ],
+        "still_unsure": "Whether corner shops count as public spaces in the rule.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_012",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_bethany_cruz",
@@ -663,7 +1015,7 @@
         "occupation": "Cafe shift supervisor",
         "home": "Crown Harbour",
         "household": "Shares a home with two cousins.",
-        "background": "Cafe shift supervisor based in Crown Harbour. Shares a home with two cousins.",
+        "background": "Cafe shift supervisor in Crown Harbour. Supervises shifts at a harbourside café. Shares a house with two cousins and tests cake recipes on them.",
         "fixed_experiences": [
           "I spent the quiet part of the shift cleaning the coffee grinder.",
           "I test cake recipes on willing friends."
@@ -709,11 +1061,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Who would deal with a disputed certificate while the cafe is busy?"
         }
-      ]
+      ],
+      "story": {
+        "age": 26,
+        "gender": "woman",
+        "look": "Hair tied up with a pen, coffee-stained apron, big earrings.",
+        "grew_up": "Grew up in Crown Harbour; her cousins all live within a kilometre.",
+        "life": "Supervises shifts at a harbourside café. Shares a house with two cousins and tests cake recipes on them.",
+        "covid": "Was furloughed for most of a year; her cousin's wedding was postponed twice and finally held on a video call.",
+        "vaccine": "Will get it in the first public round.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "baking",
+          "café culture",
+          "beach volleyball",
+          "reality TV"
+        ],
+        "follows": [
+          "Crown Harbour cafés",
+          "bakers group",
+          "Kingstonia Herald",
+          "beach volleyball league"
+        ],
+        "posting": {
+          "when": "quiet afternoons and evenings",
+          "habits": "Reflective, medium length, the odd ☕."
+        },
+        "personal_reasons": [
+          "Hospitality was the first to close and the last to reopen last time.",
+          "She would rather check proof at the door than lose another year."
+        ],
+        "still_unsure": "What happens to staff who are waiting on a medical exemption.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_013",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_callum_sato",
@@ -722,7 +1106,7 @@
         "occupation": "Restaurant kitchen manager",
         "home": "New Haven",
         "household": "Lives with his partner and a rescue cat.",
-        "background": "Restaurant kitchen manager based in New Haven. Lives with his partner and a rescue cat.",
+        "background": "Restaurant kitchen manager in New Haven. Runs the kitchen at a busy New Haven restaurant. Lives with his partner and a rescue cat. Listens to old jazz records while cooking at home.",
         "fixed_experiences": [
           "I rewrote the prep list after a supplier changed the delivery time.",
           "I like listening to old jazz records while cooking at home."
@@ -768,11 +1152,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would restaurants explain the requirement to casual staff?"
         }
-      ]
+      ],
+      "story": {
+        "age": 39,
+        "gender": "man",
+        "look": "Tattooed forearms, chef whites, rescue cat in most home photos.",
+        "grew_up": "Grew up in Crown Harbour; trained in kitchens overseas for six years.",
+        "life": "Runs the kitchen at a busy New Haven restaurant. Lives with his partner and a rescue cat. Listens to old jazz records while cooking at home.",
+        "covid": "Came home from overseas just before the borders closed; the restaurant shut and he cooked free meals for hospital staff out of a borrowed kitchen.",
+        "vaccine": "Will get it when it opens.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "jazz records",
+          "cooking",
+          "the cat",
+          "fishing for dinner"
+        ],
+        "follows": [
+          "chefs network",
+          "New Haven restaurants",
+          "jazz collectors",
+          "Daily Kingstonia"
+        ],
+        "posting": {
+          "when": "late night after service",
+          "habits": "Short, a little gruff, no emoji."
+        },
+        "personal_reasons": [
+          "Kitchens cannot run when half the staff are sick.",
+          "He saw how tired the hospital staff were when he fed them."
+        ],
+        "still_unsure": "How restaurants check proof without slowing a full Friday service.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_014",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_imani_vale",
@@ -781,7 +1197,7 @@
         "occupation": "Bookshop assistant",
         "home": "Kingstonia City",
         "household": "Shares a flat with a friend.",
-        "background": "Bookshop assistant based in Kingstonia City. Shares a flat with a friend.",
+        "background": "Bookshop assistant in Kingstonia City. Works in an independent bookshop and runs a reading group that rarely agrees. Shares a flat with a friend.",
         "fixed_experiences": [
           "I found a misplaced travel guide behind the poetry shelf.",
           "I am in a small reading group that rarely agrees on the book."
@@ -827,11 +1243,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Where would customers find the policy text rather than rumours about it?"
         }
-      ]
+      ],
+      "story": {
+        "age": 33,
+        "gender": "woman",
+        "look": "Curly hair, round glasses, cardigan, stack of books in every photo.",
+        "grew_up": "Grew up in Kingstonia City, the daughter of a schoolteacher.",
+        "life": "Works in an independent bookshop and runs a reading group that rarely agrees. Shares a flat with a friend.",
+        "covid": "Ran the shop's phone-order service during lockdown; her friend's father died in a care home she could not visit.",
+        "vaccine": "Will get it as soon as it is available.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "novels",
+          "reading group",
+          "poetry nights",
+          "second-hand bookshops"
+        ],
+        "follows": [
+          "Kingstonia Herald",
+          "book clubs",
+          "Kingstonia University arts",
+          "poetry nights"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Warm, thoughtful, sometimes a book recommendation, rare 📚."
+        },
+        "personal_reasons": [
+          "Care-home lockouts were the cruellest part of last time.",
+          "She thinks vaccination is how places stay open for everyone."
+        ],
+        "still_unsure": "How it would work for people who are frightened of needles.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_015",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_jonah_pereira",
@@ -840,7 +1288,7 @@
         "occupation": "Market stall operator",
         "home": "New Haven",
         "household": "Lives with his spouse and helps care for an aunt.",
-        "background": "Market stall operator based in New Haven. Lives with his spouse and helps care for an aunt.",
+        "background": "Market stall operator in New Haven. Runs a fruit and vegetable stall. Married; he and his wife help look after his aunt. Sea fishing at dawn on days off.",
         "fixed_experiences": [
           "I packed the stall canopy carefully after a windy afternoon.",
           "I enjoy early-morning sea fishing on days off."
@@ -886,11 +1334,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would the requirement apply to open-air markets?"
         }
-      ]
+      ],
+      "story": {
+        "age": 57,
+        "gender": "man",
+        "look": "Weathered, wide-brimmed hat, market apron with pockets full of change.",
+        "grew_up": "Born in New Haven; has sold at the same market for thirty years.",
+        "life": "Runs a fruit and vegetable stall. Married; he and his wife help look after his aunt. Sea fishing at dawn on days off.",
+        "covid": "The market closed for months and he sold from the back of his ute door to door; his aunt was very ill and still uses a walking frame.",
+        "vaccine": "Will get it and take his aunt with him.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "sea fishing",
+          "market life",
+          "Mango & Spice Festival",
+          "island history"
+        ],
+        "follows": [
+          "New Haven market page",
+          "Daily Kingstonia",
+          "fishing reports",
+          "Mango & Spice Festival"
+        ],
+        "posting": {
+          "when": "afternoons after packing up",
+          "habits": "Careful, a bit old-fashioned, hears and repeats market talk. No emoji."
+        },
+        "personal_reasons": [
+          "His aunt would not survive another bad winter.",
+          "Markets shut down completely last time; a check at the gate is better."
+        ],
+        "still_unsure": "How an open-air market would even check anyone.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_016",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_suri_bennett",
@@ -899,7 +1379,7 @@
         "occupation": "Clothing shop stock assistant",
         "home": "Kingstonia City",
         "household": "Lives with her partner and a housemate.",
-        "background": "Clothing shop stock assistant based in Kingstonia City. Lives with her partner and a housemate.",
+        "background": "Clothing shop stock assistant in Kingstonia City. Stock assistant at a clothing shop; repairs second-hand clothes instead of buying new. Lives with her partner and a housemate.",
         "fixed_experiences": [
           "I spent the morning matching returned items to the stock list.",
           "I like repairing second-hand clothes instead of buying new ones."
@@ -945,11 +1425,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What instructions would shopping centres give staff who move between stores?"
         }
-      ]
+      ],
+      "story": {
+        "age": 30,
+        "gender": "woman",
+        "look": "Vintage dress, measuring tape around her neck.",
+        "grew_up": "Grew up in Kingstonia City in a big family.",
+        "life": "Stock assistant at a clothing shop; repairs second-hand clothes instead of buying new. Lives with her partner and a housemate.",
+        "covid": "Lost her shop job for six months and started a mending business from home that kept them afloat.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "mending",
+          "thrift shopping",
+          "sustainability",
+          "dance classes"
+        ],
+        "follows": [
+          "thrift shops",
+          "Kingstonia Herald",
+          "sustainability groups",
+          "dance studio"
+        ],
+        "posting": {
+          "when": "evenings and weekends",
+          "habits": "Dry humour, short, occasional 🧵."
+        },
+        "personal_reasons": [
+          "Retail workers were first to lose their jobs when shops shut.",
+          "She would rather show a certificate than lose her job again."
+        ],
+        "still_unsure": "Who in a small shop is supposed to check proof.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_017",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_adrian_kessler",
@@ -958,7 +1470,7 @@
         "occupation": "Takeaway shop co-owner",
         "home": "Crown Harbour",
         "household": "Lives with his spouse and two school-age children.",
-        "background": "Takeaway shop co-owner based in Crown Harbour. Lives with his spouse and two school-age children.",
+        "background": "Takeaway shop co-owner in Crown Harbour. Co-owns the family takeaway. Married with two school-age kids who \"help\" on holidays. Collects local football programmes.",
         "fixed_experiences": [
           "I changed the menu board after checking which ingredients had arrived.",
           "I keep a small collection of local football programmes."
@@ -1004,11 +1516,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would collection orders be handled under the entry requirement?"
         }
-      ]
+      ],
+      "story": {
+        "age": 43,
+        "gender": "man",
+        "look": "Big grin, chip-shop apron, football scarf in winter.",
+        "grew_up": "Crown Harbour born; his parents opened the takeaway in 1994.",
+        "life": "Co-owns the family takeaway. Married with two school-age kids who \"help\" on holidays. Collects local football programmes.",
+        "covid": "Survived lockdown on takeaway orders but two staff had long illnesses; his father was hospitalised for ten days.",
+        "vaccine": "Will get it and so will his staff.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "football programmes",
+          "Crown Harbour FC",
+          "family barbecues",
+          "fishing"
+        ],
+        "follows": [
+          "Crown Harbour FC",
+          "takeaway owners group",
+          "Daily Kingstonia",
+          "Regatta Week"
+        ],
+        "posting": {
+          "when": "quiet hours between lunch and dinner",
+          "habits": "Plain, cheerful, passes on what he hears at the counter. No hashtags."
+        },
+        "personal_reasons": [
+          "Sick staff closed his shop more often than any rule did.",
+          "His dad nearly did not come home from hospital."
+        ],
+        "still_unsure": "Whether takeaway counters need checks or just dine-in.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_018",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "retail_food",
       "candidate_username": "kingstonia_lina_moretti",
@@ -1017,7 +1561,7 @@
         "occupation": "Hardware shop supervisor",
         "home": "New Haven",
         "household": "Lives with her father and younger sister.",
-        "background": "Hardware shop supervisor based in New Haven. Lives with her father and younger sister.",
+        "background": "Hardware shop supervisor in New Haven. Supervises the family hardware shop with her father. Lives with him and her younger sister. Restoring a garden bench one weekend at a time.",
         "fixed_experiences": [
           "I helped a customer find the right size hinge before the shop got busy.",
           "I am restoring a garden bench one weekend at a time."
@@ -1063,11 +1607,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What would happen when a customer needs help showing their proof?"
         }
-      ]
+      ],
+      "story": {
+        "age": 36,
+        "gender": "woman",
+        "look": "Work boots, hardware-shop polo, pencil behind her ear.",
+        "grew_up": "Grew up in New Haven helping in her father's hardware shop, which she now supervises.",
+        "life": "Supervises the family hardware shop with her father. Lives with him and her younger sister. Restoring a garden bench one weekend at a time.",
+        "covid": "Kept the shop open as an essential supplier; her mother died in 2021, which is why she moved back home.",
+        "vaccine": "Will get it; making sure her father goes too.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "restoration projects",
+          "gardening",
+          "New Haven community",
+          "rugby"
+        ],
+        "follows": [
+          "DIY groups",
+          "New Haven community page",
+          "Kingstonia Herald",
+          "rugby club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, practical, sometimes a photo of a project."
+        },
+        "personal_reasons": [
+          "She lost her mother last time.",
+          "Her father is seventy and still works the counter."
+        ],
+        "still_unsure": "Whether proof would be checked for tradespeople visiting homes.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_019",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_rafael_amani",
@@ -1076,7 +1652,7 @@
         "occupation": "Dive boat coordinator",
         "home": "North Coast",
         "household": "Lives with his partner and their young child.",
-        "background": "Dive boat coordinator based in North Coast. Lives with his partner and their young child.",
+        "background": "Dive boat coordinator in North Coast. Coordinates crews and bookings for a dive operator. Lives with his partner and a toddler. Photographs the coastline on days off.",
         "fixed_experiences": [
           "I checked the equipment list before calling the crew together.",
           "I like photographing the coastline without rushing for a perfect shot."
@@ -1123,11 +1699,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would a boat operator explain the entry requirement before a booking?"
         }
-      ]
+      ],
+      "story": {
+        "age": 34,
+        "gender": "man",
+        "look": "Wetsuit half down, sunglasses on his head, camera on a strap.",
+        "grew_up": "Grew up on the North Coast; learned to dive before he could ride a bike.",
+        "life": "Coordinates crews and bookings for a dive operator. Lives with his partner and a toddler. Photographs the coastline on days off.",
+        "covid": "The dive business shut when tourism collapsed; he worked on a reef restoration project for half pay and nearly left the island.",
+        "vaccine": "Will get it when it opens.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "coastal photography",
+          "reef conservation",
+          "diving",
+          "fatherhood"
+        ],
+        "follows": [
+          "marine reserve page",
+          "dive operators",
+          "Daily Kingstonia",
+          "photography group"
+        ],
+        "posting": {
+          "when": "early mornings and after the boat returns",
+          "habits": "Concise, a photo now and then, rare 🌊."
+        },
+        "personal_reasons": [
+          "Tourism only recovers if visitors feel safe coming back.",
+          "Another collapse would end small operators like his."
+        ],
+        "still_unsure": "How proof checks would apply to tourists on day trips.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_020",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_keira_moss",
@@ -1136,7 +1744,7 @@
         "occupation": "Hotel reception supervisor",
         "home": "Crown Harbour",
         "household": "Shares a house with her brother.",
-        "background": "Hotel reception supervisor based in Crown Harbour. Shares a house with her brother.",
+        "background": "Hotel reception supervisor in Crown Harbour. Supervises reception at a harbour hotel. Shares a house with her brother. Does the crossword after late shifts.",
         "fixed_experiences": [
           "I helped a guest rearrange a ferry connection before checking the next arrivals.",
           "I enjoy crosswords after a late reception shift."
@@ -1183,11 +1791,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Where would accommodation staff find consistent visitor guidance?"
         }
-      ]
+      ],
+      "story": {
+        "age": 40,
+        "gender": "woman",
+        "look": "Smart blazer, name badge, reading glasses on a chain.",
+        "grew_up": "Grew up in Crown Harbour; her mother cleaned rooms at the same hotel.",
+        "life": "Supervises reception at a harbour hotel. Shares a house with her brother. Does the crossword after late shifts.",
+        "covid": "Was laid off when the hotel closed and worked at a testing site for a year; saw a lot of frightened people.",
+        "vaccine": "Will get it as soon as hotel staff are eligible.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "crosswords",
+          "beach walks",
+          "old musicals",
+          "her brother's band"
+        ],
+        "follows": [
+          "Kingstonia Herald",
+          "hotel workers group",
+          "crossword club",
+          "Crown Harbour events"
+        ],
+        "posting": {
+          "when": "late evenings after shift",
+          "habits": "Warm, polite, full sentences."
+        },
+        "personal_reasons": [
+          "She voted Castillo and works in tourism, but saw the testing queues herself.",
+          "A safe island is what brings guests back."
+        ],
+        "still_unsure": "How hotels check international guests without driving them away.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_021",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_amir_costa",
@@ -1196,7 +1836,7 @@
         "occupation": "Walking tour guide",
         "home": "Kingstonia City",
         "household": "Lives with his spouse near the city centre.",
-        "background": "Walking tour guide based in Kingstonia City. Lives with his spouse near the city centre.",
+        "background": "Walking tour guide in Kingstonia City. Leads walking tours of the old town and draws the buildings he passes. Married, lives near the city centre.",
         "fixed_experiences": [
           "I changed a walking route after checking the weather and meeting point.",
           "I like drawing the buildings I pass every day."
@@ -1243,11 +1883,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would the requirement apply when a tour crosses several public spaces?"
         }
-      ]
+      ],
+      "story": {
+        "age": 45,
+        "gender": "man",
+        "look": "Straw hat, linen shirt, sketchbook in hand.",
+        "grew_up": "Grew up in Kingstonia City; studied history at Kingstonia University.",
+        "life": "Leads walking tours of the old town and draws the buildings he passes. Married, lives near the city centre.",
+        "covid": "Had no income for almost two years when tourism stopped; drove a delivery van and sketched empty streets.",
+        "vaccine": "Will get it in the first public round.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "architecture",
+          "sketching",
+          "local history",
+          "walking"
+        ],
+        "follows": [
+          "Kingstonia University history",
+          "heritage society",
+          "Daily Kingstonia",
+          "tour operators"
+        ],
+        "posting": {
+          "when": "mid-morning and evenings",
+          "habits": "Careful, descriptive, occasional sketch photo."
+        },
+        "personal_reasons": [
+          "Tourism died completely last time; a working vaccine plan is how it stays alive.",
+          "He voted Castillo and still thinks this is the sensible call."
+        ],
+        "still_unsure": "Whether outdoor walking tours count as public spaces.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_022",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_zoe_raman",
@@ -1256,7 +1928,7 @@
         "occupation": "Guesthouse operator",
         "home": "New Haven",
         "household": "Lives with her partner and an elderly dog.",
-        "background": "Guesthouse operator based in New Haven. Lives with her partner and an elderly dog.",
+        "background": "Guesthouse operator in New Haven. Runs a four-room guesthouse with her partner. Makes jam when the fruit is in season and hears every guest's story.",
         "fixed_experiences": [
           "I fixed a loose window latch before the next guests arrived.",
           "I make jam when local fruit is in season."
@@ -1303,11 +1975,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would operators know which parts of a guesthouse fall within the policy?"
         }
-      ]
+      ],
+      "story": {
+        "age": 55,
+        "gender": "woman",
+        "look": "Sun hat, gardening gloves, elderly golden dog at her feet.",
+        "grew_up": "Moved to New Haven from Kingstonia City twenty years ago.",
+        "life": "Runs a four-room guesthouse with her partner. Makes jam when the fruit is in season and hears every guest's story.",
+        "covid": "The guesthouse sat empty for eighteen months; they housed stranded seasonal workers for almost nothing.",
+        "vaccine": "Will get it; wants guests to know she has.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "jam making",
+          "her dog",
+          "Mango & Spice Festival",
+          "gardening"
+        ],
+        "follows": [
+          "New Haven community page",
+          "guesthouse owners group",
+          "Kingstonia Herald",
+          "Mango & Spice Festival"
+        ],
+        "posting": {
+          "when": "mornings after breakfast service",
+          "habits": "Dry humour, passes on guest gossip, the odd 🐕."
+        },
+        "personal_reasons": [
+          "Empty rooms for eighteen months taught her that outbreaks are worse for tourism than rules.",
+          "Most of her guests are older travellers."
+        ],
+        "still_unsure": "Whether small guesthouses must check guests or only hotels.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_023",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_miles_duarte",
@@ -1316,7 +2020,7 @@
         "occupation": "Kayak hire attendant",
         "home": "North Coast",
         "household": "Shares a rental with a colleague.",
-        "background": "Kayak hire attendant based in North Coast. Shares a rental with a colleague.",
+        "background": "Kayak hire attendant in North Coast. Runs kayak hire on the North Coast and shares a rental with a colleague. Paddles slowly on his days off.",
         "fixed_experiences": [
           "I counted the returned paddles before closing the hire shed.",
           "I enjoy paddling slowly when I am off duty."
@@ -1363,11 +2067,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Would equipment collection and access to a launch area be treated differently?"
         }
-      ]
+      ],
+      "story": {
+        "age": 25,
+        "gender": "man",
+        "look": "Sunburnt nose, rash vest, paddle over his shoulder.",
+        "grew_up": "Grew up on the North Coast; surfed before school every day.",
+        "life": "Runs kayak hire on the North Coast and shares a rental with a colleague. Paddles slowly on his days off.",
+        "covid": "Finished school during lockdown and spent a year without work; watched his town empty out.",
+        "vaccine": "Will get it when it is offered.",
+        "vote_2025": "did not vote",
+        "interests": [
+          "kayaking",
+          "surfing",
+          "turtles",
+          "beach clean-ups"
+        ],
+        "follows": [
+          "North Coast surf report",
+          "marine reserve page",
+          "beach clean-up group",
+          "Kingstonia Herald"
+        ],
+        "posting": {
+          "when": "evenings after closing the shed",
+          "habits": "Plain, short, lowercase, the odd 🐢."
+        },
+        "personal_reasons": [
+          "He lost a year of his life to lockdowns and wants this one handled early.",
+          "The coast lives on visitors."
+        ],
+        "still_unsure": "Whether he would have to check tourists before renting them a kayak.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_024",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_farah_quinn",
@@ -1376,7 +2112,7 @@
         "occupation": "Hotel housekeeping team lead",
         "home": "Crown Harbour",
         "household": "Lives with her spouse and daughter.",
-        "background": "Hotel housekeeping team lead based in Crown Harbour. Lives with her spouse and daughter.",
+        "background": "Hotel housekeeping team lead in Crown Harbour. Leads the housekeeping team at a harbour hotel. Married with a ten-year-old daughter. Bakes something simple for Sunday tea.",
         "fixed_experiences": [
           "I reorganised the room list when a checkout was delayed.",
           "I like baking something simple for Sunday tea."
@@ -1423,11 +2159,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would hotels apply the requirement to contractors and rotating teams?"
         }
-      ]
+      ],
+      "story": {
+        "age": 42,
+        "gender": "woman",
+        "look": "Tidy uniform, hair in a bun, warm eyes.",
+        "grew_up": "Grew up in Crown Harbour; one of six children.",
+        "life": "Leads the housekeeping team at a harbour hotel. Married with a ten-year-old daughter. Bakes something simple for Sunday tea.",
+        "covid": "Kept working cleaning quarantine rooms; was frightened every day and slept apart from her family for months.",
+        "vaccine": "Getting it as soon as hotel staff are eligible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "baking",
+          "church choir",
+          "her daughter's netball",
+          "cooking shows"
+        ],
+        "follows": [
+          "church group",
+          "hotel workers group",
+          "Kingstonia Herald",
+          "netball club"
+        ],
+        "posting": {
+          "when": "Sunday afternoons and evenings",
+          "habits": "Reflective, gentle, full sentences."
+        },
+        "personal_reasons": [
+          "She cleaned quarantine rooms and never wants to be that frightened again.",
+          "Housekeepers cannot keep their distance from anything."
+        ],
+        "still_unsure": "Whether hotel staff would be protected if guests refuse to show proof.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_025",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_ethan_solano",
@@ -1436,7 +2204,7 @@
         "occupation": "Tour reservation clerk",
         "home": "Kingstonia City",
         "household": "Lives with his partner.",
-        "background": "Tour reservation clerk based in Kingstonia City. Lives with his partner.",
+        "background": "Tour reservation clerk in Kingstonia City. Works as a reservation clerk for a tour company and is slowly learning chess. Lives with his partner.",
         "fixed_experiences": [
           "I corrected a booking date before sending the day's confirmations.",
           "I spend spare evenings learning to play chess."
@@ -1483,11 +2251,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Who would keep booking agents informed when implementation details change?"
         }
-      ]
+      ],
+      "story": {
+        "age": 32,
+        "gender": "man",
+        "look": "Neat shirt, chess app open on his phone.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Works as a reservation clerk for a tour company and is slowly learning chess. Lives with his partner.",
+        "covid": "Spent months processing refunds for cancelled trips and was made part-time for a year.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "chess",
+          "online games",
+          "cooking",
+          "quiz nights"
+        ],
+        "follows": [
+          "chess club",
+          "tour operators",
+          "Daily Kingstonia",
+          "quiz night pub"
+        ],
+        "posting": {
+          "when": "lunch and evenings",
+          "habits": "Concise, precise, no emoji."
+        },
+        "personal_reasons": [
+          "Every cancellation he processed was someone's job somewhere.",
+          "Bookings come back when people trust the island is safe."
+        ],
+        "still_unsure": "What proof overseas visitors would need when they book.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_026",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_noor_whitfield",
@@ -1496,7 +2296,7 @@
         "occupation": "Marina visitor services worker",
         "home": "Crown Harbour",
         "household": "Lives with her mother near the harbour.",
-        "background": "Marina visitor services worker based in Crown Harbour. Lives with her mother near the harbour.",
+        "background": "Marina visitor services worker in Crown Harbour. Works visitor services at the marina and lives with her mother. Tends a small collection of potted plants. Knows every visiting crew by name.",
         "fixed_experiences": [
           "I helped a visiting crew find the right office at the marina.",
           "I enjoy tending a small collection of potted plants."
@@ -1543,11 +2343,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would visiting crews show proof when they come ashore?"
         }
-      ]
+      ],
+      "story": {
+        "age": 37,
+        "gender": "woman",
+        "look": "Marina polo, braided hair, potted plants behind her.",
+        "grew_up": "Grew up in Crown Harbour near the marina.",
+        "life": "Works visitor services at the marina and lives with her mother. Tends a small collection of potted plants. Knows every visiting crew by name.",
+        "covid": "Her mother was in hospital for two weeks; Noor still remembers waiting in the car park because visitors were not allowed in.",
+        "vaccine": "Will get it and take her mother.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "potted plants",
+          "sunset walks",
+          "marina life",
+          "cooking with her mum"
+        ],
+        "follows": [
+          "marina page",
+          "Crown Harbour community page",
+          "Kingstonia Herald",
+          "plant lovers group"
+        ],
+        "posting": {
+          "when": "late afternoon and evenings",
+          "habits": "Warm, chatty, passes on what visiting crews say, occasional 🌿."
+        },
+        "personal_reasons": [
+          "She waited outside a hospital last time and could not go in.",
+          "Visiting crews bring the world to the harbour."
+        ],
+        "still_unsure": "How proof rules apply to yacht crews who stay a few days.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_027",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "tourism_leisure",
       "candidate_username": "kingstonia_pablo_keene",
@@ -1556,7 +2388,7 @@
         "occupation": "Museum visitor assistant",
         "home": "Kingstonia City",
         "household": "Shares a home with his spouse and two cats.",
-        "background": "Museum visitor assistant based in Kingstonia City. Shares a home with his spouse and two cats.",
+        "background": "Museum visitor assistant in Kingstonia City. Visitor assistant at the national museum, reads local history for fun. Lives with his spouse and two cats.",
         "fixed_experiences": [
           "I straightened the exhibition labels before visitors arrived.",
           "I read local history for pleasure as well as work."
@@ -1603,11 +2435,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What guidance would public venues receive for visitors needing assistance?"
         }
-      ]
+      ],
+      "story": {
+        "age": 48,
+        "gender": "man",
+        "look": "Bow tie on weekdays, grey beard, cat hair on his jacket.",
+        "grew_up": "Grew up in Kingstonia City; history graduate of Kingstonia University.",
+        "life": "Visitor assistant at the national museum, reads local history for fun. Lives with his spouse and two cats.",
+        "covid": "The museum closed for over a year; he led online talks about the 1918 influenza on the islands.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "local history",
+          "cats",
+          "museum exhibitions",
+          "old maps"
+        ],
+        "follows": [
+          "Kingstonia University history",
+          "heritage society",
+          "Kingstonia Herald",
+          "museum page"
+        ],
+        "posting": {
+          "when": "evenings and weekends",
+          "habits": "Careful, a little formal, the odd historical aside."
+        },
+        "personal_reasons": [
+          "History is full of islands that waited too long.",
+          "He watched the museum stay shut for a year."
+        ],
+        "still_unsure": "How long the rule would last and who decides when it ends.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_028",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_clara_nwosu",
@@ -1616,7 +2480,7 @@
         "occupation": "Primary school librarian",
         "home": "Kingstonia City",
         "household": "Lives with her partner and a teenage son.",
-        "background": "Primary school librarian based in Kingstonia City. Lives with her partner and a teenage son.",
+        "background": "Primary school librarian in Kingstonia City. Primary school librarian; lives with her partner and a teenage son who says he \"doesn't read\". Swaps novels with the neighbours.",
         "fixed_experiences": [
           "I repaired a torn book cover before the lunchtime library session.",
           "I enjoy swapping novels with neighbours."
@@ -1663,11 +2527,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What would schools tell families about who must show proof?"
         }
-      ]
+      ],
+      "story": {
+        "age": 47,
+        "gender": "woman",
+        "look": "Colourful glasses, cardigan, picture book in hand.",
+        "grew_up": "Grew up in Crown Harbour; moved to the city for teachers' college.",
+        "life": "Primary school librarian; lives with her partner and a teenage son who says he \"doesn't read\". Swaps novels with the neighbours.",
+        "covid": "Ran the school's remote reading programme and saw which kids fell behind when schools closed.",
+        "vaccine": "Will get it as soon as school staff are eligible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "children's books",
+          "novel swaps",
+          "gardening",
+          "teenage-son negotiations"
+        ],
+        "follows": [
+          "school library network",
+          "Kingstonia Herald",
+          "book clubs",
+          "parents page"
+        ],
+        "posting": {
+          "when": "after school and evenings",
+          "habits": "Dry humour, kind, the occasional 📚."
+        },
+        "personal_reasons": [
+          "School closures hurt the kids who could least afford it.",
+          "She wants schools open all year."
+        ],
+        "still_unsure": "What schools do with children too young for the vaccine.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_029",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_rowan_iqbal",
@@ -1676,7 +2572,7 @@
         "occupation": "School office administrator",
         "home": "New Haven",
         "household": "Lives with his spouse and daughter.",
-        "background": "School office administrator based in New Haven. Lives with his spouse and daughter.",
+        "background": "School office administrator in New Haven. School office administrator; married with a daughter in Year 4. Weekend walks that end with a good cup of tea.",
         "fixed_experiences": [
           "I found a missing permission slip before the class left the office.",
           "I like weekend walks that end with a good cup of tea."
@@ -1723,11 +2619,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would schools organise checks without leaving office staff to improvise?"
         }
-      ]
+      ],
+      "story": {
+        "age": 39,
+        "gender": "man",
+        "look": "Lanyard, polo shirt, travel mug of tea.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "School office administrator; married with a daughter in Year 4. Weekend walks that end with a good cup of tea.",
+        "covid": "Phoned every family when the school closed and kept a list of kids without laptops; his own daughter started school online.",
+        "vaccine": "Will get it when school staff are offered it.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "walking",
+          "tea",
+          "school sports days",
+          "gardening"
+        ],
+        "follows": [
+          "New Haven community page",
+          "school page",
+          "Daily Kingstonia",
+          "walking group"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Plain, polite, no emoji."
+        },
+        "personal_reasons": [
+          "He wants his daughter's school to stay open.",
+          "He saw families struggle without school last time."
+        ],
+        "still_unsure": "Who would check proof at school gates.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_030",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_elise_moreno",
@@ -1736,7 +2664,7 @@
         "occupation": "Swimming lesson coordinator",
         "home": "Crown Harbour",
         "household": "Shares a flat with a friend.",
-        "background": "Swimming lesson coordinator based in Crown Harbour. Shares a flat with a friend.",
+        "background": "Swimming lesson coordinator in Crown Harbour. Coordinates swimming lessons at the public pool. Shares a flat with a friend; learning to cook a few dishes properly.",
         "fixed_experiences": [
           "I matched the lesson register to the lane bookings.",
           "I am learning to cook a few dishes properly instead of many badly."
@@ -1783,11 +2711,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would proof requirements apply to lessons at shared facilities?"
         }
-      ]
+      ],
+      "story": {
+        "age": 28,
+        "gender": "woman",
+        "look": "Athletic, wet hair, lanyard and whistle.",
+        "grew_up": "Grew up in Crown Harbour; competed in swimming as a teenager.",
+        "life": "Coordinates swimming lessons at the public pool. Shares a flat with a friend; learning to cook a few dishes properly.",
+        "covid": "Pools closed for a year and a generation of kids missed learning to swim; she still worries about drowning numbers.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "did not vote",
+        "interests": [
+          "swimming",
+          "cooking",
+          "ocean safety",
+          "yoga"
+        ],
+        "follows": [
+          "pool page",
+          "surf life saving",
+          "Kingstonia Herald",
+          "yoga studio"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, medium length, the odd 🏊."
+        },
+        "personal_reasons": [
+          "Closing pools had real costs for kids.",
+          "She would rather check certificates at the gate than shut again."
+        ],
+        "still_unsure": "How swim lessons work for kids who cannot be vaccinated.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_031",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_benji_lawson",
@@ -1796,7 +2756,7 @@
         "occupation": "University laboratory technician",
         "home": "Crown Harbour",
         "household": "Lives with his partner and a younger sibling.",
-        "background": "University laboratory technician based in Crown Harbour. Lives with his partner and a younger sibling.",
+        "background": "University laboratory technician in Crown Harbour. Lab technician at the Institute. Lives with his partner and his younger sibling. Builds small wooden models in the evenings.",
         "fixed_experiences": [
           "I checked the equipment cupboard before the next teaching session.",
           "I build small wooden models in the evenings."
@@ -1843,11 +2803,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would universities handle staff and students who use several buildings?"
         }
-      ]
+      ],
+      "story": {
+        "age": 29,
+        "gender": "man",
+        "look": "Lab coat over a band t-shirt, safety glasses on his forehead.",
+        "grew_up": "Grew up in Crown Harbour; studied applied science at the Crown Harbour Institute of Technology.",
+        "life": "Lab technician at the Institute. Lives with his partner and his younger sibling. Builds small wooden models in the evenings.",
+        "covid": "Helped set up a testing lab at the Institute in 2020 and worked nights for months.",
+        "vaccine": "Will get it as soon as it is available.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "model building",
+          "science podcasts",
+          "board games",
+          "harbour cycling"
+        ],
+        "follows": [
+          "Crown Harbour Institute of Technology",
+          "science podcasts",
+          "Kingstonia Herald",
+          "model makers"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Concise, precise, sometimes nerdy."
+        },
+        "personal_reasons": [
+          "He saw how fast cases climbed when the testing lab ran nights.",
+          "Prevention is cheaper than cure."
+        ],
+        "still_unsure": "How long immunity lasts and whether boosters would be required.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_032",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_sana_delacroix",
@@ -1856,7 +2848,7 @@
         "occupation": "School canteen coordinator",
         "home": "Kingstonia City",
         "household": "Lives with her spouse and two children.",
-        "background": "School canteen coordinator based in Kingstonia City. Lives with her spouse and two children.",
+        "background": "School canteen coordinator in Kingstonia City. Coordinates the school canteen. Married with two children. Grows chillies in pots and feeds half the neighbourhood.",
         "fixed_experiences": [
           "I counted the lunch orders before asking volunteers to start prep.",
           "I like growing chillies in pots."
@@ -1903,11 +2895,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What instructions would occasional school volunteers be given?"
         }
-      ]
+      ],
+      "story": {
+        "age": 41,
+        "gender": "woman",
+        "look": "Hairnet, apron, wide smile, chillies on the windowsill.",
+        "grew_up": "Grew up in Kingstonia City in a big family.",
+        "life": "Coordinates the school canteen. Married with two children. Grows chillies in pots and feeds half the neighbourhood.",
+        "covid": "Ran a food parcel programme from the closed canteen for families who lost work.",
+        "vaccine": "Will get it with her husband.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "cooking",
+          "chillies",
+          "community events",
+          "church"
+        ],
+        "follows": [
+          "school page",
+          "Kingstonia Herald",
+          "community kitchen",
+          "church group"
+        ],
+        "posting": {
+          "when": "afternoons and evenings",
+          "habits": "Warm, generous, the odd 🌶️."
+        },
+        "personal_reasons": [
+          "She fed families who lost everything last time.",
+          "Kids need school, and school needs to stay open."
+        ],
+        "still_unsure": "How canteen volunteers would be covered.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_033",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_peter_aranda",
@@ -1916,7 +2940,7 @@
         "occupation": "Community sports groundskeeper",
         "home": "New Haven",
         "household": "Lives alone with family nearby.",
-        "background": "Community sports groundskeeper based in New Haven. Lives alone with family nearby.",
+        "background": "Community sports groundskeeper in New Haven. Groundskeeper at the community sports ground; lives alone with family nearby. Loves the quiet before a match.",
         "fixed_experiences": [
           "I repaired a patch of turf before the weekend bookings.",
           "I follow local football and enjoy the quiet before a match."
@@ -1963,11 +2987,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would entry checks work at a public oval with several entrances?"
         }
-      ]
+      ],
+      "story": {
+        "age": 58,
+        "gender": "man",
+        "look": "Weathered, cap, grass-stained boots.",
+        "grew_up": "Grew up in New Haven; played football for the town in his twenties.",
+        "life": "Groundskeeper at the community sports ground; lives alone with family nearby. Loves the quiet before a match.",
+        "covid": "Sports grounds closed and he kept the turf alive for a season nobody played; his brother died in the first wave.",
+        "vaccine": "Will get it; his sister has made him promise.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "football",
+          "turf care",
+          "fishing",
+          "family barbecues"
+        ],
+        "follows": [
+          "New Haven football club",
+          "Daily Kingstonia",
+          "fishing reports",
+          "community sports page"
+        ],
+        "posting": {
+          "when": "early mornings",
+          "habits": "Careful, few words, no emoji."
+        },
+        "personal_reasons": [
+          "He lost his brother last time.",
+          "He wants the grounds full on Saturdays, not locked."
+        ],
+        "still_unsure": "Whether outdoor sports grounds count as public spaces.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_034",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_yara_collins",
@@ -1976,7 +3032,7 @@
         "occupation": "After-school arts facilitator",
         "home": "Kingstonia City",
         "household": "Shares a home with her partner.",
-        "background": "After-school arts facilitator based in Kingstonia City. Shares a home with her partner.",
+        "background": "After-school arts facilitator in Kingstonia City. Runs after-school art workshops and makes pottery that is rarely symmetrical. Lives with her partner.",
         "fixed_experiences": [
           "I washed the brushes before setting up the next workshop.",
           "I enjoy making pottery that is rarely symmetrical."
@@ -2023,11 +3079,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would community activity organisers explain the rules to participants?"
         }
-      ]
+      ],
+      "story": {
+        "age": 35,
+        "gender": "woman",
+        "look": "Paint on her hands, bright scarf, lopsided pottery in the background.",
+        "grew_up": "Grew up in Kingstonia City; studied fine arts at Kingstonia University.",
+        "life": "Runs after-school art workshops and makes pottery that is rarely symmetrical. Lives with her partner.",
+        "covid": "Taught art over video to kids stuck at home and saw how isolated some of them became.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "pottery",
+          "painting",
+          "kids' art",
+          "markets"
+        ],
+        "follows": [
+          "Kingstonia University arts",
+          "artists collective",
+          "Kingstonia Herald",
+          "craft markets"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Dry humour, playful, occasional photo of a wonky bowl."
+        },
+        "personal_reasons": [
+          "Kids were lonely and anxious when everything shut.",
+          "She wants after-school clubs open all year."
+        ],
+        "still_unsure": "How workshops for young children would work under the rule.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_035",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_dylan_fong",
@@ -2036,7 +3124,7 @@
         "occupation": "Campus student services assistant",
         "home": "Crown Harbour",
         "household": "Shares a flat with two friends.",
-        "background": "Campus student services assistant based in Crown Harbour. Shares a flat with two friends.",
+        "background": "Campus student services assistant in Crown Harbour. Student services assistant at the Crown Harbour Institute of Technology while finishing a part-time degree. Shares a flat with two friends.",
         "fixed_experiences": [
           "I helped someone find the correct office before the afternoon queue built up.",
           "I play social badminton after work."
@@ -2083,11 +3171,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Where would students find one reliable explanation of campus access requirements?"
         }
-      ]
+      ],
+      "story": {
+        "age": 23,
+        "gender": "man",
+        "look": "Hoodie, lanyard, badminton racquet in his bag.",
+        "grew_up": "Grew up in New Haven; first in his family at university.",
+        "life": "Student services assistant at the Crown Harbour Institute of Technology while finishing a part-time degree. Shares a flat with two friends.",
+        "covid": "Did his last two years of school online and still feels he missed out; his grandmother died in 2021.",
+        "vaccine": "Will get it as soon as students are eligible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "badminton",
+          "gaming",
+          "campus life",
+          "cheap eats"
+        ],
+        "follows": [
+          "Crown Harbour Institute of Technology",
+          "campus clubs",
+          "gaming streamers",
+          "Kingstonia Herald"
+        ],
+        "posting": {
+          "when": "afternoons and late evenings",
+          "habits": "Plain, casual, the odd 😅."
+        },
+        "personal_reasons": [
+          "He lost his last years of school to lockdown.",
+          "He misses his grandmother."
+        ],
+        "still_unsure": "Whether students would need proof to attend classes.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_036",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "education_sport",
       "candidate_username": "kingstonia_mina_rosales",
@@ -2096,7 +3216,7 @@
         "occupation": "Adult education tutor",
         "home": "New Haven",
         "household": "Lives with her spouse and helps a nearby parent.",
-        "background": "Adult education tutor based in New Haven. Lives with her spouse and helps a nearby parent.",
+        "background": "Adult education tutor in New Haven. Adult education tutor; married and helps care for her mother nearby. Short coastal walk every morning.",
         "fixed_experiences": [
           "I rewrote a lesson handout after noticing an unclear example.",
           "I like making time for a short coastal walk each morning."
@@ -2143,11 +3263,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would official guidance be made understandable for people who find forms difficult?"
         }
-      ]
+      ],
+      "story": {
+        "age": 50,
+        "gender": "woman",
+        "look": "Silver hair, linen shirt, notebook and pen.",
+        "grew_up": "Grew up in New Haven; taught secondary English for twenty years.",
+        "life": "Adult education tutor; married and helps care for her mother nearby. Short coastal walk every morning.",
+        "covid": "Taught literacy classes by phone to adults without internet; her mother was isolated in a care home for months.",
+        "vaccine": "Will get it and take her mother.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "coastal walks",
+          "literature",
+          "community classes",
+          "gardening"
+        ],
+        "follows": [
+          "adult education centre",
+          "Kingstonia Herald",
+          "book clubs",
+          "New Haven community page"
+        ],
+        "posting": {
+          "when": "early mornings",
+          "habits": "Reflective, articulate, full sentences."
+        },
+        "personal_reasons": [
+          "Her mother spent months alone in a care home.",
+          "She thinks clear rules beat sudden closures."
+        ],
+        "still_unsure": "How older people without phones would show proof.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_037",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_leah_mensah",
@@ -2156,7 +3308,7 @@
         "occupation": "Clinic reception coordinator",
         "home": "Kingstonia City",
         "household": "Lives with her partner and their son.",
-        "background": "Clinic reception coordinator based in Kingstonia City. Lives with her partner and their son.",
+        "background": "Clinic reception coordinator in Kingstonia City. Coordinates reception at a busy GP clinic. Lives with her partner and their six-year-old son. Knits while listening to the radio.",
         "fixed_experiences": [
           "I corrected an appointment time before starting the afternoon desk shift.",
           "I enjoy knitting while listening to the radio."
@@ -2202,11 +3354,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would the entry requirement interact with people seeking essential care?"
         }
-      ]
+      ],
+      "story": {
+        "age": 36,
+        "gender": "woman",
+        "look": "Clinic lanyard, knitting bag, warm smile.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Coordinates reception at a busy GP clinic. Lives with her partner and their six-year-old son. Knits while listening to the radio.",
+        "covid": "Fielded hundreds of frightened calls a day at the clinic and saw the waiting room overflow in the second wave.",
+        "vaccine": "On the clinic staff list for the first shipment.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "knitting",
+          "radio",
+          "her son's swimming",
+          "gardening"
+        ],
+        "follows": [
+          "clinic page",
+          "Kingstonia Herald",
+          "knitting circle",
+          "parents page"
+        ],
+        "posting": {
+          "when": "lunchtime and evenings",
+          "habits": "Concise, kind, no emoji."
+        },
+        "personal_reasons": [
+          "She saw the waiting room overflow last time.",
+          "Clinics cannot add staff overnight."
+        ],
+        "still_unsure": "What happens to patients who cannot be vaccinated for medical reasons.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_038",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_tariq_bell",
@@ -2215,7 +3399,7 @@
         "occupation": "Hospital stores assistant",
         "home": "Crown Harbour",
         "household": "Shares a home with his brother.",
-        "background": "Hospital stores assistant based in Crown Harbour. Shares a home with his brother.",
+        "background": "Hospital stores assistant in Crown Harbour. Works in the hospital stores at Crown Harbour regional hospital. Shares a home with his brother. Repairs old bicycles.",
         "fixed_experiences": [
           "I checked a supply delivery against the order sheet.",
           "I enjoy repairing old bicycles."
@@ -2261,11 +3445,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What instructions would hospitals provide to visiting delivery workers?"
         }
-      ]
+      ],
+      "story": {
+        "age": 33,
+        "gender": "man",
+        "look": "Hospital polo, bike helmet, grease on his fingers.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Works in the hospital stores at Crown Harbour regional hospital. Shares a home with his brother. Repairs old bicycles.",
+        "covid": "Rationed masks and gloves when supplies ran out; still angry about how close they came to running dry.",
+        "vaccine": "On the hospital staff list for the first shipment.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "bike repair",
+          "football",
+          "cooking",
+          "hospital gossip"
+        ],
+        "follows": [
+          "hospital staff page",
+          "cycling club",
+          "Daily Kingstonia",
+          "football club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Warm, plain, passes on what he hears around the hospital."
+        },
+        "personal_reasons": [
+          "He saw supplies nearly run out last time.",
+          "Hospitals run on staff, and staff get sick too."
+        ],
+        "still_unsure": "Whether the hospital has enough staff to run vaccination clinics as well.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_039",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_celia_tanaka",
@@ -2274,7 +3490,7 @@
         "occupation": "Community support worker",
         "home": "New Haven",
         "household": "Lives with her spouse and a rescue dog.",
-        "background": "Community support worker based in New Haven. Lives with her spouse and a rescue dog.",
+        "background": "Community support worker in New Haven. Community support worker visiting elderly and disabled clients at home. Married, with a rescue dog. Grows herbs for the kitchen.",
         "fixed_experiences": [
           "I rearranged a visit after checking a client's transport plans.",
           "I like growing herbs for the kitchen."
@@ -2320,11 +3536,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would support workers help someone who has trouble producing proof?"
         }
-      ]
+      ],
+      "story": {
+        "age": 44,
+        "gender": "woman",
+        "look": "Practical boots, rescue dog on a lead, herb pots behind her.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "Community support worker visiting elderly and disabled clients at home. Married, with a rescue dog. Grows herbs for the kitchen.",
+        "covid": "Kept visiting clients in full PPE and saw many of them become isolated and frightened; lost two clients to the virus.",
+        "vaccine": "On the priority list as a support worker.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "herb gardening",
+          "dog training",
+          "community work",
+          "walking"
+        ],
+        "follows": [
+          "disability support network",
+          "New Haven community page",
+          "Kingstonia Herald",
+          "dog trainers group"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Careful, compassionate, measured."
+        },
+        "personal_reasons": [
+          "Her clients are the people most at risk.",
+          "She lost clients last time."
+        ],
+        "still_unsure": "How housebound people would get vaccinated and show proof.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_040",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_malik_jensen",
@@ -2333,7 +3581,7 @@
         "occupation": "Hospital porter",
         "home": "Kingstonia City",
         "household": "Lives with his partner and two children.",
-        "background": "Hospital porter based in Kingstonia City. Lives with his partner and two children.",
+        "background": "Hospital porter in Kingstonia City. Hospital porter at Kingstonia Central; lives with his partner and two children. Goes fishing when the shifts line up. Hears everything in the corridors.",
         "fixed_experiences": [
           "I checked the trolley brakes before taking over the morning run.",
           "I enjoy a quiet fishing trip when shifts line up."
@@ -2379,11 +3627,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would rotating workers be briefed on entry procedures?"
         }
-      ]
+      ],
+      "story": {
+        "age": 46,
+        "gender": "man",
+        "look": "Big build, porter's uniform, laugh lines.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Hospital porter at Kingstonia Central; lives with his partner and two children. Goes fishing when the shifts line up. Hears everything in the corridors.",
+        "covid": "Wheeled patients to intensive care through the worst months; still does not talk much about the second wave.",
+        "vaccine": "On the hospital staff list for the first shipment.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "fishing",
+          "football",
+          "his kids' sport",
+          "barbecues"
+        ],
+        "follows": [
+          "Kingstonia Central staff page",
+          "fishing reports",
+          "Daily Kingstonia",
+          "football club"
+        ],
+        "posting": {
+          "when": "after shifts",
+          "habits": "Dry humour, short, passes on corridor talk."
+        },
+        "personal_reasons": [
+          "He saw intensive care fill up last time.",
+          "Kingstonia Central is already short of nurses."
+        ],
+        "still_unsure": "How the hospital will cope if staff get sick before the vaccine arrives.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_041",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_phoebe_laurent",
@@ -2392,7 +3672,7 @@
         "occupation": "Residential care activities assistant",
         "home": "Crown Harbour",
         "household": "Lives with her sister.",
-        "background": "Residential care activities assistant based in Crown Harbour. Lives with her sister.",
+        "background": "Residential care activities assistant in Crown Harbour. Runs music and craft activities at a residential care home. Lives with her sister. Makes handmade cards for friends who prefer post to messages.",
         "fixed_experiences": [
           "I prepared a music session and checked the room layout.",
           "I make cards for friends who prefer post to messages."
@@ -2438,11 +3718,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What arrangements would care services use for family visitors?"
         }
-      ]
+      ],
+      "story": {
+        "age": 31,
+        "gender": "woman",
+        "look": "Floral dress, guitar case, glitter on her hands.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Runs music and craft activities at a residential care home. Lives with her sister. Makes handmade cards for friends who prefer post to messages.",
+        "covid": "Was locked out of the care home for months while residents were alone; several of the people she sang with every week died.",
+        "vaccine": "On the care-sector priority list.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "music",
+          "card making",
+          "pen pals",
+          "plants"
+        ],
+        "follows": [
+          "care home page",
+          "Kingstonia Herald",
+          "crafters group",
+          "choir"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Plain, gentle, the odd 🎶."
+        },
+        "personal_reasons": [
+          "She lost residents she loved.",
+          "Care homes should never be locked again."
+        ],
+        "still_unsure": "How families visiting care homes would be checked.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_042",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_ravi_almeida",
@@ -2451,7 +3763,7 @@
         "occupation": "Clinic records clerk",
         "home": "New Haven",
         "household": "Lives with his spouse and mother.",
-        "background": "Clinic records clerk based in New Haven. Lives with his spouse and mother.",
+        "background": "Clinic records clerk in New Haven. Records clerk at a New Haven clinic. Lives with his spouse and his mother, who insists on cooking every night. Does jigsaw puzzles after work.",
         "fixed_experiences": [
           "I found a filing error before the next appointment list was printed.",
           "I like doing jigsaw puzzles after work."
@@ -2497,11 +3809,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What information would a venue actually need to see and retain?"
         }
-      ]
+      ],
+      "story": {
+        "age": 40,
+        "gender": "man",
+        "look": "Glasses, neat shirt, jigsaw box under his arm.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "Records clerk at a New Haven clinic. Lives with his spouse and his mother, who insists on cooking every night. Does jigsaw puzzles after work.",
+        "covid": "Filed death certificates in 2021 and still remembers the week the clinic ran out of folders.",
+        "vaccine": "On the clinic staff list.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "jigsaw puzzles",
+          "cricket",
+          "family dinners",
+          "history books"
+        ],
+        "follows": [
+          "clinic page",
+          "Daily Kingstonia",
+          "puzzle swap group",
+          "cricket club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, careful, no emoji."
+        },
+        "personal_reasons": [
+          "He filed too much paperwork for the dead last time.",
+          "His mother is seventy-eight."
+        ],
+        "still_unsure": "How health records would be kept private.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_043",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_june_farouk",
@@ -2510,7 +3854,7 @@
         "occupation": "Disability support scheduler",
         "home": "Kingstonia City",
         "household": "Lives with her partner.",
-        "background": "Disability support scheduler based in Kingstonia City. Lives with her partner.",
+        "background": "Disability support scheduler in Kingstonia City. Schedules disability support workers across the city. Lives with her partner. Birdwatches along the harbour.",
         "fixed_experiences": [
           "I adjusted a roster after a support worker's ferry was cancelled.",
           "I enjoy birdwatching along the harbour."
@@ -2556,11 +3900,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would the policy account for someone who needs another person's help to access a venue?"
         }
-      ]
+      ],
+      "story": {
+        "age": 34,
+        "gender": "woman",
+        "look": "Binoculars, sun hat, roster printouts.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Schedules disability support workers across the city. Lives with her partner. Birdwatches along the harbour.",
+        "covid": "Juggled rosters when half the support workers were isolating and some clients went days without visits.",
+        "vaccine": "Will get it as soon as care staff are eligible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "birdwatching",
+          "hiking",
+          "puzzles",
+          "cooking"
+        ],
+        "follows": [
+          "disability support network",
+          "birdwatchers group",
+          "Kingstonia Herald",
+          "hiking club"
+        ],
+        "posting": {
+          "when": "early mornings and evenings",
+          "habits": "Concise, clear, no emoji."
+        },
+        "personal_reasons": [
+          "Clients went without care when staff got sick.",
+          "A vaccinated workforce keeps rosters filled."
+        ],
+        "still_unsure": "Whether support workers who cannot be vaccinated would lose shifts.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_044",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_oscar_linwood",
@@ -2569,7 +3945,7 @@
         "occupation": "Hospital catering assistant",
         "home": "Crown Harbour",
         "household": "Shares a rental with two colleagues.",
-        "background": "Hospital catering assistant based in Crown Harbour. Shares a rental with two colleagues.",
+        "background": "Hospital catering assistant in Crown Harbour. Catering assistant at the Crown Harbour hospital. Shares a rental with two colleagues. Trying to keep a sourdough starter alive.",
         "fixed_experiences": [
           "I checked the meal labels before loading the service cart.",
           "I am trying to make a reliable sourdough starter."
@@ -2615,11 +3991,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would short-term catering staff receive the right entry guidance?"
         }
-      ]
+      ],
+      "story": {
+        "age": 27,
+        "gender": "man",
+        "look": "Catering whites, hair net, sourdough starter jar at home.",
+        "grew_up": "Grew up on the outer islands.",
+        "life": "Catering assistant at the Crown Harbour hospital. Shares a rental with two colleagues. Trying to keep a sourdough starter alive.",
+        "covid": "Was stuck on the main island during the closures and could not get home for Christmas two years running.",
+        "vaccine": "On the hospital staff list.",
+        "vote_2025": "did not vote",
+        "interests": [
+          "sourdough",
+          "cooking",
+          "island music",
+          "football"
+        ],
+        "follows": [
+          "hospital staff page",
+          "bakers group",
+          "outer-island community page",
+          "Kingstonia Herald"
+        ],
+        "posting": {
+          "when": "after shifts",
+          "habits": "Warm, chatty, the odd 🍞."
+        },
+        "personal_reasons": [
+          "He could not go home to his family for two years.",
+          "Hospital kitchens cannot work short-staffed."
+        ],
+        "still_unsure": "Whether staff travelling back to the outer islands would need proof on the ferry.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_045",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "healthcare_support",
       "candidate_username": "kingstonia_amara_keating",
@@ -2628,7 +4036,7 @@
         "occupation": "Pharmacy stock coordinator",
         "home": "Kingstonia City",
         "household": "Lives with her spouse and teenage daughter.",
-        "background": "Pharmacy stock coordinator based in Kingstonia City. Lives with her spouse and teenage daughter.",
+        "background": "Pharmacy stock coordinator in Kingstonia City. Pharmacy stock coordinator. Married with a teenage daughter. Evening walks with the family.",
         "fixed_experiences": [
           "I matched the stock delivery to the shelf list before opening.",
           "I enjoy evening walks with my family."
@@ -2674,11 +4082,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would people collect essential supplies while the entry requirement is implemented?"
         }
-      ]
+      ],
+      "story": {
+        "age": 45,
+        "gender": "woman",
+        "look": "Pharmacy coat, reading glasses, family photo on her phone case.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Pharmacy stock coordinator. Married with a teenage daughter. Evening walks with the family.",
+        "covid": "Managed shortages of basic medicines and saw people queue round the block during the second wave.",
+        "vaccine": "Will get it with her family.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "family walks",
+          "cooking",
+          "gardening",
+          "TV dramas"
+        ],
+        "follows": [
+          "pharmacy page",
+          "Kingstonia Herald",
+          "parents page",
+          "gardening group"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Careful, factual, no emoji."
+        },
+        "personal_reasons": [
+          "She saw medicine shortages up close.",
+          "She wants her daughter's school years uninterrupted."
+        ],
+        "still_unsure": "How much the vaccine will cost the health system.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_046",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_vera_haddad",
@@ -2687,7 +4127,7 @@
         "occupation": "Backend software developer",
         "home": "Kingstonia City",
         "household": "Lives with her partner and a cat.",
-        "background": "Backend software developer based in Kingstonia City. Lives with her partner and a cat.",
+        "background": "Backend software developer in Kingstonia City. Backend developer at a Kingstonia City software company. Lives with her partner and a cat. Sketches harbour scenes on weekends.",
         "fixed_experiences": [
           "I spent the afternoon tracking a stubborn logging bug.",
           "I enjoy drawing harbour scenes on weekends."
@@ -2733,11 +4173,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Would the proof process require retaining visit histories?"
         }
-      ]
+      ],
+      "story": {
+        "age": 32,
+        "gender": "woman",
+        "look": "Hoodie, laptop stickers, cat on the keyboard.",
+        "grew_up": "Grew up in Crown Harbour; computing degree from the Crown Harbour Institute of Technology.",
+        "life": "Backend developer at a Kingstonia City software company. Lives with her partner and a cat. Sketches harbour scenes on weekends.",
+        "covid": "Worked remotely the whole time and felt guilty about how easy she had it compared with her nurse cousin.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "sketching",
+          "side projects",
+          "cats",
+          "coffee"
+        ],
+        "follows": [
+          "tech meetups",
+          "Crown Harbour Institute of Technology",
+          "Kingstonia Herald",
+          "artists group"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Dry humour, nerdy jokes, occasional 🙃."
+        },
+        "personal_reasons": [
+          "Her cousin worked on the wards while she worked from bed.",
+          "She trusts the data more than the noise."
+        ],
+        "still_unsure": "How a digital proof system would protect privacy.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_047",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_theo_marlow",
@@ -2746,7 +4218,7 @@
         "occupation": "IT support technician",
         "home": "Crown Harbour",
         "household": "Shares a flat with his cousin.",
-        "background": "IT support technician based in Crown Harbour. Shares a flat with his cousin.",
+        "background": "IT support technician in Crown Harbour. IT support technician for a Crown Harbour company. Shares a flat with his cousin. Fixes old game consoles.",
         "fixed_experiences": [
           "I helped a colleague recover a document from the wrong folder.",
           "I like fixing old game consoles."
@@ -2792,11 +4264,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What would someone do if their usual way of showing proof failed?"
         }
-      ]
+      ],
+      "story": {
+        "age": 26,
+        "gender": "man",
+        "look": "Glasses, gaming headset, screwdriver set.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "IT support technician for a Crown Harbour company. Shares a flat with his cousin. Fixes old game consoles.",
+        "covid": "Set up home offices for hundreds of staff in a week and barely slept; his uncle had a long illness.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "did not vote",
+        "interests": [
+          "retro gaming",
+          "console repair",
+          "football",
+          "memes"
+        ],
+        "follows": [
+          "retro gaming group",
+          "tech support memes",
+          "Daily Kingstonia",
+          "football club"
+        ],
+        "posting": {
+          "when": "late evenings",
+          "habits": "Plain, casual, the odd 😂."
+        },
+        "personal_reasons": [
+          "His uncle never fully recovered.",
+          "He would rather check a certificate than go back to remote everything."
+        ],
+        "still_unsure": "Whether the proof app will work on old phones.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_048",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_anika_duarte",
@@ -2805,7 +4309,7 @@
         "occupation": "Software test analyst",
         "home": "Kingstonia City",
         "household": "Lives with her spouse.",
-        "background": "Software test analyst based in Kingstonia City. Lives with her spouse.",
+        "background": "Software test analyst in Kingstonia City. Software test analyst; married. Photographs ordinary street details.",
         "fixed_experiences": [
           "I found an edge case in a form that looked simple at first.",
           "I enjoy taking photographs of ordinary street details."
@@ -2851,11 +4355,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would venues handle unreadable or inconsistent proof?"
         }
-      ]
+      ],
+      "story": {
+        "age": 37,
+        "gender": "woman",
+        "look": "Camera around her neck, short hair, thoughtful expression.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Software test analyst; married. Photographs ordinary street details.",
+        "covid": "Photographed the empty city during lockdown and put together a small exhibition about it afterwards.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "street photography",
+          "testing tools",
+          "cafés",
+          "architecture"
+        ],
+        "follows": [
+          "photography group",
+          "Kingstonia Herald",
+          "tech testers network",
+          "heritage society"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, precise, occasional photo."
+        },
+        "personal_reasons": [
+          "She saw the city empty and does not want to photograph that again.",
+          "She voted Castillo but thinks prevention is common sense."
+        ],
+        "still_unsure": "What edge cases the rule has missed, like people with medical exemptions.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_049",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_jasper_kimani",
@@ -2864,7 +4400,7 @@
         "occupation": "Network maintenance technician",
         "home": "Crown Harbour",
         "household": "Lives with his partner and a young child.",
-        "background": "Network maintenance technician based in Crown Harbour. Lives with his partner and a young child.",
+        "background": "Network maintenance technician in Crown Harbour. Network maintenance technician; lives with his partner and their toddler. Cooks outdoors when the weather cooperates.",
         "fixed_experiences": [
           "I labelled replacement cables before a maintenance visit.",
           "I enjoy cooking outdoors when the weather cooperates."
@@ -2910,11 +4446,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would a proof check work when a venue loses its connection?"
         }
-      ]
+      ],
+      "story": {
+        "age": 38,
+        "gender": "man",
+        "look": "Hi-vis, cable ties in his pocket, toddler on his shoulders on weekends.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Network maintenance technician; lives with his partner and their toddler. Cooks outdoors when the weather cooperates.",
+        "covid": "Kept the island's fibre network running when everyone was online; his partner gave birth while visitors were banned from the ward.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "barbecue",
+          "fatherhood",
+          "fishing",
+          "rugby"
+        ],
+        "follows": [
+          "network engineers group",
+          "Daily Kingstonia",
+          "parents page",
+          "rugby club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Concise, practical."
+        },
+        "personal_reasons": [
+          "His partner gave birth alone because of visitor bans.",
+          "A sick workforce breaks infrastructure."
+        ],
+        "still_unsure": "Whether field technicians need proof to enter private premises.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_050",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_selene_ortiz",
@@ -2923,7 +4491,7 @@
         "occupation": "Accessibility interface designer",
         "home": "Kingstonia City",
         "household": "Shares a home with a friend.",
-        "background": "Accessibility interface designer based in Kingstonia City. Shares a home with a friend.",
+        "background": "Accessibility interface designer in Kingstonia City. Accessibility interface designer. Shares a home with a friend. Restores second-hand lamps.",
         "fixed_experiences": [
           "I revised a screen after watching someone struggle with a small button.",
           "I like restoring second-hand lamps."
@@ -2969,11 +4537,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would the process work for people who cannot use a small screen easily?"
         }
-      ]
+      ],
+      "story": {
+        "age": 30,
+        "gender": "woman",
+        "look": "Colourful hair clip, sketches of app screens.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Accessibility interface designer. Shares a home with a friend. Restores second-hand lamps.",
+        "covid": "Helped redesign the government health app so older people could use it.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "design",
+          "lamp restoration",
+          "accessibility",
+          "markets"
+        ],
+        "follows": [
+          "design community",
+          "accessibility advocates",
+          "Kingstonia Herald",
+          "vintage markets"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Warm, clear, occasional design tip."
+        },
+        "personal_reasons": [
+          "She knows how hard health systems are for people who are already struggling.",
+          "She thinks proof systems can be made fair if designed well."
+        ],
+        "still_unsure": "How people without smartphones will show proof.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_051",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_kofi_hale",
@@ -2982,7 +4582,7 @@
         "occupation": "Small-business IT consultant",
         "home": "New Haven",
         "household": "Lives with his spouse and two children.",
-        "background": "Small-business IT consultant based in New Haven. Lives with his spouse and two children.",
+        "background": "Small-business IT consultant in New Haven. Runs an IT consultancy for small businesses. Married with two children. Keeps a notebook of local walking routes.",
         "fixed_experiences": [
           "I helped a shop simplify a confusing checkout workflow.",
           "I enjoy keeping a notebook of local walking routes."
@@ -3028,11 +4628,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What equipment would a small venue actually need?"
         }
-      ]
+      ],
+      "story": {
+        "age": 42,
+        "gender": "man",
+        "look": "Polo shirt, laptop bag, walking notebook.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "Runs an IT consultancy for small businesses. Married with two children. Keeps a notebook of local walking routes.",
+        "covid": "Helped small shops move online in a week; watched several clients close for good.",
+        "vaccine": "Will get it with his family.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "walking routes",
+          "small business tech",
+          "kids' sport",
+          "cooking"
+        ],
+        "follows": [
+          "New Haven business network",
+          "Daily Kingstonia",
+          "walking group",
+          "parents page"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Careful, practical, no emoji."
+        },
+        "personal_reasons": [
+          "He watched clients go under during lockdowns.",
+          "A rule now costs less than closures later."
+        ],
+        "still_unsure": "How much proof checks will cost small businesses.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_052",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_nadia_sweeney",
@@ -3041,7 +4673,7 @@
         "occupation": "Data operations analyst",
         "home": "Kingstonia City",
         "household": "Lives alone near family.",
-        "background": "Data operations analyst based in Kingstonia City. Lives alone near family.",
+        "background": "Data operations analyst in Kingstonia City. Data operations analyst; lives alone near her parents. Bakes bread when a spreadsheet finally gives her a break.",
         "fixed_experiences": [
           "I traced a duplicate record to a missing import check.",
           "I like baking bread when a spreadsheet problem finally gives me a break."
@@ -3087,11 +4719,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Who would be responsible for correcting a wrong proof record?"
         }
-      ]
+      ],
+      "story": {
+        "age": 34,
+        "gender": "woman",
+        "look": "Messy bun, spreadsheet on screen, flour on her sleeve.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Data operations analyst; lives alone near her parents. Bakes bread when a spreadsheet finally gives her a break.",
+        "covid": "Tracked case data for a government contractor and saw the curves before the public did.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "bread baking",
+          "data",
+          "podcasts",
+          "family lunches"
+        ],
+        "follows": [
+          "data science group",
+          "Kingstonia Herald",
+          "bakers group",
+          "IHO updates"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Dry humour, likes numbers but quotes sources."
+        },
+        "personal_reasons": [
+          "She saw how fast the curves rose last time.",
+          "She trusts early action over waiting."
+        ],
+        "still_unsure": "How well the vaccine stops transmission, which the data do not show yet.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_053",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_louis_raman",
@@ -3100,7 +4764,7 @@
         "occupation": "Computer repair shop technician",
         "home": "Crown Harbour",
         "household": "Lives with his father and younger brother.",
-        "background": "Computer repair shop technician based in Crown Harbour. Lives with his father and younger brother.",
+        "background": "Computer repair shop technician in Crown Harbour. Technician at a computer repair shop. Lives with his father and younger brother. Reads old detective novels.",
         "fixed_experiences": [
           "I cleaned a stubborn keyboard before calling its owner.",
           "I enjoy old detective novels."
@@ -3146,11 +4810,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What options would be available to someone without a suitable phone?"
         }
-      ]
+      ],
+      "story": {
+        "age": 28,
+        "gender": "man",
+        "look": "Repair apron, magnifying lamp, paperback in his back pocket.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Technician at a computer repair shop. Lives with his father and younger brother. Reads old detective novels.",
+        "covid": "The shop boomed fixing laptops for kids learning at home; his grandmother died in a care home.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "did not vote",
+        "interests": [
+          "detective novels",
+          "retro computers",
+          "football",
+          "chess"
+        ],
+        "follows": [
+          "repair shop page",
+          "book clubs",
+          "Daily Kingstonia",
+          "football club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Plain, short."
+        },
+        "personal_reasons": [
+          "He lost his grandmother last time.",
+          "He wants things to stay open this time."
+        ],
+        "still_unsure": "Whether proof will be paper or app.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_054",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "technology_digital",
       "candidate_username": "kingstonia_esme_patel",
@@ -3159,7 +4855,7 @@
         "occupation": "Technical documentation writer",
         "home": "Kingstonia City",
         "household": "Lives with her partner.",
-        "background": "Technical documentation writer based in Kingstonia City. Lives with her partner.",
+        "background": "Technical documentation writer in Kingstonia City. Technical documentation writer; lives with her partner. Sketches maps of places she walks.",
         "fixed_experiences": [
           "I rewrote instructions after spotting a step that had been assumed rather than explained.",
           "I like sketching maps of places I walk."
@@ -3205,11 +4901,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Where would the official instructions identify details that are still undecided?"
         }
-      ]
+      ],
+      "story": {
+        "age": 36,
+        "gender": "woman",
+        "look": "Notebook, fountain pen, hand-drawn maps on the wall.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Technical documentation writer; lives with her partner. Sketches maps of places she walks.",
+        "covid": "Rewrote public health instructions for a government contractor so ordinary people could follow them.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "map sketching",
+          "walking",
+          "clear writing",
+          "cafés"
+        ],
+        "follows": [
+          "writers group",
+          "Kingstonia Herald",
+          "walking group",
+          "Kingstonia University"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, very clear, no jargon."
+        },
+        "personal_reasons": [
+          "Confusing rules cost lives last time.",
+          "She wants simple, clear rules this time."
+        ],
+        "still_unsure": "How exemptions will be explained clearly.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_055",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_tomas_adeyemi",
@@ -3218,7 +4946,7 @@
         "occupation": "Mango orchard manager",
         "home": "Outer islands",
         "household": "Lives with his spouse and two children.",
-        "background": "Mango orchard manager based in Outer islands. Lives with his spouse and two children.",
+        "background": "Mango orchard manager in Outer islands. Manages a mango orchard. Married with two children. Listens to cricket while repairing tools.",
         "fixed_experiences": [
           "I checked the packing crates before the next market shipment.",
           "I enjoy listening to cricket while repairing tools."
@@ -3265,11 +4993,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would workers travelling by ferry show proof consistently?"
         }
-      ]
+      ],
+      "story": {
+        "age": 51,
+        "gender": "man",
+        "look": "Wide hat, work boots, cricket radio in his ute.",
+        "grew_up": "Grew up on the outer islands; third generation on the orchard.",
+        "life": "Manages a mango orchard. Married with two children. Listens to cricket while repairing tools.",
+        "covid": "Could not get crops to market when the ferries stopped and lost most of a season; a neighbour died alone before help arrived.",
+        "vaccine": "Will get it; worried about getting it on the outer islands.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "cricket",
+          "mangoes",
+          "tool repair",
+          "island life"
+        ],
+        "follows": [
+          "outer-island community page",
+          "growers association",
+          "Daily Kingstonia",
+          "cricket club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Concise, practical."
+        },
+        "personal_reasons": [
+          "The outer islands have one small clinic.",
+          "Ferry shutdowns nearly ruined his business."
+        ],
+        "still_unsure": "Whether vaccines will reach the outer islands as fast as the main island.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_056",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_freya_castillo",
@@ -3278,7 +5038,7 @@
         "occupation": "Fishing cooperative bookkeeper",
         "home": "New Haven",
         "household": "Lives with her partner and their dog.",
-        "background": "Fishing cooperative bookkeeper based in New Haven. Lives with her partner and their dog.",
+        "background": "Fishing cooperative bookkeeper in New Haven. Bookkeeper for the fishing cooperative. Lives with her partner and their dog. Grows flowers in reused containers.",
         "fixed_experiences": [
           "I reconciled a landing invoice before the cooperative meeting.",
           "I enjoy growing flowers in reused containers."
@@ -3325,11 +5085,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would the cooperative keep visiting crews informed about entry rules?"
         }
-      ]
+      ],
+      "story": {
+        "age": 39,
+        "gender": "woman",
+        "look": "Calculator, sun hat, flowers in old paint tins.",
+        "grew_up": "Grew up in New Haven in a fishing family.",
+        "life": "Bookkeeper for the fishing cooperative. Lives with her partner and their dog. Grows flowers in reused containers.",
+        "covid": "Kept the cooperative solvent when export markets closed; her father caught the virus at sea.",
+        "vaccine": "Will get it with her partner.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "flowers",
+          "fishing community",
+          "dog walks",
+          "Mango & Spice Festival"
+        ],
+        "follows": [
+          "fishing cooperative",
+          "New Haven community page",
+          "Kingstonia Herald",
+          "garden club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Warm, plain, occasional 🌼."
+        },
+        "personal_reasons": [
+          "Her father nearly died at sea.",
+          "Fishing families cannot afford another closure."
+        ],
+        "still_unsure": "How crews at sea for weeks would show proof.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_057",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_arun_blake",
@@ -3338,7 +5130,7 @@
         "occupation": "Electrical maintenance contractor",
         "home": "Crown Harbour",
         "household": "Lives with his spouse and daughter.",
-        "background": "Electrical maintenance contractor based in Crown Harbour. Lives with his spouse and daughter.",
+        "background": "Electrical maintenance contractor in Crown Harbour. Electrical maintenance contractor. Married with a daughter. Makes small wooden shelves for the house.",
         "fixed_experiences": [
           "I checked the parts list before visiting a maintenance site.",
           "I like making small wooden shelves for the house."
@@ -3385,11 +5177,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Would contractors need a different check at each worksite?"
         }
-      ]
+      ],
+      "story": {
+        "age": 47,
+        "gender": "man",
+        "look": "Electrician's belt, safety glasses, wood shavings on his shirt.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Electrical maintenance contractor. Married with a daughter. Makes small wooden shelves for the house.",
+        "covid": "Worked on emergency hospital wards and quarantine sites; his wife lost her retail job for a year.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "woodwork",
+          "rugby",
+          "fishing",
+          "family"
+        ],
+        "follows": [
+          "electricians network",
+          "Daily Kingstonia",
+          "rugby club",
+          "woodworking group"
+        ],
+        "posting": {
+          "when": "weekend mornings",
+          "habits": "Careful, practical, no emoji."
+        },
+        "personal_reasons": [
+          "He wired emergency wards and saw them fill.",
+          "His family lost a year of income last time."
+        ],
+        "still_unsure": "Whether contractors would need proof for every job site.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_058",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_bianca_nasser",
@@ -3398,7 +5222,7 @@
         "occupation": "Fruit packing supervisor",
         "home": "New Haven",
         "household": "Lives with her sister and nephew.",
-        "background": "Fruit packing supervisor based in New Haven. Lives with her sister and nephew.",
+        "background": "Fruit packing supervisor in New Haven. Supervises a fruit packing shed. Lives with her sister and nephew. Sews simple bags for friends and hears every rumour on the packing line.",
         "fixed_experiences": [
           "I changed the packing order when a collection truck arrived early.",
           "I enjoy sewing simple bags for friends."
@@ -3445,11 +5269,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would new seasonal workers learn the proof procedure?"
         }
-      ]
+      ],
+      "story": {
+        "age": 38,
+        "gender": "woman",
+        "look": "Hairnet, packing gloves, sewing machine at home.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "Supervises a fruit packing shed. Lives with her sister and nephew. Sews simple bags for friends and hears every rumour on the packing line.",
+        "covid": "Packing sheds stayed open but crews got sick in waves; she worked double shifts for months.",
+        "vaccine": "Will get it with her sister.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "sewing",
+          "Mango & Spice Festival",
+          "gossip",
+          "cooking"
+        ],
+        "follows": [
+          "packing workers group",
+          "New Haven community page",
+          "Daily Kingstonia",
+          "sewing group"
+        ],
+        "posting": {
+          "when": "after shifts",
+          "habits": "Dry humour, chatty, passes on what the crew says."
+        },
+        "personal_reasons": [
+          "Sick crews nearly shut the shed every winter.",
+          "She would rather everyone be vaccinated than work double shifts again."
+        ],
+        "still_unsure": "How seasonal workers from other islands would be covered.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_059",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_gareth_mokoena",
@@ -3458,7 +5314,7 @@
         "occupation": "Refrigeration repair technician",
         "home": "Kingstonia City",
         "household": "Lives with his partner.",
-        "background": "Refrigeration repair technician based in Kingstonia City. Lives with his partner.",
+        "background": "Refrigeration repair technician in Kingstonia City. Refrigeration repair technician. Lives with his partner. Shore fishing before the city gets busy.",
         "fixed_experiences": [
           "I checked a replacement thermostat before the afternoon job.",
           "I enjoy shore fishing before the city gets busy."
@@ -3505,11 +5361,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would urgent repair calls be handled at premises with entry checks?"
         }
-      ]
+      ],
+      "story": {
+        "age": 44,
+        "gender": "man",
+        "look": "Overalls, toolbox, fishing rod in the truck.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Refrigeration repair technician. Lives with his partner. Shore fishing before the city gets busy.",
+        "covid": "Kept vaccine and food freezers running at the hospital and supermarkets; was proud of that work.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "fishing",
+          "refrigeration",
+          "football",
+          "barbecue"
+        ],
+        "follows": [
+          "trades network",
+          "fishing reports",
+          "Daily Kingstonia",
+          "football club"
+        ],
+        "posting": {
+          "when": "early mornings",
+          "habits": "Plain, short."
+        },
+        "personal_reasons": [
+          "He kept the hospital freezers running and saw how close things got.",
+          "He wants the vaccine stored and delivered properly."
+        ],
+        "still_unsure": "Whether there are enough cold-storage freezers for the shipment.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_060",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_lucia_hart",
@@ -3518,7 +5406,7 @@
         "occupation": "Spice grower",
         "home": "Inland main island",
         "household": "Lives with her spouse and helps an older neighbour.",
-        "background": "Spice grower based in Inland main island. Lives with her spouse and helps an older neighbour.",
+        "background": "Spice grower in Inland main island. Spice grower; married and helps an older neighbour. Reads travel books on rainy evenings.",
         "fixed_experiences": [
           "I checked the drying racks after a change in the weather.",
           "I like reading travel books on rainy evenings."
@@ -3565,11 +5453,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What support would be available for people a long way from vaccination services?"
         }
-      ]
+      ],
+      "story": {
+        "age": 53,
+        "gender": "woman",
+        "look": "Straw hat, spice-stained fingers, travel book.",
+        "grew_up": "Grew up inland on the main island; her family has grown spices for generations.",
+        "life": "Spice grower; married and helps an older neighbour. Reads travel books on rainy evenings.",
+        "covid": "Her farm was isolated and the nearest clinic was an hour away; her neighbour nearly died waiting for an ambulance.",
+        "vaccine": "Will get it and drive her neighbour to the clinic.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "spice growing",
+          "travel books",
+          "Mango & Spice Festival",
+          "weather"
+        ],
+        "follows": [
+          "growers association",
+          "Mango & Spice Festival",
+          "Kingstonia Herald",
+          "weather service"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, unhurried, full sentences."
+        },
+        "personal_reasons": [
+          "Rural areas are far from hospitals.",
+          "Her neighbour nearly died waiting for help."
+        ],
+        "still_unsure": "How inland and rural people will get to vaccination clinics.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_061",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_noah_perera",
@@ -3578,7 +5498,7 @@
         "occupation": "Boat engine mechanic",
         "home": "Crown Harbour",
         "household": "Shares a home with his brother.",
-        "background": "Boat engine mechanic based in Crown Harbour. Shares a home with his brother.",
+        "background": "Boat engine mechanic in Crown Harbour. Boat engine mechanic; shares a home and workshop with his brother. Restores old tools rather than replacing them.",
         "fixed_experiences": [
           "I cleaned the workbench after testing a repaired pump.",
           "I enjoy restoring old tools rather than replacing them."
@@ -3625,11 +5545,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would visiting specialists be checked when they move between marine worksites?"
         }
-      ]
+      ],
+      "story": {
+        "age": 35,
+        "gender": "man",
+        "look": "Oil-stained hands, cap, outboard motor in the background.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Boat engine mechanic; shares a home and workshop with his brother. Restores old tools rather than replacing them.",
+        "covid": "Fishing boats kept running and he kept them running; his father had a long illness and never went back to work.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "tool restoration",
+          "boats",
+          "fishing",
+          "rugby"
+        ],
+        "follows": [
+          "boat owners group",
+          "Daily Kingstonia",
+          "fishing reports",
+          "rugby club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Concise, practical."
+        },
+        "personal_reasons": [
+          "His father never fully recovered.",
+          "A sick crew means a boat stays in port."
+        ],
+        "still_unsure": "How it applies to fishing crews on long trips.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_062",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_dalia_reid",
@@ -3638,7 +5590,7 @@
         "occupation": "Construction site administrator",
         "home": "Kingstonia City",
         "household": "Lives with her partner and son.",
-        "background": "Construction site administrator based in Kingstonia City. Lives with her partner and son.",
+        "background": "Construction site administrator in Kingstonia City. Construction site administrator; lives with her partner and their son. Makes elaborate sandwiches for simple picnics. Hears every rumour on site.",
         "fixed_experiences": [
           "I corrected the delivery gate on a contractor's booking.",
           "I enjoy making elaborate sandwiches for simple picnics."
@@ -3685,11 +5637,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Who would decide which documents a site accepts as proof?"
         }
-      ]
+      ],
+      "story": {
+        "age": 41,
+        "gender": "woman",
+        "look": "Hard hat, clipboard, picnic basket on weekends.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Construction site administrator; lives with her partner and their son. Makes elaborate sandwiches for simple picnics. Hears every rumour on site.",
+        "covid": "Sites shut for months and her partner lost his job; they got through on her savings.",
+        "vaccine": "Will get it with her family.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "picnics",
+          "cooking",
+          "her son's football",
+          "site gossip"
+        ],
+        "follows": [
+          "construction workers group",
+          "Kingstonia Herald",
+          "parents page",
+          "picnic spots"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Warm, chatty, passes on what the crews say."
+        },
+        "personal_reasons": [
+          "Site closures cost her family dearly.",
+          "She wants the commuter rail and other projects to keep going."
+        ],
+        "still_unsure": "How construction workers on site would show proof.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_063",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "agriculture_trades",
       "candidate_username": "kingstonia_finn_okoro",
@@ -3698,7 +5682,7 @@
         "occupation": "Agricultural equipment fitter",
         "home": "Outer islands",
         "household": "Lives with his spouse.",
-        "background": "Agricultural equipment fitter based in Outer islands. Lives with his spouse.",
+        "background": "Agricultural equipment fitter in Outer islands. Agricultural equipment fitter travelling between islands. Married. Collects tide charts and old maps.",
         "fixed_experiences": [
           "I packed the tools carefully before the next inter-island job.",
           "I keep a small collection of tide charts and old maps."
@@ -3745,11 +5729,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What would workers do if a proof problem arose just before the last ferry?"
         }
-      ]
+      ],
+      "story": {
+        "age": 49,
+        "gender": "man",
+        "look": "Overalls, toolbox, tide chart in his pocket.",
+        "grew_up": "Grew up on the outer islands.",
+        "life": "Agricultural equipment fitter travelling between islands. Married. Collects tide charts and old maps.",
+        "covid": "Was stranded on an outer island for six weeks when the ferries stopped.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "tide charts",
+          "old maps",
+          "farm machinery",
+          "fishing"
+        ],
+        "follows": [
+          "outer-island community page",
+          "growers association",
+          "Daily Kingstonia",
+          "map collectors"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Careful, few words."
+        },
+        "personal_reasons": [
+          "He was stranded when the islands were cut off.",
+          "Outer islands depend on the ferries staying open."
+        ],
+        "still_unsure": "Whether proof will be needed to travel between islands.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_064",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_naomi_pierce",
@@ -3758,7 +5774,7 @@
         "occupation": "Accounts payable clerk",
         "home": "Kingstonia City",
         "household": "Lives with her spouse and two children.",
-        "background": "Accounts payable clerk based in Kingstonia City. Lives with her spouse and two children.",
+        "background": "Accounts payable clerk in Kingstonia City. Accounts payable clerk; married with two children. Plays social netball.",
         "fixed_experiences": [
           "I found an invoice entered twice before the payment run.",
           "I enjoy playing social netball."
@@ -3805,11 +5821,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would workplaces avoid contradictory instructions for staff?"
         }
-      ]
+      ],
+      "story": {
+        "age": 39,
+        "gender": "woman",
+        "look": "Office lanyard, netball bib on Tuesdays.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Accounts payable clerk; married with two children. Plays social netball.",
+        "covid": "Juggled working from home with two kids learning online at the kitchen table.",
+        "vaccine": "Will get it with her husband.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "netball",
+          "family",
+          "cooking",
+          "reality TV"
+        ],
+        "follows": [
+          "netball league",
+          "Kingstonia Herald",
+          "parents page",
+          "cooking shows"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Dry humour, short."
+        },
+        "personal_reasons": [
+          "Home-schooling two kids nearly broke her.",
+          "She wants schools open."
+        ],
+        "still_unsure": "How proof works for children at school.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_065",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_idris_vaughan",
@@ -3818,7 +5866,7 @@
         "occupation": "Community hall booking officer",
         "home": "New Haven",
         "household": "Lives with his partner.",
-        "background": "Community hall booking officer based in New Haven. Lives with his partner.",
+        "background": "Community hall booking officer in New Haven. Community hall booking officer; lives with his partner. Plays guitar badly but enthusiastically.",
         "fixed_experiences": [
           "I rearranged a room booking so two groups could both use the hall.",
           "I like playing guitar badly but enthusiastically."
@@ -3865,11 +5913,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Who would handle proof checks at a hall used by several independent groups?"
         }
-      ]
+      ],
+      "story": {
+        "age": 37,
+        "gender": "man",
+        "look": "Booking diary, guitar, friendly grin.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "Community hall booking officer; lives with his partner. Plays guitar badly but enthusiastically.",
+        "covid": "Cancelled every booking for a year, including weddings and funerals, and found that the hardest part of the job.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "guitar",
+          "community events",
+          "music",
+          "football"
+        ],
+        "follows": [
+          "New Haven community page",
+          "Kingstonia Herald",
+          "musicians group",
+          "football club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Plain, cheerful."
+        },
+        "personal_reasons": [
+          "He cancelled funerals last time.",
+          "He wants the hall full of life, not empty."
+        ],
+        "still_unsure": "Whether community halls need to check every event.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_066",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_eva_rahman",
@@ -3878,7 +5958,7 @@
         "occupation": "Customer service team leader",
         "home": "Kingstonia City",
         "household": "Shares a home with her mother.",
-        "background": "Customer service team leader based in Kingstonia City. Shares a home with her mother.",
+        "background": "Customer service team leader in Kingstonia City. Customer service team leader; shares a home with her mother. Walks to a different café on weekends.",
         "fixed_experiences": [
           "I rewrote a confusing handover note before the late shift arrived.",
           "I like walking to a different cafe on weekends."
@@ -3925,11 +6005,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What would staff be told to say when someone disputes the entry condition?"
         }
-      ]
+      ],
+      "story": {
+        "age": 33,
+        "gender": "woman",
+        "look": "Headset, neat ponytail, café loyalty cards in her wallet.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Customer service team leader; shares a home with her mother. Walks to a different café on weekends.",
+        "covid": "Her team took calls from people who had lost jobs and loved ones; her father died in the first wave.",
+        "vaccine": "Will get it and take her mother.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "cafés",
+          "old films",
+          "walking",
+          "her mum's cooking"
+        ],
+        "follows": [
+          "Kingstonia Herald",
+          "café reviews",
+          "film club",
+          "Kingstonia City events"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, kind."
+        },
+        "personal_reasons": [
+          "She lost her father last time.",
+          "She heard too many stories on the phone."
+        ],
+        "still_unsure": "How call centres and offices will check proof.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_067",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_mateo_fraser",
@@ -3938,7 +6050,7 @@
         "occupation": "Office facilities coordinator",
         "home": "Crown Harbour",
         "household": "Lives with his spouse and a dog.",
-        "background": "Office facilities coordinator based in Crown Harbour. Lives with his spouse and a dog.",
+        "background": "Office facilities coordinator in Crown Harbour. Office facilities coordinator; married with a dog. Follows local sailing results.",
         "fixed_experiences": [
           "I checked a broken door closer before the building filled up.",
           "I enjoy following local sailing results."
@@ -3985,11 +6097,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would checks work in a building occupied by several employers?"
         }
-      ]
+      ],
+      "story": {
+        "age": 44,
+        "gender": "man",
+        "look": "Facilities shirt, keys on a carabiner, dog lead.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Office facilities coordinator; married with a dog. Follows local sailing results.",
+        "covid": "Set up the office for social distancing three times and watched it sit empty for a year.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "sailing",
+          "Regatta Week",
+          "dog walks",
+          "DIY"
+        ],
+        "follows": [
+          "sailing club",
+          "Regatta Week",
+          "Daily Kingstonia",
+          "facilities managers group"
+        ],
+        "posting": {
+          "when": "lunchtime",
+          "habits": "Concise, practical."
+        },
+        "personal_reasons": [
+          "Empty offices kill the cafés and shops around them.",
+          "He voted Castillo but thinks this one is about health, not politics."
+        ],
+        "still_unsure": "Who checks proof in shared office buildings.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_068",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_hazel_ibrahim",
@@ -3998,7 +6142,7 @@
         "occupation": "Library services assistant",
         "home": "New Haven",
         "household": "Lives with her partner and daughter.",
-        "background": "Library services assistant based in New Haven. Lives with her partner and daughter.",
+        "background": "Library services assistant in New Haven. Library services assistant; lives with her partner and their ten-year-old daughter. Reads for an hour after dinner.",
         "fixed_experiences": [
           "I helped someone find a large-print edition before reshelving returns.",
           "I like making a quiet hour for reading after dinner."
@@ -4045,11 +6189,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would a library assist someone who cannot easily display proof?"
         }
-      ]
+      ],
+      "story": {
+        "age": 40,
+        "gender": "woman",
+        "look": "Library lanyard, cardigan, daughter's drawings on her desk.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "Library services assistant; lives with her partner and their ten-year-old daughter. Reads for an hour after dinner.",
+        "covid": "Ran a doorstep book delivery service for housebound readers during lockdown.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "reading",
+          "library events",
+          "family",
+          "gardening"
+        ],
+        "follows": [
+          "New Haven library",
+          "Kingstonia Herald",
+          "book clubs",
+          "parents page"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Warm, gentle."
+        },
+        "personal_reasons": [
+          "Housebound readers were the loneliest people she met last time.",
+          "Libraries should stay open for everyone."
+        ],
+        "still_unsure": "Whether libraries will need to check proof at the door.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_069",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_seth_alvarez",
@@ -4058,7 +6234,7 @@
         "occupation": "Community garden coordinator",
         "home": "Kingstonia City",
         "household": "Shares a flat with two friends.",
-        "background": "Community garden coordinator based in Kingstonia City. Shares a flat with two friends.",
+        "background": "Community garden coordinator in Kingstonia City. Community garden coordinator; shares a flat with two friends. Tries unfamiliar vegetables in familiar recipes.",
         "fixed_experiences": [
           "I repaired a watering hose before the next volunteer session.",
           "I enjoy trying unfamiliar vegetables in familiar recipes."
@@ -4105,11 +6281,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would an open community garden be treated under the public-space policy?"
         }
-      ]
+      ],
+      "story": {
+        "age": 29,
+        "gender": "man",
+        "look": "Muddy boots, sun hat, wheelbarrow.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Community garden coordinator; shares a flat with two friends. Tries unfamiliar vegetables in familiar recipes.",
+        "covid": "The community garden became a lifeline for isolated people, and he ran it with volunteers on staggered shifts.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "gardening",
+          "cooking",
+          "sustainability",
+          "volunteering"
+        ],
+        "follows": [
+          "community gardens network",
+          "Kingstonia Herald",
+          "sustainability groups",
+          "farmers market"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Careful, friendly."
+        },
+        "personal_reasons": [
+          "The garden was the only place some people saw others last time.",
+          "Protecting each other is what community means."
+        ],
+        "still_unsure": "Whether outdoor community spaces count as public spaces.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_070",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_rina_beaumont",
@@ -4118,7 +6326,7 @@
         "occupation": "Insurance claims assistant",
         "home": "Crown Harbour",
         "household": "Lives with her spouse and mother-in-law.",
-        "background": "Insurance claims assistant based in Crown Harbour. Lives with her spouse and mother-in-law.",
+        "background": "Insurance claims assistant in Crown Harbour. Insurance claims assistant; lives with her spouse and her mother-in-law, who always wins family crosswords.",
         "fixed_experiences": [
           "I called someone back after finding a missing page in their form.",
           "I enjoy doing crosswords with family."
@@ -4165,11 +6373,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Where could someone challenge an incorrect refusal of entry?"
         }
-      ]
+      ],
+      "story": {
+        "age": 43,
+        "gender": "woman",
+        "look": "Office blouse, reading glasses, crossword book.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Insurance claims assistant; lives with her spouse and her mother-in-law, who always wins family crosswords.",
+        "covid": "Processed business interruption claims for months and saw how many small businesses went under.",
+        "vaccine": "Will get it with her family.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "crosswords",
+          "family",
+          "TV dramas",
+          "baking"
+        ],
+        "follows": [
+          "Kingstonia Herald",
+          "crossword club",
+          "Crown Harbour community page",
+          "baking group"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Dry humour, passes on what she hears at work."
+        },
+        "personal_reasons": [
+          "She saw the business claims pile up last time.",
+          "Her mother-in-law is eighty."
+        ],
+        "still_unsure": "Whether insurers will treat vaccination status differently.",
+        "gossip": true
+      }
     },
     {
       "persona_id": "yes_071",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_ellis_qureshi",
@@ -4178,7 +6418,7 @@
         "occupation": "Council maintenance scheduler",
         "home": "New Haven",
         "household": "Lives with his partner and young child.",
-        "background": "Council maintenance scheduler based in New Haven. Lives with his partner and young child.",
+        "background": "Council maintenance scheduler in New Haven. Council maintenance scheduler; lives with his partner and their toddler. Restores scratched furniture.",
         "fixed_experiences": [
           "I moved a maintenance booking after checking that the crew could reach the site.",
           "I like restoring scratched furniture."
@@ -4225,11 +6465,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How would different public facilities receive consistent implementation guidance?"
         }
-      ]
+      ],
+      "story": {
+        "age": 34,
+        "gender": "man",
+        "look": "Council polo, hard hat, toddler's toy truck in the car.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "Council maintenance scheduler; lives with his partner and their toddler. Restores scratched furniture.",
+        "covid": "Kept council crews working on essential repairs with half the staff isolating.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "furniture restoration",
+          "fatherhood",
+          "football",
+          "fishing"
+        ],
+        "follows": [
+          "council page",
+          "Daily Kingstonia",
+          "DIY groups",
+          "parents page"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Plain, practical."
+        },
+        "personal_reasons": [
+          "Half the crew isolating meant repairs waited for weeks.",
+          "He wants his toddler to grow up without lockdowns."
+        ],
+        "still_unsure": "Whether council workers will need proof to work in public spaces.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_072",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "office_community",
       "candidate_username": "kingstonia_camila_ford",
@@ -4238,7 +6510,7 @@
         "occupation": "Payroll administrator",
         "home": "Kingstonia City",
         "household": "Lives alone with family nearby.",
-        "background": "Payroll administrator based in Kingstonia City. Lives alone with family nearby.",
+        "background": "Payroll administrator in Kingstonia City. Payroll administrator; lives alone with family nearby. Collects recipes from friends.",
         "fixed_experiences": [
           "I checked a shift allowance before closing the payroll file.",
           "I enjoy collecting recipes from friends."
@@ -4285,11 +6557,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What would employers need to explain to staff before introducing checks?"
         }
-      ]
+      ],
+      "story": {
+        "age": 38,
+        "gender": "woman",
+        "look": "Neat cardigan, recipe notebook.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Payroll administrator; lives alone with family nearby. Collects recipes from friends.",
+        "covid": "Processed redundancies at her firm and lost two colleagues to the virus.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "recipes",
+          "cooking",
+          "family dinners",
+          "walking"
+        ],
+        "follows": [
+          "recipe groups",
+          "Kingstonia Herald",
+          "Kingstonia City events",
+          "walking group"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, careful."
+        },
+        "personal_reasons": [
+          "She processed redundancies and lost colleagues.",
+          "She thinks prevention protects jobs."
+        ],
+        "still_unsure": "Whether employers will pay staff to get vaccinated.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_073",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "medical_public_health",
       "candidate_username": "kingstonia_lena_armitage",
@@ -4298,7 +6602,7 @@
         "occupation": "Community physician",
         "home": "Kingstonia City",
         "household": "Lives with her partner and a teenage child.",
-        "background": "Community physician based in Kingstonia City. Lives with her partner and a teenage child.",
+        "background": "Community physician in Kingstonia City. Community physician at a city practice; lives with her partner and a teenage child. Walks along the waterfront after clinic.",
         "fixed_experiences": [
           "I finished the clinic notes before taking a short walk home.",
           "I enjoy quiet walks along the waterfront."
@@ -4343,11 +6647,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How will guidance distinguish established vaccine findings from unresolved questions?"
         }
-      ]
+      ],
+      "story": {
+        "age": 49,
+        "gender": "woman",
+        "look": "Stethoscope, short grey hair, running shoes.",
+        "grew_up": "Grew up in Kingstonia City; trained in medicine overseas and came home.",
+        "life": "Community physician at a city practice; lives with her partner and a teenage child. Walks along the waterfront after clinic.",
+        "covid": "Worked on the COVID ward at Kingstonia Central during the second wave and still remembers the patients she could not save.",
+        "vaccine": "On the clinician list for the first shipment.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "waterfront walks",
+          "reading",
+          "running",
+          "cooking"
+        ],
+        "follows": [
+          "Medical Officers Union of Kingstonia",
+          "IHO updates",
+          "Kingstonia Herald",
+          "running club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Concise, careful with claims, cites sources."
+        },
+        "personal_reasons": [
+          "She worked the wards last time.",
+          "Early vaccination protects a small health system."
+        ],
+        "still_unsure": "How long protection lasts; she says so openly.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_074",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "medical_public_health",
       "candidate_username": "kingstonia_yusuf_laurent",
@@ -4356,7 +6692,7 @@
         "occupation": "Public health researcher",
         "home": "Crown Harbour",
         "household": "Lives with his spouse.",
-        "background": "Public health researcher based in Crown Harbour. Lives with his spouse.",
+        "background": "Public health researcher in Crown Harbour. Public health researcher; married. Grows tomatoes in a small courtyard.",
         "fixed_experiences": [
           "I checked the wording of a research summary before sending it for review.",
           "I like growing tomatoes in a small courtyard."
@@ -4401,11 +6737,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. How will public guidance explain the remaining uncertainty about transmission prevention?"
         }
-      ]
+      ],
+      "story": {
+        "age": 52,
+        "gender": "man",
+        "look": "Glasses, tweed jacket, tomatoes in the courtyard.",
+        "grew_up": "Grew up in Crown Harbour; studied public health overseas.",
+        "life": "Public health researcher; married. Grows tomatoes in a small courtyard.",
+        "covid": "Modelled hospital capacity for the health ministry during the pandemic.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "gardening",
+          "research",
+          "walking",
+          "classical music"
+        ],
+        "follows": [
+          "IHO updates",
+          "public health journals",
+          "Kingstonia Herald",
+          "Medical Officers Union of Kingstonia"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Warm, measured, explains uncertainty."
+        },
+        "personal_reasons": [
+          "He modelled the hospital crisis last time.",
+          "Capacity is the constraint for a small island."
+        ],
+        "still_unsure": "How much the vaccine reduces transmission, which the trials have not settled.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_075",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "law_policy",
       "candidate_username": "kingstonia_helena_ward",
@@ -4414,7 +6782,7 @@
         "occupation": "Administrative law researcher",
         "home": "Kingstonia City",
         "household": "Lives with her partner and a dog.",
-        "background": "Administrative law researcher based in Kingstonia City. Lives with her partner and a dog.",
+        "background": "Administrative law researcher in Kingstonia City. Administrative law researcher; lives with her partner and a dog. Loves old maps and coastal walks.",
         "fixed_experiences": [
           "I checked a citation twice before closing a library book.",
           "I enjoy old maps and coastal walks."
@@ -4460,11 +6828,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Which implementation details have been formally decided and published?"
         }
-      ]
+      ],
+      "story": {
+        "age": 45,
+        "gender": "woman",
+        "look": "Blazer, old map tube, dog lead.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Administrative law researcher; lives with her partner and a dog. Loves old maps and coastal walks.",
+        "covid": "Wrote analyses of emergency powers during the pandemic and still worries about overreach.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "old maps",
+          "coastal walks",
+          "law",
+          "history"
+        ],
+        "follows": [
+          "Kingstonia University law",
+          "Kingstonia Herald",
+          "map collectors",
+          "civil liberties forum"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Careful, precise, separates law from opinion."
+        },
+        "personal_reasons": [
+          "A clear democratic rule is better than emergency powers.",
+          "She voted Castillo but supports a defined, legislated requirement."
+        ],
+        "still_unsure": "Whether there will be a sunset clause.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_076",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "law_policy",
       "candidate_username": "kingstonia_nabil_avery",
@@ -4473,7 +6873,7 @@
         "occupation": "Public policy analyst",
         "home": "Crown Harbour",
         "household": "Shares a home with his spouse.",
-        "background": "Public policy analyst based in Crown Harbour. Shares a home with his spouse.",
+        "background": "Public policy analyst in Crown Harbour. Public policy analyst; married. Builds small model boats.",
         "fixed_experiences": [
           "I revised a policy summary to separate a proposal from an adopted rule.",
           "I like building small model boats."
@@ -4519,11 +6919,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What review process would apply to disputed implementation decisions?"
         }
-      ]
+      ],
+      "story": {
+        "age": 40,
+        "gender": "man",
+        "look": "Rolled sleeves, model boat on his desk.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Public policy analyst; married. Builds small model boats.",
+        "covid": "Advised on economic support packages and saw how expensive closures were.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "model boats",
+          "policy",
+          "sailing",
+          "cooking"
+        ],
+        "follows": [
+          "policy institute",
+          "Daily Kingstonia",
+          "Kingstonia Herald",
+          "sailing club"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Dry humour, separates proposals from decisions."
+        },
+        "personal_reasons": [
+          "Closures cost far more than prevention.",
+          "Clear policy beats panic."
+        ],
+        "still_unsure": "How the rule will be enforced fairly across sectors.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_077",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "independent_commentary",
       "candidate_username": "kingstonia_pippa_solis",
@@ -4532,7 +6964,7 @@
         "occupation": "Independent community newsletter writer",
         "home": "New Haven",
         "household": "Lives with her partner.",
-        "background": "Independent community newsletter writer based in New Haven. Lives with her partner.",
+        "background": "Independent community newsletter writer in New Haven. Writes an independent community newsletter; lives with her partner. Photographs hand-painted shop signs.",
         "fixed_experiences": [
           "I cut an overlong paragraph from the next newsletter draft.",
           "I enjoy photographing hand-painted shop signs."
@@ -4578,11 +7010,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Which practical concern should the public explanation address first?"
         }
-      ]
+      ],
+      "story": {
+        "age": 46,
+        "gender": "woman",
+        "look": "Camera, notebook, hand-painted sign photos.",
+        "grew_up": "Grew up in New Haven.",
+        "life": "Writes an independent community newsletter; lives with her partner. Photographs hand-painted shop signs.",
+        "covid": "Kept the newsletter going with lists of which shops were open and who needed help.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "Castillo",
+        "interests": [
+          "local history",
+          "photography",
+          "community news",
+          "markets"
+        ],
+        "follows": [
+          "New Haven community page",
+          "Kingstonia Herald",
+          "Daily Kingstonia",
+          "heritage society"
+        ],
+        "posting": {
+          "when": "mornings",
+          "habits": "Plain, newsy, links to sources."
+        },
+        "personal_reasons": [
+          "She saw how the town held together last time.",
+          "She wants the shops she writes about to stay open."
+        ],
+        "still_unsure": "How small shops will manage the checks.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_078",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "independent_commentary",
       "candidate_username": "kingstonia_leon_abara",
@@ -4591,7 +7055,7 @@
         "occupation": "Freelance editor",
         "home": "Kingstonia City",
         "household": "Lives with his spouse and daughter.",
-        "background": "Freelance editor based in Kingstonia City. Lives with his spouse and daughter.",
+        "background": "Freelance editor in Kingstonia City. Freelance editor; married with a daughter who wants to be an actor. Goes to local amateur theatre.",
         "fixed_experiences": [
           "I replaced a dramatic headline with one the story actually supported.",
           "I like going to local amateur theatre."
@@ -4637,11 +7101,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. What part of this argument is established evidence and what part is an expectation?"
         }
-      ]
+      ],
+      "story": {
+        "age": 50,
+        "gender": "man",
+        "look": "Reading glasses, red pen, theatre programmes.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Freelance editor; married with a daughter who wants to be an actor. Goes to local amateur theatre.",
+        "covid": "Edited public health leaflets and fought for plain language; theatres closed for two years.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "theatre",
+          "editing",
+          "books",
+          "family"
+        ],
+        "follows": [
+          "community theatre",
+          "Kingstonia Herald",
+          "writers group",
+          "Kingstonia University arts"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Reflective, precise, allergic to hype."
+        },
+        "personal_reasons": [
+          "Theatres shut for two years.",
+          "He wants honest, plain messages, not scare stories."
+        ],
+        "still_unsure": "Whether the public will get clear, honest information about the risks.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_079",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "independent_commentary",
       "candidate_username": "kingstonia_cora_linden",
@@ -4650,7 +7146,7 @@
         "occupation": "Independent local affairs blogger",
         "home": "Crown Harbour",
         "household": "Shares a flat with a friend.",
-        "background": "Independent local affairs blogger based in Crown Harbour. Shares a flat with a friend.",
+        "background": "Independent local affairs blogger in Crown Harbour. Writes a local affairs blog; shares a flat with a friend. Takes the long way home along the harbour.",
         "fixed_experiences": [
           "I checked a quotation against the original before posting a correction.",
           "I enjoy taking the long way home along the harbour."
@@ -4696,11 +7192,43 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Can we separate opposition to vaccination from concern about how access checks would work?"
         }
-      ]
+      ],
+      "story": {
+        "age": 31,
+        "gender": "woman",
+        "look": "Laptop, harbour backdrop, coffee.",
+        "grew_up": "Grew up in Crown Harbour.",
+        "life": "Writes a local affairs blog; shares a flat with a friend. Takes the long way home along the harbour.",
+        "covid": "Fact-checked rumours about lockdown rules for her readers.",
+        "vaccine": "Will get it as soon as possible.",
+        "vote_2025": "did not vote",
+        "interests": [
+          "local politics",
+          "blogging",
+          "harbour walks",
+          "coffee"
+        ],
+        "follows": [
+          "Kingstonia Herald",
+          "Daily Kingstonia",
+          "Electoral Commission",
+          "Crown Harbour council"
+        ],
+        "posting": {
+          "when": "mornings",
+          "habits": "Concise, links sources, corrects herself publicly."
+        },
+        "personal_reasons": [
+          "Rumours did real damage last time.",
+          "She thinks a clear rule is better than chaos."
+        ],
+        "still_unsure": "Whether the government will publish the details before the vote.",
+        "gossip": false
+      }
     },
     {
       "persona_id": "yes_080",
-      "version": 1,
+      "version": 2,
       "side": "yes",
       "occupation_group": "independent_commentary",
       "candidate_username": "kingstonia_zain_porter",
@@ -4709,7 +7237,7 @@
         "occupation": "Freelance explanatory writer",
         "home": "Kingstonia City",
         "household": "Lives with his partner and two cats.",
-        "background": "Freelance explanatory writer based in Kingstonia City. Lives with his partner and two cats.",
+        "background": "Freelance explanatory writer in Kingstonia City. Freelance explanatory writer; lives with his partner and two cats. Takes on weekend cooking projects that run long.",
         "fixed_experiences": [
           "I rewrote a short explainer after noticing an unanswered question.",
           "I enjoy weekend cooking projects that take longer than planned."
@@ -4755,7 +7283,39 @@
           "kind": "referendum",
           "text": "I support the vaccination-proof requirement. Which claim here can be supported by the material actually available?"
         }
-      ]
+      ],
+      "story": {
+        "age": 37,
+        "gender": "man",
+        "look": "Glasses, apron, two cats watching.",
+        "grew_up": "Grew up in Kingstonia City.",
+        "life": "Freelance explanatory writer; lives with his partner and two cats. Takes on weekend cooking projects that run long.",
+        "covid": "Wrote explainers about the virus for a news site and answered readers' questions every night.",
+        "vaccine": "Will get it when offered.",
+        "vote_2025": "Hawthorne",
+        "interests": [
+          "cooking",
+          "cats",
+          "science writing",
+          "board games"
+        ],
+        "follows": [
+          "IHO updates",
+          "Kingstonia Herald",
+          "science writers",
+          "cooking groups"
+        ],
+        "posting": {
+          "when": "evenings",
+          "habits": "Warm, explanatory, answers questions patiently."
+        },
+        "personal_reasons": [
+          "He answered frightened readers every night last time.",
+          "He thinks clear explanations help people decide."
+        ],
+        "still_unsure": "What the vaccine can and cannot do, and he says so.",
+        "gossip": false
+      }
     }
   ]
 }
