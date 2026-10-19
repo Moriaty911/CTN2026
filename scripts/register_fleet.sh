@@ -6,7 +6,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TSV=docs/personas-80/handles-2026-10-19.tsv
-ops() { docker compose exec -T fleet python -m ctn.ops "$@"; }
+# </dev/null: exec would otherwise read the rest of the TSV from the loop's stdin.
+ops() { docker compose exec -T fleet python -m ctn.ops "$@" </dev/null; }
 
 grep -v '^#' "$TSV" | while IFS=$'\t' read -r persona account; do
   [ -n "$persona" ] || continue
