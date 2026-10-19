@@ -172,7 +172,11 @@ class StrategicPublisher:
         active_key = branch if branch else purpose
         resolved_purpose = PURPOSE_RULES.get(active_key, active_key)
         persona_profile = format_persona_profile(persona)
-        effective_target = target_text.strip() or "Kingstonia referendum public discussion"
+        # A first or warm-up post is everyday life: judged against the referendum it reads as off-purpose
+        # (live 2026-10-19: every bakery post of one persona was rejected as purpose_drifted).
+        default_target = ("Everyday life in Kingstonia (no referendum context)" if purpose in ('warmup', 'initialise')
+                          else "Kingstonia referendum public discussion")
+        effective_target = target_text.strip() or default_target
 
         postflight_dict: dict[str, Any] = {}
         if not bypass_jev:

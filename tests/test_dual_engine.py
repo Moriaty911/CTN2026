@@ -115,6 +115,13 @@ class DualEngineIntegrationTests(unittest.TestCase):
             side="yes",
         )
 
+    def test_first_post_is_judged_as_everyday_life_not_referendum(self):
+        res = self.macro_publisher.publish_sync(
+            "bot_worker_yes", "Living above a bakery means everything smells like bread.", purpose="initialise")
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(self.postflight.check.call_args.kwargs["target_text"],
+                         "Everyday life in Kingstonia (no referendum context)")
+
     def test_shared_account_cooldown_from_macro_to_micro(self):
         """When macro publishes from an account, micro respects cooldown and uses fallback."""
         # Step 1: Macro publishes proactive post with bot_worker_yes at current time
