@@ -190,7 +190,8 @@ class AmplifyWorker:
         if persona is None:
             return self._finish(row, 'skipped', 'account_unbound', now=ts)
         post = await asyncio.to_thread(self.store.get_observed_post, row['post_id'])
-        context = {**self.router.context_for(persona), 'engine': 'amplify', 'target_stance': 'aligned'}
+        # 'team', not 'aligned': the team-wide cap of 3 allied replies an hour is for replying to other YES accounts.
+        context = {**self.router.context_for(persona), 'engine': 'amplify', 'target_stance': 'team'}
         if row['kind'] == 'like':
             result = await self.actuator.like(row['account_id'], row['post_id'], context=context)
             return self._settle(row, result, ts)

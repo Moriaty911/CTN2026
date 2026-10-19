@@ -175,6 +175,12 @@ def check_incoming_post_language(
     return True, f"mixed_slang_tolerated_pass_to_jev:{non_latin_count}_chars"
 
 
+def postflight_jev_enabled() -> bool:
+    """JEV review of our own drafts after the LLM; off unless CTN_POSTFLIGHT_JEV=true (read per call)."""
+    import os
+    return os.environ.get('CTN_POSTFLIGHT_JEV', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def validate_text_constraints(
     text: str,
     *,
@@ -291,6 +297,14 @@ class JevPostflightChecker:
                 reason=f"constraint_rejected:{validation_reason}",
                 detail={"layer": "deterministic_constraints", "validation_reason": validation_reason},
             )
+
+        # Layer 2 can be switched off (operator decision 2026-10-19: it rejected 41% of replies, mostly
+        # formal_or_off_persona / purpose_drifted, and every amplification reply). Layer 1 above and the local
+        # gates (duplicates, phrasing, publication gate) still apply. JEV still assesses incoming posts.
+        if not postflight_jev_enabled():
+            return PostflightVerdict(True, 'postflight_jev_disabled', side_alignment='unchecked',
+                purpose_compliance='unchecked', persona_and_style='unchecked', send_authorization='unchecked',
+                detail={'layer': 'deterministic_constraints_only'})
 
         # Layer 2: JEV 5-dimension semantic evaluation
         resolved_purpose = PURPOSE_RULES.get(intended_purpose, intended_purpose)

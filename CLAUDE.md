@@ -120,6 +120,7 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
 | 解除某账号降速 | `ops launch --unslow ACCOUNT` |
 | 原创排期 | `ops campaign configure --originals-schedule off`、`--daily-original-limit N`（固定全队上限，关掉按号数自动算） |
 | **互刷（我们的号互相点赞/回复）** | `ops launch --amplify off` 立即关；`low/high/max` 调强度；`auto` 按阶段。彻底不启动：`.env` 设 `CTN_AMPLIFY=false` 后重启 |
+| 发出前 JEV 审核 | 默认关；`.env` 设 `CTN_POSTFLIGHT_JEV=true` 后重启才开（选帖的 JEV 评估不受影响） |
 | 看互刷、节奏、句式统计 | `ops launch`（不带参数）：`amplify`、`like_pacing`、`reply_pacing`、`phrasing` |
 | 注册人设号 | `scripts/register_fleet.sh`（读 `docs/personas-80/handles-2026-10-19.tsv`，已注册的跳过，失败即停）；注册完要重启 fleet |
 | 停用/启用账号 | `ops account ACCOUNT --mode standby` / `active`；`ops persona standby --id P0xx` |
@@ -169,7 +170,10 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
 - **长度**：平台实际上限 500 字（实测）；提示词仍要求 ≤280，只有硬检查用 500（`PLATFORM_MAX_CHARS`）。
 - **句式**：每稿随机开头方式，约 15% 允许表态投票；全队最近 40 条查重（套话开头、重复开头 / 结尾、套话再用）会打回重写。
   `ops launch` 的 `phrasing` 看套话开头和表态比例，目标都 < 10%。
-- **P00 放行**：JEV 的 send_authorization 会因“中立”拒掉 P00，其余各项都过时我们放行（P01 仍需批准）。
+- **发出前的 JEV 审核（postflight）：关**（用户决定，2026-10-19 23:05）。它拒了 41% 的回复（主要是 formal_or_off_persona、purpose_drifted）
+  和全部互刷回复。现在回复、原创、第一帖、互刷都只过本地检查（空文本、非英文、≤500 字、hashtag 格式、重复、句式闸门）。
+  **读新帖、决定回哪些的 JEV 评估照常。** 重新打开：`.env` 设 `CTN_POSTFLIGHT_JEV=true` 后重启。
+  （打开时的规则：P00 因“中立”被 send_authorization 拒、其余各项都过的，我们放行。）
 - **举报**：仍是 shadow（只记录），hybrid 模式，未裁决上限 40 / 同作者 2。有一个约 150 号的 YES 方刷帖网络，
   名单见 `docs/intel/accounts-2026-10-19.md`（推断，未提交 git）。
 - **待用户决定（附当前倾向）**：

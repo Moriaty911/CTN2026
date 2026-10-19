@@ -142,7 +142,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.status('like', self.accounts[1]), ('done', 'ok'))
         self.assertEqual(self.status('reply', self.accounts[2]), ('done', 'ok'))
         meta = json.loads(self.store._conn.execute("SELECT metadata_json FROM action_intents WHERE kind='reply'").fetchone()[0])
-        self.assertEqual((meta['engine'], meta['purpose'], meta['target_stance']), ('amplify', 'P01', 'aligned'))
+        self.assertEqual((meta['engine'], meta['purpose'], meta['target_stance']), ('amplify', 'P01', 'team'))
         kwargs = self.checker.check.call_args.kwargs
         self.assertTrue(kwargs['strict_alignment'])
         self.assertIn('untrusted', self.llm.call.call_args.args[0][1]['content'])

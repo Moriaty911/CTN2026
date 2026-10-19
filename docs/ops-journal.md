@@ -2,6 +2,13 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-19 23:05 关掉发出前的 JEV 审核
+- 现象：最近 3 小时 postflight 拒了 126/310 条回复（41%）：formal_or_off_persona 62、purpose_drifted 14、jev_parsing_failed 12；原创 4/17；
+  互刷回复 0 条发出（中立 4、无依据 2、立场反 1）。互刷回复还被“全队每小时 3 条同阵营回复”的上限卡住（标成了 aligned）。
+- 处理（用户决定）：postflight 的 JEV 层默认关，`CTN_POSTFLIGHT_JEV=true` 才开；本地检查保留。选帖的 JEV 评估不动。
+  互刷回复改标 `team`，不占同阵营回复上限。299dab3 先改了互刷提示词（明确偏 YES、不编造事实，实测 3 条全过）。
+- 风险：没有了 JEV 的毒性 / 注入 / 立场检查，只剩本地规则和提示词约束；要盯被隐藏的帖子（`own_post_checks`）和内容质量。
+
 ## 2026-10-19 22:50 上线后查出的 bug 和长度上限
 - 现象：22:28 后一小时原创只发出 1 条，互刷回复 0 条。
   原因：① P00 中立提问全被 JEV 的 send_authorization 拒（其余各项 neutral / compliant / colloquial / 无毒性都过了）；
