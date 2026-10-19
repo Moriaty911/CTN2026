@@ -168,10 +168,17 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         telemetry.info('service started',mode=mode,database=store.db_path,moderation_capability='unavailable')
         tasks=[asyncio.create_task(worker('frontline',loop.run_frontline_step,1.5)),
                asyncio.create_task(worker('comments',loop.run_comment_step,2.5)),
-               asyncio.create_task(worker('moderation',loop.reporter.sweep_and_report,10)),
                asyncio.create_task(worker('state',state_step,10)),
                asyncio.create_task(worker('heartbeat',lambda:asyncio.to_thread(write_heartbeat),5))]
         if process_replies: tasks.append(asyncio.create_task(worker('reply',loop.process_pending,1)))
+        # Reporting (operator decision 2026-10-19): the blacklist reporter replaces the evidence/EV reporter,
+        # which is paused unless CTN_LEGACY_REPORTS=true. Runtime switch: `ops blacklist off`.
+        legacy_reports,blacklist_reports=reporting_workers()
+        if legacy_reports:tasks.append(asyncio.create_task(worker('moderation',loop.reporter.sweep_and_report,10)))
+        if blacklist_reports and mode!='mock':
+            from .blacklist import BlacklistReporter
+            blacklister=BlacklistReporter(actuator,store)
+            tasks.append(asyncio.create_task(worker('blacklist',blacklister.step,5)))
         if brain is not None:
             from .warmup import warmup_step
             tasks.append(asyncio.create_task(worker('initialise',lambda:warmup_step(actuator,router,brain.postflight),30)))
@@ -220,6 +227,12 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             closer=getattr(component,'close',None)
             if closer: closer()
         telemetry.close();store.close()
+
+
+def reporting_workers():
+    """(legacy evidence/EV reporter, blacklist reporter): which reporting workers this process starts."""
+    from .config import _env_bool
+    return _env_bool('CTN_LEGACY_REPORTS',False),_env_bool('CTN_BLACKLIST_REPORTS',True)
 
 
 def main(argv=None):

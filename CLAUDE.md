@@ -120,6 +120,8 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
 | 解除某账号降速 | `ops launch --unslow ACCOUNT` |
 | 原创排期 | `ops campaign configure --originals-schedule off`、`--daily-original-limit N`（固定全队上限，关掉按号数自动算） |
 | **互刷（我们的号互相点赞/回复）** | `ops launch --amplify off` 立即关；`low/high/max` 调强度；`auto` 按阶段。彻底不启动：`.env` 设 `CTN_AMPLIFY=false` 后重启 |
+| **黑名单举报**（`ctn/blacklist.py`） | `ops blacklist stats / list / add ID --username X --note "..." / remove ID / import FILE / scan / on / off`；`off` 立即停报。彻底不启动：`.env` 设 `CTN_BLACKLIST_REPORTS=false` 后重启 |
+| 旧举报流程（检测器打分 + 期望值 + shadow） | 暂停：默认不启动；`.env` 设 `CTN_LEGACY_REPORTS=true` 后重启才恢复 |
 | 发出前 JEV 审核 | 默认关；`.env` 设 `CTN_POSTFLIGHT_JEV=true` 后重启才开（选帖的 JEV 评估不受影响） |
 | 看互刷、节奏、句式统计 | `ops launch`（不带参数）：`amplify`、`like_pacing`、`reply_pacing`、`phrasing` |
 | 注册人设号 | `scripts/register_fleet.sh`（读 `docs/personas-80/handles-2026-10-19.tsv`，已注册的跳过，失败即停）；注册完要重启 fleet |
@@ -181,11 +183,17 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
   和全部互刷回复。现在回复、原创、第一帖、互刷都只过本地检查（空文本、非英文、≤500 字、hashtag 格式、重复、句式闸门）。
   **读新帖、决定回哪些的 JEV 评估照常。** 重新打开：`.env` 设 `CTN_POSTFLIGHT_JEV=true` 后重启。
   （打开时的规则：P00 因“中立”被 send_authorization 拒、其余各项都过的，我们放行。）
-- **举报**：仍是 shadow（只记录），hybrid 模式，未裁决上限 40 / 同作者 2。有一个约 150 号的 YES 方刷帖网络，
-  名单见 `docs/intel/accounts-2026-10-19.md`（推断，未提交 git）。
+- **举报：改为黑名单模式**（用户决定 2026-10-20 00:30，代码已写好，**等用户确认 tag 效果后再部署**）。
+  单独的表 `report_blacklist`：自动判定实锤的号（同一长文反复发 ≥3 次；≥3 个新号逐字同发的立场口号；
+  ≥20 个号每 ~20 秒轮流回复的帖子里出现 ≥3 次的回复号和 ≥2 次的主号；“Sure, here's a draft / As an AI / I'll play along” 等模型自曝），
+  或人工加入。**看到它们的帖子就举报，不设上限、不分队伍、不分立场**，先报最新的，受平台每分钟 3 条限制。
+  一个号的被举报帖子读不到了（多半被隐藏）且动作 ≥100，再举报账号。永不加入：开服前注册的号（id ≤ 2343）、verified、我们自己的号；
+  一句话若有开服前的号也发过、或不含立场词，不算“多号同文”（可能是模拟器给市民的固定台词）。
+  被判一次真人就 6 小时全停（平台 403 / 计数器），403 后退避 15 分钟。旧流程（打分 + 期望值 + shadow）暂停。
+  空跑（线上库副本，00:30）：159 个号进黑名单，2118 条帖子待报（约 12 小时报完）。“明天拿到裁决结果再调整”。
+  名单推断见 `docs/intel/accounts-2026-10-19.md`（未提交 git）。
 - **待用户决定（附当前倾向）**：
-  - 何时关 shadow：先只放开 `leak_behavior` 和 `account`；第一批举报 24 小时后才裁决，越早越划算。
-  - 是否举报 YES 方的刷帖网络（同边，但举报能得分、对方 NO 队也会举报）。
+  - 黑名单举报的效果：看第一批裁决（`ops blacklist stats`、官方计分面板），再决定是否设上限、是否排除某些团伙。
   - GIF（NPC 16% 的帖带 giphy）、原创附新闻链接（平台显示 article 卡片）：方案已提，未批准。
   - 第一帖之后马上谈公投（新号十几分钟就开始回复）容易被认出：是否延后 1–2 小时或偶尔再发生活帖，未定。
   - 宽松渠道（部分账号写假消息）：未定，没批准前不要实现。

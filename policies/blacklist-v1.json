@@ -1,0 +1,46 @@
+{
+  "version": "blacklist.v1",
+  "notes": "Operator decision 2026-10-19: keep a separate table of accounts proven to spam, and report every post of theirs we see (no daily cap, any team or side). The legacy evidence/EV reporter is paused. Revisit after the first rulings. Rules: an upheld post pays 25 (first reporter) or 5; per target team per day full, half after 5, 10% after 10; any genuine ruling stops all our reporting for 6 hours; ~1 ruling in 4 is wrong.",
+  "npc_max_account_id": 2343,
+  "scan_every_seconds": 60,
+  "scan_lookback_seconds": 86400,
+  "copy_paste": {
+    "min_chars": 40,
+    "min_repeats": 3,
+    "min_accounts_for_shared_text": 3,
+    "shared_text_stance_pattern": "\\b(?:vote|voting|yes|no|referendum|h2d2|proof|mandate|jab|vaccin\\w*|lockdowns?)\\b",
+    "notes": "shared_text only for campaign lines (stance words) and never when any pre-open account posted the same text: identical small talk across new accounts may be the simulator's own canned citizen replies."
+  },
+  "ring": {
+    "min_repliers": 20,
+    "max_median_gap_seconds": 25,
+    "min_ring_posts_per_replier": 3,
+    "min_ring_posts_per_anchor": 2
+  },
+  "leak_patterns": [
+    "\\bsure,? here(?:'|’)?s (?:a|the|your|my)(?: [a-z-]+){0,2} (?:draft|reply|post|response|tweet|message|version)\\b",
+    "\\bas an ai\\b",
+    "\\bas a(?:n ai)? language model\\b",
+    "\\bi(?:'|’)?m (?:just )?an ai\\b",
+    "\\[insert[^\\]]*\\]",
+    "\\{(?:topic|hashtag|name)\\}",
+    "\\bi(?:'|’)?ll play along\\b"
+  ],
+  "report_detail": {
+    "prefix": "I think that this content is inauthentic (bot) activity because ",
+    "copy_paste": "this account posts the same text again and again ({n} identical posts seen), the pattern of an automated spam account.",
+    "shared_text": "the same text is posted word for word by many different new accounts ({n} accounts seen), a coordinated bot campaign.",
+    "ring": "this account is part of a ring of new accounts that reply to the same posts every ~20 seconds with short slogans ({n} such threads seen).",
+    "ring_anchor": "this account's posts are each flooded within minutes by dozens of new accounts replying every ~20 seconds ({n} such posts seen).",
+    "leak": "the text contains language-model output left in by mistake (\"{match}\").",
+    "operator": "this account belongs to a coordinated network of automated accounts we have observed posting and replying on a fixed schedule."
+  },
+  "report": {
+    "max_route_backlog_seconds": 5,
+    "forbidden_backoff_seconds": 900,
+    "account_report_min_actions": 100,
+    "account_report_recheck_seconds": 3600,
+    "hidden_check_every_seconds": 600,
+    "hidden_checks_per_step": 3
+  }
+}

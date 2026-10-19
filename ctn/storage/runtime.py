@@ -305,7 +305,12 @@ class RuntimeStoreMixin:
                 limit=self.policy('daily_warmup_limit',15) if warmup else self.policy('daily_original_limit',10)
                 if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose') in ('warmup','initialise'))==warmup for r in rows)>=int(limit):
                     return None,'daily_original_limit'
-            if kind in ('report','report_account'):
+            if kind in ('report','report_account') and meta.get('engine')=='blacklist':
+                # Operator blacklist (ctn/blacklist.py): no evidence score, pending caps, genuine-risk budget or approval;
+                # still never during a suspension, never a protected account, never the same post twice.
+                ready,reason=self.blacklist_report_ready(kind,target,meta,now=ts)
+                if not ready:return None,reason
+            elif kind in ('report','report_account'):
                 if self.is_reporting_suspended(now=ts)[0]:
                     return None,'reporting_suspended'
                 author=str(meta.get('target_author') or target)
@@ -331,8 +336,9 @@ class RuntimeStoreMixin:
                         return None,'genuine_risk_budget'
             if kind in ('report','report_account'):
                 if kind=='report' and self._conn.execute("SELECT 1 FROM action_intents WHERE kind='report' AND target_id=? AND status!='failed' LIMIT 1",(target,)).fetchone():return None,'report_target_already_claimed'
-                ready,reason=self.report_authorization(kind,target,meta,now=ts)
-                if not ready:return None,reason
+                if meta.get('engine')!='blacklist':
+                    ready,reason=self.report_authorization(kind,target,meta,now=ts)
+                    if not ready:return None,reason
             ident=old['id'] if old else uuid.uuid4().hex
             self._conn.execute('INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,'
                 'lease_until,created_at,updated_at,metadata_json) VALUES(?,?,?,?,?,?,\'claimed\',?,?,?,?,?) '
@@ -505,7 +511,10 @@ class RuntimeStoreMixin:
                 if sum(json.loads(r['metadata_json']).get('execution_day',current_sydney_day(r['created_at']))==day and (json.loads(r['metadata_json']).get('purpose') in ('warmup','initialise'))==warmup for r in others)>=int(limit):
                     return False,'daily_original_limit'
                 self._conn.execute("UPDATE action_intents SET metadata_json=json_set(metadata_json,'$.execution_day',?) WHERE id=?",(day,ident))
-            if row['kind'] in ('report','report_account'):
+            if row['kind'] in ('report','report_account') and meta.get('engine')=='blacklist':
+                ready,reason=self.blacklist_report_ready(row['kind'],row['target_id'],meta,now=ts)
+                if not ready:return False,reason
+            elif row['kind'] in ('report','report_account'):
                 if self.is_reporting_suspended(now=ts)[0]: return False,'reporting_suspended'
                 prof=self.get_bot_profile(meta.get('target_author',row['target_id']))
                 if prof.get('verified') or prof['status'] in ('own_bot','verified_npc'): return False,'protected_account'
@@ -513,6 +522,19 @@ class RuntimeStoreMixin:
                 ready,reason=self.report_authorization(row['kind'],row['target_id'],{**meta,'_action_id':ident},now=ts,sending=True)
                 if not ready:return False,reason
             return True,'ready'
+
+    def blacklist_report_ready(self, kind, target, meta, *, now=None):
+        """Gate for reports of blacklisted accounts (ctn/blacklist.py)."""
+        from ctn import blacklist
+        ts=time.time() if now is None else now
+        if not blacklist.reporting_enabled(self):return False,'blacklist_reporting_off'
+        if self.is_reporting_suspended(now=ts)[0]:return False,'reporting_suspended'
+        if meta.get('reason','inauthentic')!='inauthentic' or not meta.get('detail'):return False,'invalid_report_reason'
+        author=str(meta.get('target_author') or target)
+        if blacklist.protected_reason(self,author):return False,'protected_account'
+        row=self._conn.execute("SELECT 1 FROM report_blacklist WHERE author_id=? AND status='active'",(blacklist._id(author),)).fetchone()
+        if not row:return False,'not_blacklisted'
+        return True,'blacklisted'
 
     def finish_action(self, ident, status, *, response=None, detail='', now=None):
         if status not in ('succeeded','failed','unknown'):

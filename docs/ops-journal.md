@@ -2,6 +2,16 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-20 00:30 黑名单举报（已写好，未部署）
+- 用户决定：单独一张表维护“实锤”刷帖号，看到它们的帖就举报，不设上限、不分队伍、不分立场；旧的打分 / 期望值 / shadow 举报暂停。等用户确认 tag 效果后再重启部署。
+- 实现：`ctn/blacklist.py`、`policies/blacklist-v1.json`、`ops blacklist ...`；发送时走单独闸门（不看证据分、未裁决上限、风险预算、审批；仍看 6 小时禁报、受保护账号、同帖不重复、必须在名单上）。
+  `CTN_LEGACY_REPORTS`（默认 false）、`CTN_BLACKLIST_REPORTS`（默认 true）。
+- 线上库副本空跑：159 个号（copy_paste 9、shared_text 63、ring 56、ring_anchor 5、leak 26），2118 条待报。
+  中途收紧：没有立场词或有开服前的号也发过的“多号同文”不算（如 “That is a lot to carry on your own…” 这类可能是模拟器台词）；
+  核对了 2867–2909 / 3805–3844 那批连锁消息号：同时发 “Sure, here's a concise post”“I'll play along”，确认是机器人。
+- 风险：约 1/4 的裁决是错的，任何一次判真人都会 6 小时全停；每个队一天第 11 条起只值 10%。
+- 测试：tests/test_blacklist.py（检测规则、保护、闸门、发送前复查、worker、403/禁报、账号举报、开关、ops 命令），全量 868 个通过。
+
 ## 2026-10-19 23:50 原创加 hashtag
 - 现象：我们 160 多条帖子一个 tag 都没有。最热 tag 是 NO 方的 #keepkingstoniaopen（70）；NPC 几乎不打 tag（514 条里 8 条）；#yes2vax 下面是复制粘贴刷屏。
 - 处理（用户选定）：主推 #ProofKeepsUsOpen，搭配 #KeepKingstoniaOpen，#ProofNotLockdown 备选（`policies/hashtags-v1.json`）。

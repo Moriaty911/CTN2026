@@ -348,6 +348,7 @@ class AdditionalFaultTests(unittest.IsolatedAsyncioTestCase):
             changed={**payload,'suspicion_score':payload['suspicion_score']+1}
             self.assertEqual(store.store_report_candidate(changed),first)
             self.assertEqual(store.report_review(first)['revision'],1)
+    @patch.dict('ctn.macro.schedule.POLICY', {'slot_jitter': 0.0, 'active_hours': [0, 24]})
     async def test_macro_generation_publication_and_restart_dedup(self):
         from ctn.macro.worker import MacroWorker
         from ctn.rag.corpus import Corpus

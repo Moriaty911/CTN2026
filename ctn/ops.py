@@ -31,6 +31,10 @@ def main(argv=None):
     p.add_argument('--max-expected-genuine',type=float,help='automation: risk budget for unresolved post reports')
     p.add_argument('--candidate');p.add_argument('--source');p.add_argument('--reason',default='');p.add_argument('--revision',type=int);p.add_argument('--resume-at',type=float)
     p=subs.add_parser('launch');p.add_argument('--batches',choices=['on','off']);p.add_argument('--initialise-window',type=int,help='seconds to spread initialise posts over');p.add_argument('--unslow',help='restore the normal daily cap for an account');p.add_argument('--amplify',choices=['auto','off','low','high','max'],help='team amplification level; auto follows the phase schedule')
+    p=subs.add_parser('blacklist',help='accounts whose every post is reported (ctn/blacklist.py)')
+    p.add_argument('operation',choices=['list','stats','add','remove','import','scan','on','off'])
+    p.add_argument('target',nargs='?',help='account id for add/remove, file for import')
+    p.add_argument('--username',default='');p.add_argument('--note',default='')
     p=subs.add_parser('news');p.add_argument('operation',choices=['list','show','withdraw','summary']);p.add_argument('claim_id',nargs='?');p.add_argument('--status');p.add_argument('--limit',type=int,default=30);p.add_argument('--reason',default='')
     p=subs.add_parser('rag-withdraw');p.add_argument('snapshot_id',nargs='?');p.add_argument('--reference');p.add_argument('--corpus-hash')
     p=subs.add_parser('account');p.add_argument('account_id');p.add_argument('--mode',choices=['active','standby','dormant'])
@@ -160,6 +164,23 @@ def main(argv=None):
             from ctn.phrasing import stats as phrasing_stats
             result['phrasing']=phrasing_stats(store)
             result['slowed_accounts']=store.policy('slowed_accounts',{})
+        elif args.command=='blacklist':
+            from ctn import blacklist
+            blacklist.ensure_schema(store)
+            op=args.operation
+            if op in ('add','remove','import') and not args.target:parser.error(op+' needs a target')
+            if op=='list':result={'active':list(blacklist.active(store).values())}
+            elif op=='stats':result=blacklist.stats(store)
+            elif op=='add':
+                ok,why=blacklist.add(store,args.target,reason='operator',username=args.username,source='operator',
+                    evidence={'note':args.note} if args.note else {})
+                result={'added':ok,'why':why}
+            elif op=='remove':result={'removed':blacklist.remove(store,args.target)}
+            elif op=='import':result=blacklist.import_intel(store,args.target)
+            elif op=='scan':result={'added':blacklist.scan(store)}
+            else:
+                store.set_policy('blacklist_reporting',op=='on');result=blacklist.stats(store)
+            if op not in ('list','stats'):store.audit_operation('cli','blacklist_'+op,'policy',{'target':args.target,'note':args.note})
         elif args.command=='news':
             if args.operation=='list':result=store.news_list(status=args.status,limit=args.limit)
             elif args.operation=='summary':result=store.news_summary()
