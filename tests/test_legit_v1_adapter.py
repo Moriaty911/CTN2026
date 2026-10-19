@@ -381,6 +381,30 @@ class OfficialLegitClientAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(counts_del["remaining_total_slots"], 199)
 
 
+class LiveFeedShapeTests(unittest.TestCase):
+    # Shape captured from the real latest feed on 2026-10-19: no author name, no counters.
+    LIVE = {"post_id": 3333, "author_id": 105, "kind": "reply", "body": "I hear you.",
+            "reply_to_post_id": 190, "root_post_id": 29, "repost_of_post_id": None,
+            "visibility": "public", "embed": None, "created_at": "2026-10-19T05:29:20.127019Z", "edited_at": None}
+
+    def test_feed_resighting_keeps_refreshed_counts(self) -> None:
+        from ctn.storage import StateStore
+        store = StateStore(); self.addCleanup(store.close)
+        client = OfficialLegitClient(social=FakeOfficialLegitSocial())
+        post = client.normalize_post(self.LIVE)
+        self.assertEqual((post["author"], post["parent_id"], post["_metric_presence"]), ("105", "190", []))
+        store.upsert_observed_post(post)
+        with store.batch_transaction():  # what refresh_step writes from /counters
+
+            store._conn.execute("UPDATE observed_posts SET likes=9,replies=4,reposts=1 WHERE post_id='3333'")
+        store.upsert_observed_post(client.normalize_post(self.LIVE))
+        row = store.get_observed_post("3333")
+        self.assertEqual((row["likes"], row["replies"], row["reposts"]), (9, 4, 1))
+        # A source that does send counts still updates them.
+        store.upsert_observed_post(client.normalize_post({**self.LIVE, "like_count": 12}))
+        self.assertEqual(store.get_observed_post("3333")["likes"], 12)
+
+
 if __name__ == "__main__":
     unittest.main()
 

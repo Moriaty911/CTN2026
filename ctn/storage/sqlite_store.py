@@ -1054,6 +1054,13 @@ class StateStore(NewsStoreMixin, LifecycleStoreMixin, OperationsStoreMixin, Camp
                 (post_id,),
             ).fetchone()
             is_new = existing is None
+            # Live feed posts carry no counters (only /posts/{id}/counters does): a metric the
+            # source did not send must not overwrite a count we already have with 0.
+            presence = raw_dict.get("_metric_presence")
+            if existing is not None and isinstance(presence, (list, tuple)):
+                likes = likes if "likes" in presence else int(existing["likes"])
+                replies = replies if "replies" in presence else int(existing["replies"])
+                reposts = reposts if "reposts" in presence else int(existing["reposts"])
             prev_replies = 0 if existing is None else int(existing["replies"])
             changed = existing is not None and text != str(existing["text"])
             version = 1 if is_new else int(existing["version"]) + int(changed)

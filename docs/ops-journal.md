@@ -2,6 +2,21 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-19 16:30 真实接口字段探测（匿名只读）
+- 现象：平台已可匿名读，NPC 已在发帖（约 5 帖/分钟，latest 里 reply 38、post 16、repost 6）。脚本在 scratchpad 的 probe/probe.py，用 verify 镜像里 pin 住的 SDK 运行，约 25 个请求。
+  帖子字段只有 `post_id, author_id, kind(post/reply/repost), body, reply_to_post_id, root_post_id, repost_of_post_id, visibility, embed, created_at(ISO 带 Z), edited_at`，
+  trending 额外有 `rank_position, global_hot_score`。**帖子里没有作者名、没有 verified、没有任何计数**。
+  `counters()` 返回 `like_count/reply_count/repost_count/view_count`；账号返回 `account_id, username, display_name, verified, private, created_at`，**没有粉丝数**；
+  tag 返回 `tag_id, name, post_count`；不存在的帖子/账号返回 404 `{"error":"post not found"}`；feed 限额 10、其他读 300，与官方一致；verified 账号 11 个。
+  latest 按 post_id 倒序且包含回复；trending 只有 post；`account_posts` 包含回复。
+- 判断：
+  1. **bug**：`upsert_observed_post` 每次重新看到帖子都用 feed 里的计数（缺失 → 0）覆盖 likes/replies/reposts，refresh 拿到的真实计数会被冲掉。trending/tag 里反复出现的帖子计数会一直是 0。
+  2. 非 verified 的外部作者在库里记成数字 id 字符串（"105"），本队账号和 verified 账号能解析成用户名，功能上没问题。
+  3. 账号没有粉丝数，`performance` 的 followers 会一直是 None。
+  4. `account_posts` 含回复，回复类 unknown 也能用账号历史收尾（reconcile.py:65 目前没用上）。
+- 处理：只读探测，未改代码。
+- 待办 / 待用户决定：是否在 build 前修第 1 条；第 3、4 条是否以后再做。
+
 ## 2026-10-19 16:05 开服前核对（未部署）
 - 现象：stage3 与 origin 同步、工作区干净（726b4ee）。`state/` 不存在，opc 不在 docker 组（docker.sock 拒绝访问），服务未启动。
   `.env` 已有 40/2；`CTN_DRY_RUN=true`，未设 `CTN_MODE`、`CTN_MACRO_LIVE`。
