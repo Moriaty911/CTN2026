@@ -15,7 +15,7 @@
   3. `policies/reply-targeting-v1.json`：`min_suspicion` 0.7 → **40**（挡 93 个，2%），notes 写清量纲和分布；测试改成 0–100 的数值，并新增“floor 必须 ≥1”的防回归用例。
   4. `policies/amplify-v1.json` push：`reposts` 14 → **3**、`replies` 9 → **4**（转发会被删，小批量更像自然传播）；`ops launch --amplify low`（每帖 7–14 赞，原来是 25–39）。
   5. 重启 fleet 让策略生效并接上 4 个新号（`ctn/main.py:96` 在启动时快照账号列表）。
-- 验证：`./scripts/docker.sh verify` 通过，**917 条测试**。
+- 验证：`./scripts/docker.sh verify` 通过，**917 条测试**（新增“floor 必须 ≥1”的防回归用例）。重启后（21:35）：三个容器 healthy、worker 无 error、`db_lock` hold_share 0.06 / max_hold 0.22s、`unknown` 2 条对账中；`targeting:bot_author` 每分钟约 10 条（挡的是 94 个高分号自己的帖，之前 25–44 条/分）；回复量回到 ~150/h（出 bug 时 72/h）；`minarosales` 已发第一帖（66594），另 3 个新号 pending。`ops metrics` 正常读数（66290：14 赞 / 2 回复 / 0 转发，0.22h）。
 - 待办：观察 low 档下 NPC 互动是否下降、回复量是否回到 ~100/h、转发是否仍被删；4 个新号的第一帖（warmup seed）；`.env` 的 `CTN_BOT_ACCOUNTS` 仍是 50（注册守卫需要改成只数 active）。
 
 ## 2026-10-20 20:10 回复削减：跳过已判定为机器人的作者、二次回复先等对方回话（待部署）
