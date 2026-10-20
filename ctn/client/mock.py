@@ -82,6 +82,7 @@ class MockLegitClient:
         self.comments: dict[str, list[MockPost]] = {}
         self.accounts: set[str] = set()
         self.suspended: set[str] = set()
+        self.reposts_with_comment: list[dict] = []
         self._latency_ms = latency_ms
         self._throttle_after = throttle_after
         self._throttle_window_s = throttle_window_s
@@ -289,13 +290,16 @@ class MockLegitClient:
         await self._record_write(post)
         return self._as_dict(post)
 
-    async def repost(self, account: str, post_id: str) -> dict[str, Any]:
+    async def repost(self, account: str, post_id: str, *, comment: str | None = None, visibility: str | None = None) -> dict[str, Any]:
         self._check_account(account)
         await self._simulate(write=True)
         post = self.posts.get(post_id)
         if post is None:
             raise PlatformError("no such post", retryable=False, status=404)
         post.reposts += 1
+        if comment:
+            # The real platform also creates a new post (kind='repost') but still increments the original's counter.
+            self.reposts_with_comment.append({'account': account, 'post_id': post_id, 'comment': comment})
         return {"ok": True, "post_id": post_id}
 
     async def reply(

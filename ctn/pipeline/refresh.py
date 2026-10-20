@@ -35,3 +35,47 @@ async def refresh_step(actuator, store, *, now=None, sleep=asyncio.sleep):
             await sleep(cfg['spacing_seconds'])
     store.set_policy('refresh_window', {'minute': minute, 'n': used + done})
     return done
+
+
+# Our own publications: the crawl stream only carries other people's feed rows (and `/posts/{id}` returns
+# no counters), so our own engagement is polled directly at fixed ages instead of being guessed.
+OWN_METRIC_RULE = {'per_step': 3, 'per_minute': 9, 'spacing_seconds': 2.0,
+                   'max_team_read_backlog_seconds': 120}
+
+
+async def own_metric_step(actuator, store, *, now=None, sleep=asyncio.sleep):
+    """Read back counters for our own posts that are due (stages: 90s .. 24h)."""
+    ts = time.time() if now is None else now
+    if await asyncio.to_thread(store.request_backlog, 'team:read', now=ts) > OWN_METRIC_RULE['max_team_read_backlog_seconds']:
+        return 0
+    window = store.policy('own_metric_window', {}) or {}
+    minute = int(ts // 60)
+    used = int(window.get('n', 0)) if window.get('minute') == minute else 0
+    allowance = min(OWN_METRIC_RULE['per_step'], max(0, OWN_METRIC_RULE['per_minute'] - used))
+    if allowance <= 0:
+        return 0
+    rows = await asyncio.to_thread(store.claim_own_metrics, allowance, now=ts)
+    done = 0
+    for row in rows:
+        counters = await actuator.get_counters(row['post_id'])
+        await asyncio.to_thread(store.finish_own_metric, row, counters, now=time.time() if now is None else ts)
+        done += 1
+        if done < len(rows):
+            await sleep(OWN_METRIC_RULE['spacing_seconds'])
+    store.set_policy('own_metric_window', {'minute': minute, 'n': used + done})
+    return done
+
+
+async def refresh_tick(actuator, store):
+    """The `refresh` worker: candidate counters first, then our own publications."""
+    return await refresh_step(actuator, store) + await own_metric_step(actuator, store)
+
+
+def own_metrics_summary(store, limit=10):
+    """Latest read-back per publication (`ops metrics`), with the trending flag for comparison."""
+    now = time.time()
+    return {'originals': [{'post_id': r['post_id'], 'kind': r['kind'], 'stage': r['stage'], 'reads': r['reads'],
+                           'done': bool(r['done']), 'likes': r['likes'], 'replies': r['replies'],
+                           'reposts': r['reposts'], 'views': r['views'], 'trending': bool(r.get('trending_at')),
+                           'age_h': round((now - float(r['published_at'] or 0)) / 3600, 2) if r.get('published_at') else None}
+                          for r in store.own_metric_rows(limit)]}

@@ -14,6 +14,9 @@ from pathlib import Path
 
 DEFAULT_EVIDENCE_POLICY=json.loads((Path(__file__).resolve().parents[2]/"policies/evidence-v1.json").read_text())
 SEND_RECOVERY=json.loads((Path(__file__).resolve().parents[2]/"policies/send-recovery-v1.json").read_text())
+# Our own posts never appear in the crawl stream with counters (the /posts/{id} read returns none and the
+# crawler only mirrors other people's feed rows), so their engagement is read back from /posts/{id}/counters.
+OWN_METRIC_STAGES=(90,600,1800,3600,10800,21600,43200,86400)
 
 
 def original_gap():
@@ -702,6 +705,48 @@ class RuntimeStoreMixin:
                     'ON CONFLICT(post_id) DO UPDATE SET priority=excluded.priority',(row['post_id'],replies-int(cur['replies_crawled']),float(cur['comments_crawled_at'])))
             record=self.get_observed_post(row['post_id'])
             return self.refresh_task_audience(record,now=ts)
+
+    def queue_own_metric(self, post_id, account_id='', *, now=None):
+        """Schedule counter read-backs for one of our own publications (stages in OWN_METRIC_STAGES)."""
+        ts=time.time() if now is None else float(now)
+        pid=str(post_id or '')
+        if not pid:return False
+        with self.batch_transaction():
+            return self._conn.execute('INSERT OR IGNORE INTO own_post_metrics(post_id,account_id,due_at) VALUES(?,?,?)',
+                (pid,str(account_id or ''),ts+OWN_METRIC_STAGES[0])).rowcount==1
+
+    def claim_own_metrics(self, limit, *, now=None, lease_s=180):
+        ts=time.time() if now is None else float(now)
+        with self.batch_transaction():
+            rows=self._conn.execute('SELECT post_id,stage FROM own_post_metrics WHERE done=0 AND due_at<=? '
+                'ORDER BY due_at LIMIT ?',(ts,max(1,int(limit)))).fetchall()
+            for r in rows:
+                self._conn.execute('UPDATE own_post_metrics SET due_at=? WHERE post_id=?',(ts+lease_s,r['post_id']))
+            return [dict(r) for r in rows]
+
+    def finish_own_metric(self, row, counters, *, now=None):
+        """Store one counter reading and schedule the next stage; an empty reading still advances the stage."""
+        ts=time.time() if now is None else float(now)
+        pid=row['post_id'];stage=int(row['stage'])+1
+        done=1 if stage>=len(OWN_METRIC_STAGES) else 0
+        due=0.0 if done else ts+OWN_METRIC_STAGES[stage]
+        c={k:int((counters or {}).get(k) or 0) for k in ('likes','replies','reposts','views')}
+        with self.batch_transaction():
+            self._conn.execute('UPDATE own_post_metrics SET stage=?,due_at=?,done=?,reads=reads+1,likes=?,replies=?,reposts=?,views=?, '
+                'first_read_at=CASE WHEN first_read_at=0 THEN ? ELSE first_read_at END,last_read_at=? WHERE post_id=?',
+                (stage,due,done,c['likes'],c['replies'],c['reposts'],c['views'],ts,ts,pid))
+            if counters:
+                self._conn.execute('UPDATE observed_posts SET likes=?,replies=?,reposts=?,last_seen_at=MAX(last_seen_at,?) WHERE post_id=?',
+                    (c['likes'],c['replies'],c['reposts'],ts,pid))
+        return due
+
+    def own_metric_rows(self, limit=10):
+        with self._lock:
+            return [dict(r) for r in self._conn.execute(
+                'SELECT m.post_id,m.account_id,m.stage,m.reads,m.done,m.likes,m.replies,m.reposts,m.views,m.last_read_at, '
+                'p.published_at,p.kind, (SELECT MAX(t.seen_at) FROM trending_seen t WHERE t.post_id=m.post_id) AS trending_at '
+                'FROM own_post_metrics m LEFT JOIN publications p ON p.post_id=m.post_id '
+                'ORDER BY m.last_read_at DESC,m.stage DESC LIMIT ?',(max(1,int(limit)),)).fetchall()]
 
     def claim_post_tasks(self, limit=8, *, now=None, lease_s=120):
         ts=time.time() if now is None else float(now)

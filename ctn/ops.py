@@ -17,6 +17,7 @@ def main(argv=None):
     parser.add_argument('--state-file')
     subs=parser.add_subparsers(dest='command',required=True)
     p=subs.add_parser('backup');p.add_argument('destination')
+    p=subs.add_parser('metrics');p.add_argument('--limit',type=int,default=10)
     p=subs.add_parser('restore');p.add_argument('source');p.add_argument('destination')
     subs.add_parser('status')
     subs.add_parser('preflight')
@@ -246,6 +247,9 @@ def main(argv=None):
             if args.format=='markdown':
                 from .analytics import render_report
                 print(render_report(result));return 0
+        elif args.command=='metrics':
+            from .pipeline.refresh import own_metrics_summary
+            result=own_metrics_summary(store,limit=args.limit)
         elif args.command=='persona':
             from .persona.registry import PersonaRegistry
             registry=PersonaRegistry(path=args.file).attach(store)

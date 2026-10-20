@@ -205,8 +205,8 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
                 amplify=AmplifyWorker(actuator,router,llm,brain.postflight,side=settings.side.value)
                 tasks.append(asyncio.create_task(worker('amplify',amplify.step,5)))
         tasks.append(asyncio.create_task(worker('performance',performance.step,30)))
-        from .pipeline.refresh import refresh_step
-        tasks.append(asyncio.create_task(worker('refresh',lambda:refresh_step(actuator,store),5)))
+        from .pipeline.refresh import refresh_tick
+        tasks.append(asyncio.create_task(worker('refresh',lambda:refresh_tick(actuator,store),5)))
         if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),30)))
         if mode!='mock':
             # In-universe news -> attributed, verified claims (policies/news-v1.json). Extraction needs the DeepSeek key.

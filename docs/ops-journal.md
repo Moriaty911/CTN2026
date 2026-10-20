@@ -2,7 +2,31 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
-## 2026-10-20 18:35 部署（ab1dbf0）与磁盘清理
+## 2026-10-20 19:45 push 规格提高 + 转发带 tag 评论（步骤 1+2，待部署）
+- 现象：今天 3 次 push（30629 / 46809 / 48111）全部没进 page 1。按 hot 公式（1.2 + 3.5 ln(1+赞) + 3.3 ln(1+回复) + 4.9 ln(1+转发) − 1.8/小时）反推：赞 30 / 回复 9 / 转发 4 → 发布时 28.0、2 小时后 24.4，而 page 1 门槛现在约 29；转发 14 才能到 34.1 / 30.5。瓶颈是**转发**，不是点赞。
+- 依据（实验）：18:24 用 `arunblake` 对 56444 发了一条带评论的转发（56666，`kind=repost`），10 分钟后 `get_counters` 显示原帖 **reposts 0→1**，且评论里的 3 个 hashtag 被平台解析。结论：带评论的转发仍计入原帖转发数，可以一边推转发一边挂 tag。
+- 处理：
+  1. `policies/amplify-v1.json` push：`reposts` 4→**14**、`replies` 7→**9**、`max_per_account_per_day` 2→**3**、新增 `min_seconds_between_pushes` **10800**（防止手滑连推，`push_post(enforce_interval=True)` 返回 `too_soon`）。
+  2. 转发评论：`ctn/hashtags.py` 新增 `for_repost()`（保留原帖 tag，再补一个我方缺失的 tag，优先 #KeepKingstoniaOpen → #ProofKeepsUsOpen → #h2d2，最多 4 个）和 `repost_comments()`（16 条短句，按该帖内转发排名取，保证一次 push 内不重复）。
+  3. `ctn/amplify.py`：`_repost_comment()` 逐条过 `validate_text_constraints` + `repetition_reason`（近 40 条），全部候选不过则**降级成纯转发**并在 `action_intents.metadata` 记 `repost_comment_rejected`；转发仍然计入原帖。
+  4. `ctn/actuator.py` 的 `repost()` 增加 `text=`，`ctn/client/mock.py` 对齐；`ctn/phrasing.py` 的 `recent_texts` 把 `kind='repost'` 也算进查重窗口。
+  5. 测试：`tests/test_hashtags.py`（tag 保留/去重/上限、候选互不相同、句首不重复）、`tests/test_amplify.py`（转发带原帖 tag + 我方 tag、被拦后降级纯转发、间隔守卫、push 规格）。
+- 验证：`./scripts/docker.sh verify` 通过，**910 条测试**。
+- 待办 / 待用户决定：部署后 `ops launch --push next` 推一次，**4 小时后**看是否进 page 1、有没有 `duplicate_publication` / `near_duplicate_publication` 拒绝，以及 `ops metrics` 里该帖的赞/回复/转发读数。
+
+## 2026-10-20 19:20 自有帖子的测量闭环（步骤 3，未提交、未部署）
+- 现象：过去三天调互刷全靠手搓数。证据：`observed_posts` 里我们自己的 195 条帖计数全是 0；`post_refresh` 队列里自己的帖子 0 行（`refresh_step` 只处理回复候选任务）；`amplify_actions` 没有 `post_id`，只有事件；`own_post_checks.fields_json` 是 `'{}'`；唯一一次读到真实互动（41 赞）是人工开页面看的。也就是说“推 8 次赞 + 7 条回复能到多少 hot score”这类判断此前没有数据来源。
+- 判断：不是接口没有数据，是没人去读。`/posts/{id}/counters` 一直可用（`actuator.get_counters`），只是 `refresh` worker 只给别人的帖子排期。
+- 处理（代码完成，`./scripts/docker.sh verify` 通过 901 条测试，**未 commit、未部署**）：
+  1. 新表 `own_post_metrics`（`ctn/storage/lifecycle.py`）：每个原创一行，按固定年龄回读 8 次——90s、10min、30min、1h、3h、6h、12h、24h（`OWN_METRIC_STAGES`，`ctn/storage/runtime.py`）。
+  2. `queue_own_metric / claim_own_metrics / finish_own_metric / own_metric_rows`：插入幂等；claim 带 180s 租约防止慢读被重复领；读失败（空 counters）也推进阶段，不会卡死；计数同时写回 `observed_posts` 的 likes/replies/reposts。
+  3. `ctn/actuator.py`：`POST` 成功后（拿到 post_id）自动入队；simulated/blocked/unknown 不入队。原创、第一帖、互刷推送都走这条路，所以不需要改发布逻辑。
+  4. `ctn/pipeline/refresh.py`：新增 `own_metric_step`，与回复候选刷新共用读预算纪律（每轮 ≤3 条、每分钟 ≤9 条、间隔 2s、团队读积压 >120s 时跳过），`refresh_tick` 把两者串在同一个 `refresh` worker（5s）里。
+  5. `ops metrics`（`ctn/ops.py`）：打印每条原创最近一次读数 + `trending` 标记 + 年龄，用于对比“推过的”和“没推过的”。
+  6. 测试：`tests/test_own_metrics.py`（9 条）覆盖幂等入队、租约、8 个阶段推进到 done、计数镜像、每分钟预算、`ops metrics` 摘要、POST 成功入队 / dry-run 不入队。
+- 预期数据（首次部署后）：半天内能拿到每条原创 90s/10min/30min/1h 的点，约 20–30 条原创；能回答“8 次赞 + 7 条回复在 1h 时值多少 hot score，离 trending 阈值差多少”。
+- 待办 / 待用户决定：commit + 重启 fleet（需要 `ops backup`）后跑半天；其余步骤 1+2（推送规格 + 带 tag 的转发）、4（回复预算下调）、5（预算保护）按顺序排在后面。
+
 - 现象：部署前 702→754MB 库，盘 46G 用 31G（剩 16G）。`docker system df`：镜像 18.72GB（其中 1Panel 的其他服务占用大头，与我们无关）、**build cache 7.27GB（全是我们 99 次 build 的层）**；备份 14 个共 2.9GB。
 - 处理：①`git commit ab1dbf0` 并 push 到 `stage3`（本机 git 身份未配置，按仓库历史设为 `Xiang Li <z5533008@unsw.edu.au>`，只改了本仓库 local config）；②删旧备份只留 `backup-20261020-0410/0505`，新备份 `backup-20261020-0713.sqlite3`（720MB）；③`nice -n 19 ionice -c 3 docker.sh build all`（缓存命中，12s）；④`docker compose --profile discord up -d fleet macro-agent discord-review`；⑤部署后 `docker builder prune -f` 回收 6.86GB，删 `ctn2026/verify:local`。
 - 结果：盘 27G/46G（剩 20G，59%）。三个容器 healthy。`db_lock` 3374 tx / max_hold **0.138s** / max_wait 0.323s / slow 空；worker error 全空；`unknown` 0。15 分钟内 213 次动作成功，只有 2 条 like 因重启 `client shutting down` 失败（无害）。`discord_health` 已刷新（connected true），19 条坏 payload（attempts 22）标成 `failed` 不再堵队列。

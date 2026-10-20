@@ -22,11 +22,12 @@
   "max_wait_seconds": 7200,
   "steps_per_tick": 4,
   "push": {
-    "notes": "Operator decision 2026-10-20: push a few originals hard to reach trending (`ops launch --push next|POST_ID`). Trending is the platform's global_hot_score; a live fit (46 posts, R2 0.99) gave ~1.2 + 3.5 ln(1+likes) + 3.3 ln(1+replies) + 4.9 ln(1+reposts) - 1.8 per hour of age, and page one ends near 20. Trending posts drew 1.42 citizen replies each, the others 0.02. A pushed post gets this many reposts and replies in total (its normal amplification replies count) from different accounts, front-loaded inside the window; an account joins at most max_per_account_per_day pushes a day.",
-    "reposts": 4,
-    "replies": 7,
+    "notes": "Operator decision 2026-10-20: push a few originals hard to reach trending (`ops launch --push next|POST_ID`). Trending is the platform's global_hot_score; a live fit (46 posts, R2 0.99) gave ~1.2 + 3.5 ln(1+likes) + 3.3 ln(1+replies) + 4.9 ln(1+reposts) - 1.8 per hour of age, and page one now ends near 29 (2026-10-20 18:00). Reposts dominate: at likes 30 / replies 9, 4 reposts scores 28.0 at publish time and 24.4 two hours later (miss), while 14 reposts scores 34.1 and 30.5 (in). A pushed post gets this many reposts and replies in total (its normal amplification replies count) from different accounts, front-loaded inside the window; an account joins at most max_per_account_per_day pushes a day. Push reposts carry a short comment with the original's tags plus one of ours (policies/hashtags-v1.json `reposts`): verified 2026-10-20 that a commented repost still increments the original's reposts counter. min_seconds_between_pushes stops an accidental second push.",
+    "reposts": 14,
+    "replies": 9,
     "window_seconds": [60, 1500],
-    "max_per_account_per_day": 2,
+    "max_per_account_per_day": 3,
+    "min_seconds_between_pushes": 10800,
     "request_ttl_seconds": 10800
   }
 }

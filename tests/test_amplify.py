@@ -258,16 +258,20 @@ class PushTests(unittest.TestCase):
         self.assertEqual({r['id'] for r in before} <= {r['id'] for r in replies}, True)
         self.assertEqual(amplify.push_post(self.store, 'o1', self.author, 1000.0, self.accounts, reposts=3, replies=6, now=1000.0)['reason'], 'already_pushed')
 
-    def test_an_account_joins_at_most_two_pushes_a_day(self):
-        for i, post in enumerate(('p1', 'p2')):
-            amplify.push_post(self.store, post, self.author, 1000.0 + i, self.accounts, reposts=4, replies=5, rng=random.Random(i), now=1000.0 + i)
-        out = amplify.push_post(self.store, 'p3', self.author, 1002.0, self.accounts, reposts=4, replies=5, rng=random.Random(9), now=1002.0)
+    def test_an_account_joins_at_most_three_pushes_a_day(self):
+        cap = int(amplify.POLICY['push']['max_per_account_per_day'])
+        for i in range(cap):
+            amplify.push_post(self.store, f'p{i}', self.author, 1000.0 + i, self.accounts, reposts=4, replies=5,
+                              rng=random.Random(i), now=1000.0 + i)
         counts = {}
-        for post in ('p1', 'p2', 'p3'):
-            for r in self.rows(post):
+        for i in range(cap):
+            for r in self.rows(f'p{i}'):
                 counts[r['account_id']] = counts.get(r['account_id'], 0) + 1
-        self.assertLessEqual(max(counts.values()), 2)
-        self.assertLess(out['reposts'] + out['replies'], 9)  # 9 accounts, 18 places, two pushes already used them
+        self.assertEqual(max(counts.values()), cap)  # 9 accounts, 9 places per push: everyone is used exactly `cap` times
+        # The accounts are spent for the day; a further push finds nobody available.
+        spent = amplify.push_post(self.store, 'extra', self.author, 2000.0, self.accounts, reposts=4, replies=5,
+                                  rng=random.Random(9), now=2000.0)
+        self.assertEqual((spent['reposts'], spent['replies']), (0, 0))
         # A day later the same accounts are free again.
         later = amplify.push_post(self.store, 'p4', self.author, 1000.0 + 86401, self.accounts, reposts=4, replies=5, now=1000.0 + 86401)
         self.assertEqual((later['reposts'], later['replies']), (4, 5))
@@ -337,6 +341,64 @@ class PushWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.platform.posts['o1'].reposts, 2)
         meta = json.loads(self.store._conn.execute("SELECT metadata_json FROM action_intents WHERE kind='repost'").fetchone()[0])
         self.assertEqual(meta['engine'], 'amplify')
+
+
+class RepostCommentPushTests(unittest.IsolatedAsyncioTestCase):
+    """Push reposts carry a short comment with the original's tags plus one of ours (verified live 2026-10-20)."""
+    async def asyncSetUp(self):
+        self.store, self.router = setup_store(TEN); self.addCleanup(self.store.close)
+        self.accounts = amplify.amplifiable_accounts(self.store)
+        self.platform = MockLegitClient(failure_rate=0, latency_ms=(0, 0))
+        self.platform.posts['o1'] = MockPost(post_id='o1', author=self.accounts[0],
+                                            text='Ferry crews rotate weekly. #KeepKingstoniaOpen', created_at=time.time())
+        self.store.upsert_observed_post({'post_id': 'o1', 'author': self.accounts[0],
+                                         'text': 'Ferry crews rotate weekly. #KeepKingstoniaOpen', 'created_at': time.time()})
+        self.worker = amplify.AmplifyWorker(actor(self.platform, self.store), self.router, Mock(), Mock(), rng=random.Random(3))
+        with self.store.batch_transaction():
+            for account in self.accounts[1:3]:
+                self.store._conn.execute("INSERT INTO amplify_plan(id,post_id,kind,account_id,due_at,updated_at) VALUES(?,?,'repost',?,0,0)",
+                                         ('rp' + account, 'o1', account))
+
+    async def test_reposts_carry_the_original_tag_plus_one_of_ours(self):
+        with patch.object(amplify, 'level', return_value='high'):
+            await self.worker.step()
+        comments = [c['comment'] for c in self.platform.reposts_with_comment]
+        self.assertEqual(len(comments), 2)
+        for text in comments:
+            self.assertIn('#KeepKingstoniaOpen', text)
+            self.assertIn('#ProofKeepsUsOpen', text)
+        self.assertEqual(len(set(comments)), 2)  # different accounts open differently
+        self.assertEqual(self.platform.posts['o1'].reposts, 2)
+
+    async def test_a_rejected_comment_still_goes_out_as_a_plain_repost(self):
+        with patch.object(amplify, 'level', return_value='high'), \
+             patch('ctn.hashtags.repost_comments', return_value=['中文不受支持 #h2d2']):
+            await self.worker.step()
+        self.assertEqual(self.platform.reposts_with_comment, [])
+        self.assertEqual(self.platform.posts['o1'].reposts, 2)
+        meta = [json.loads(r[0]) for r in self.store._conn.execute("SELECT metadata_json FROM action_intents WHERE kind='repost'")]
+        self.assertEqual({m.get('repost_comment_rejected') for m in meta}, {'non_english_text'})
+
+
+class PushIntervalTests(unittest.TestCase):
+    def setUp(self):
+        self.store, self.router = setup_store(); self.addCleanup(self.store.close)
+        self.accounts = amplify.amplifiable_accounts(self.store)
+        publish(self.store, 'o1', self.accounts[0])
+        publish(self.store, 'o2', self.accounts[1])
+
+    def test_the_push_spec_is_sized_for_page_one(self):
+        push = amplify.POLICY['push']
+        self.assertEqual((push['reposts'], push['replies'], push['max_per_account_per_day']), (14, 9, 3))
+
+    def test_a_second_push_inside_the_minimum_interval_is_refused(self):
+        gap = float(amplify.POLICY['push']['min_seconds_between_pushes'])
+        self.assertEqual(amplify.request_push(self.store, 'o1', reposts=2, replies=2, now=1000.0)['reposts'], 2)
+        early = amplify.request_push(self.store, 'o2', reposts=2, replies=2, now=1000.0 + 60)
+        self.assertEqual(early['reason'], 'too_soon')
+        self.assertEqual(early['wait_s'], int(gap) - 60)
+        self.assertEqual(self.store._conn.execute('SELECT COUNT(*) FROM amplify_push').fetchone()[0], 1)
+        self.assertEqual(amplify.request_push(self.store, 'o2', reposts=2, replies=2, now=1000.0 + gap)['reposts'], 2)
 
 
 class AmplifyReplyKeyTests(unittest.TestCase):

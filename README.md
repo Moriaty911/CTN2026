@@ -656,6 +656,12 @@ priority = JEV score + audience   (the old "longer wait = higher priority" term 
   reads counters by post id (≤ 120/min, ≤ 10 per step, 0.5 s apart), yields whenever the team read backlog exceeds 2 s,
   marks refreshes more than 5 minutes late as stale, and drops them when the task is no longer open. New counts
   re-score the task and feed the comment queue.
+- **Own-post metrics:** our own publications never appear in the crawl stream with counters (`/posts/{id}`
+  returns none and the crawler only mirrors other accounts' feed rows), so every successful original is queued in
+  `own_post_metrics` (`ctn/storage/runtime.py`) and re-read through `/posts/{id}/counters` at 90 s, 10/30/60 min,
+  3/6/12/24 h. Reads share `refresh`'s budget discipline (≤ 3 per step, ≤ 9 per minute, 2 s apart, skipped while the
+  team read backlog exceeds 120 s); counts are mirrored into `observed_posts`. `ops metrics` prints the latest
+  reading per original with the trending flag — without it, amplify push levels were tuned blind.
 - **Comment crawl:** priority is `10·ln(1 + unseen)` plus bonuses (own thread 80, verified 40, trending 30). Own,
   verified and trending threads are always among the candidates, and one post gets at most 4 comment pages per hour;
   after that its backlog is marked caught up (`depth_cap`) and only newer replies are read later.

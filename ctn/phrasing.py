@@ -48,7 +48,7 @@ def strip_stance(text):
 def recent_texts(store, policy=POLICY):
     with store._lock:
         return [r[0] for r in store._conn.execute(
-            "SELECT text FROM action_intents WHERE kind IN ('post','reply') AND status IN ('claimed','sending','unknown','succeeded') "
+            "SELECT text FROM action_intents WHERE kind IN ('post','reply','repost') AND status IN ('claimed','sending','unknown','succeeded') "
             "AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('initialise','warmup') AND text<>'' "
             "ORDER BY created_at DESC LIMIT ?", (int(policy['recent_window']),))]
 

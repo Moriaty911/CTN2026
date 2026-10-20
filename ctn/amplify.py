@@ -109,12 +109,19 @@ def plan_post(store, post_id, author, kind, published_at, accounts, *, lvl, rng=
     return len(rows)
 
 
-def push_post(store, post_id, author, start, accounts, *, reposts, replies, rng=random, now=None, policy=POLICY):
+def push_post(store, post_id, author, start, accounts, *, reposts, replies, rng=random, now=None, policy=POLICY, enforce_interval=False):
     """Push one of our originals hard (policy `push`): reposts plus enough replies to reach `replies` in total,
     each from a different account, front-loaded after `start`. Queued replies already planned move into the window."""
     ts = time.time() if now is None else now
     rules = policy['push']
     with store.batch_transaction():
+        if enforce_interval:
+            # Operator pushes are manual; a second one minutes later is a mistake, not a strategy.
+            last = store._conn.execute('SELECT MAX(pushed_at) FROM amplify_push').fetchone()[0]
+            gap = float(rules.get('min_seconds_between_pushes', 0))
+            if last and ts - float(last) < gap:
+                return {'post_id': post_id, 'reposts': 0, 'replies': 0, 'reason': 'too_soon',
+                        'wait_s': int(gap - (ts - float(last)))}
         if store._conn.execute('INSERT OR IGNORE INTO amplify_push VALUES(?,?,?,?)', (post_id, reposts, replies, ts)).rowcount == 0:
             return {'post_id': post_id, 'reposts': 0, 'replies': 0, 'reason': 'already_pushed'}
         store._conn.execute('INSERT OR IGNORE INTO amplify_sources VALUES(?,?,?,?,?)', (post_id, author, 'post', 'push', ts))
@@ -154,7 +161,7 @@ def request_push(store, target, *, reposts=None, replies=None, now=None, policy=
         row = store._conn.execute("SELECT account_id,published_at FROM publications WHERE post_id=? AND kind='post'", (str(target),)).fetchone()
     if row is None:
         raise ValueError('not one of our published originals: ' + str(target))
-    return push_post(store, str(target), row[0], ts, amplifiable_accounts(store), **spec, now=ts, policy=policy)
+    return push_post(store, str(target), row[0], ts, amplifiable_accounts(store), **spec, now=ts, policy=policy, enforce_interval=True)
 
 
 def pending_push(store, now, policy=POLICY):
@@ -207,7 +214,8 @@ class AmplifyWorker:
                 # Clear the request first: a crash after this pushes nothing rather than pushing two posts.
                 await asyncio.to_thread(self.store.set_policy, 'amplify_push_next', {})
                 await asyncio.to_thread(lambda: push_post(self.store, src['post_id'], src['account_id'], float(src['published_at']), accounts,
-                                                          reposts=push['reposts'], replies=push['replies'], rng=self.rng, now=ts, policy=self.policy))
+                                                          reposts=push['reposts'], replies=push['replies'], rng=self.rng, now=ts, policy=self.policy,
+                                                          enforce_interval=True))
         done = []
         for row in await asyncio.to_thread(self._due, ts):
             done.append(await self._run(row, ts))
@@ -270,6 +278,35 @@ class AmplifyWorker:
                 return p
         return None
 
+    def _repost_rank(self, row):
+        """Position of this repost among its post's reposts, so one push never repeats a lead sentence."""
+        with self.store._lock:
+            return self.store._conn.execute('SELECT COUNT(*) FROM amplify_plan WHERE post_id=? AND kind=? AND id<=?',
+                                            (row['post_id'], 'repost', row['id'])).fetchone()[0] - 1
+
+    def _repost_comment(self, row, post):
+        """(text, rejection) for one push repost; ('', '') means a plain repost is fine and still counts as a repost."""
+        from ctn.hashtags import repost_comments
+        from ctn.jev.postflight import MAX_POST_CHARS, validate_text_constraints
+        from ctn.phrasing import recent_texts, repetition_reason
+        candidates = repost_comments((post or {}).get('text') or '', f"{row['account_id']}:{row['post_id']}",
+                                     index=self._repost_rank(row))
+        if not candidates:
+            return '', ''
+        recent = recent_texts(self.store)
+        reasons = []
+        for text in candidates:
+            ok, reason = validate_text_constraints(text, max_chars=MAX_POST_CHARS)
+            if not ok:
+                reasons.append(reason)
+                continue
+            repeated = repetition_reason(text, recent)
+            if repeated:
+                reasons.append(repeated)
+                continue
+            return text, ''
+        return '', reasons[0] if reasons else 'no_candidate'
+
     def _settle(self, row, result, now):
         if result.ok:
             return self._finish(row, 'done', 'ok', now=now)
@@ -293,7 +330,10 @@ class AmplifyWorker:
             # A repost is a publish (POST /posts) and shares the team's 3-a-minute budget with posts and replies.
             if await asyncio.to_thread(self.store.request_backlog, 'route:publish', now=ts) > float(self.policy['max_publish_backlog_seconds']):
                 return self._finish(row, 'queued', 'publish_backlog', delay=float(self.policy['reply_retry_seconds']), now=ts)
-            result = await self.actuator.repost(row['account_id'], row['post_id'], context=context)
+            text, rejected = await asyncio.to_thread(self._repost_comment, row, post)
+            if rejected:
+                context = {**context, 'repost_comment_rejected': rejected}
+            result = await self.actuator.repost(row['account_id'], row['post_id'], text=text, context=context)
             return self._settle(row, result, ts)
         if not post or not post.get('text'):
             return self._finish(row, 'queued', 'target_not_mirrored', delay=60, now=ts)

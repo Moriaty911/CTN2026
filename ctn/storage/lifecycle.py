@@ -38,6 +38,8 @@ CREATE INDEX IF NOT EXISTS idx_report_target_obs ON report_target_observations(a
 CREATE TABLE IF NOT EXISTS trending_seen(post_id TEXT PRIMARY KEY,seen_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS post_refresh(post_id TEXT NOT NULL,stage INTEGER NOT NULL,due_at REAL NOT NULL,status TEXT NOT NULL DEFAULT 'queued',PRIMARY KEY(post_id,stage));
 CREATE INDEX IF NOT EXISTS idx_post_refresh_due ON post_refresh(status,due_at);
+CREATE TABLE IF NOT EXISTS own_post_metrics(post_id TEXT PRIMARY KEY,account_id TEXT NOT NULL DEFAULT '',stage INTEGER NOT NULL DEFAULT 0,due_at REAL NOT NULL DEFAULT 0,reads INTEGER NOT NULL DEFAULT 0,likes INTEGER NOT NULL DEFAULT 0,replies INTEGER NOT NULL DEFAULT 0,reposts INTEGER NOT NULL DEFAULT 0,views INTEGER NOT NULL DEFAULT 0,first_read_at REAL NOT NULL DEFAULT 0,last_read_at REAL NOT NULL DEFAULT 0,done INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS idx_own_post_metrics_due ON own_post_metrics(done,due_at);
 CREATE INDEX IF NOT EXISTS idx_batches_target_version ON reply_batches(target_id,target_version,status);
 '''
 

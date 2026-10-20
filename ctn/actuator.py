@@ -165,11 +165,10 @@ class Actuator:
             lambda: self._client.like(account, post_id), decision_id,metadata=context,
         )
 
-    async def repost(self, account: str, post_id: str, *, decision_id: str = "", context=None) -> ActionResult:
-        return await self._write(
-            ActionKind.REPOST, account, post_id,
-            lambda: self._client.repost(account, post_id), decision_id,metadata=context,
-        )
+    async def repost(self, account: str, post_id: str, *, text: str = '', decision_id: str = "", context=None) -> ActionResult:
+        # A comment keeps the original's reposts counter intact (verified 2026-10-20) and adds our hashtags to it.
+        call = (lambda: self._client.repost(account, post_id, comment=text)) if text else (lambda: self._client.repost(account, post_id))
+        return await self._write(ActionKind.REPOST, account, post_id, call, decision_id, text=text, metadata=context)
 
     async def reply(
         self,
@@ -406,6 +405,10 @@ class Actuator:
                 # The store turns an "unknown" that never reached the wire into a definite failure.
                 row=await asyncio.to_thread(self.store.get_action,ident)
                 if row and row['status']=='failed':status,detail='failed',row['detail']
+        if status=='succeeded' and kind is ActionKind.POST and response.get('post_id') and self.store:
+            # Schedule counter read-backs for our own publication (own_post_metrics, ctn/pipeline/refresh.py).
+            try: await asyncio.to_thread(self.store.queue_own_metric,response['post_id'],account)
+            except Exception as exc: self._warn('own metric queue failed',error=str(exc))
         return result(status,detail,_ms(start),response)
 
     def _warn(self, msg: str, **fields: Any) -> None:
