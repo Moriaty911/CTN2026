@@ -2,7 +2,13 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
-## 2026-10-20 18:30 数据库锁：定位与改代码（未提交、未部署）
+## 2026-10-20 18:35 部署（ab1dbf0）与磁盘清理
+- 现象：部署前 702→754MB 库，盘 46G 用 31G（剩 16G）。`docker system df`：镜像 18.72GB（其中 1Panel 的其他服务占用大头，与我们无关）、**build cache 7.27GB（全是我们 99 次 build 的层）**；备份 14 个共 2.9GB。
+- 处理：①`git commit ab1dbf0` 并 push 到 `stage3`（本机 git 身份未配置，按仓库历史设为 `Xiang Li <z5533008@unsw.edu.au>`，只改了本仓库 local config）；②删旧备份只留 `backup-20261020-0410/0505`，新备份 `backup-20261020-0713.sqlite3`（720MB）；③`nice -n 19 ionice -c 3 docker.sh build all`（缓存命中，12s）；④`docker compose --profile discord up -d fleet macro-agent discord-review`；⑤部署后 `docker builder prune -f` 回收 6.86GB，删 `ctn2026/verify:local`。
+- 结果：盘 27G/46G（剩 20G，59%）。三个容器 healthy。`db_lock` 3374 tx / max_hold **0.138s** / max_wait 0.323s / slow 空；worker error 全空；`unknown` 0。15 分钟内 213 次动作成功，只有 2 条 like 因重启 `client shutting down` 失败（无害）。`discord_health` 已刷新（connected true），19 条坏 payload（attempts 22）标成 `failed` 不再堵队列。
+- 待办 / 待用户决定：`ops db-slim`（`rag_snapshots` 296MB + `reply_batches.plan_json` 200MB，库每天 +600MB）尚未做；比赛期间如需跑测试用 `ionice`，跑完 `docker builder prune -f`。
+
+## 2026-10-20 18:30 数据库锁：定位与改代码（未提交、未部署，已被 18:35 条目取代）
 - 现象：`ops status` 上一个 300s 窗口 `fleet.db_lock` hold_share 0.532、`max_hold 44.569s`（`pipeline/crawl.py:ingest_rows`）、`max_wait 213.1s`（别的 worker 在排队）；`slow db transaction` 里 `ingest_history` 也有 32.4s。macro-agent 6 小时里 11 次以 `database is locked` 退出，docker 自动重启又撞回同一把锁。
 - 判断：**不是检测器算得慢**。在线上库副本上实测：一页 40 帖走真实 `_ingest_page` 路径（upsert + 检测 + 证据）只要 **0.15s**（4ms/条），检测器单独跑 30 条 p50 4ms。44s 几乎全在写事务的 commit / WAL checkpoint / fsync。诱因：16:05 那轮 `docker build`（GB 级写盘）+ 685MB `ops backup`、库当天涨到 702MB、8 个备份共 2.9GB，全在同一块 46G 盘上。结构上的放大器：整个 feed 页塞进一个写事务且检测器在里面跑，`busy_timeout` 5s 挡不住，于是 macro 直接退出、fleet 的 worker 没有兜底也会整进程退出（`sqlite3.OperationalError` 不是 `OSError`，会 raise 到 `asyncio.gather`）。
 - 处理（代码改完，`./scripts/docker.sh verify` 通过，892 条测试；**未 commit、未重启**）：
