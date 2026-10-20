@@ -359,6 +359,17 @@ class RankingTests(Base):
         self.assertEqual(blacklist.price_group(self.rows()[1]), 'ring:700')
         self.assertEqual(blacklist.price_group(self.rows()[2]), 'author:3')
 
+    def test_trending_posts_enter_the_pool_before_newer_cold_posts(self):
+        blacklist.add(self.store, 3001, reason='ring', cluster='ring', evidence={'n': 3, 'threads': ['1']})
+        blacklist.add(self.store, 3002, reason='ring', cluster='ring', evidence={'n': 3, 'threads': ['2']})
+        post(self.store, 'old-trending', 3001, 'Count me in.', at=NOW - 2 * 3600)
+        post(self.store, 'new-cold', 3002, 'Count me in.', at=NOW - 60)
+        self.store._conn.execute('INSERT INTO trending_seen(post_id,seen_at) VALUES(?,?)', ('old-trending', NOW))
+        self.store._conn.commit()
+        ranked = blacklist.pending_targets(self.store, 5, now=NOW)
+        self.assertEqual([r['post_id'] for r in ranked], ['old-trending', 'new-cold'])
+        self.assertEqual(ranked[0]['trending'], 1)
+
     def test_pending_targets_carry_the_ranking(self):
         blacklist.add(self.store, 3001, reason='shared_text', cluster='text:aaa', evidence={'n': 5})
         blacklist.add(self.store, 3002, reason='ring', cluster='ring', evidence={'n': 3, 'threads': ['900']})
@@ -376,6 +387,42 @@ class RankingTests(Base):
         self.assertEqual([r['post_id'] for r in ranked], ['ring', 'weak'])
         self.assertEqual({r['post_id']: r['price_group'] for r in ranked}, {'ring': 'ring:900', 'weak': 'text:aaa'})
         self.assertGreater(ranked[0]['rank_score'], ranked[1]['rank_score'])
+
+
+class CounterRefreshTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+        self.platform = MockLegitClient(failure_rate=0, latency_ms=(0, 0))
+        self.act = actor(self.platform, self.store)
+        self.reporter = blacklist.BlacklistReporter(self.act, self.store)
+
+    async def test_counters_are_read_once_then_cached(self):
+        calls = []
+
+        async def counters(post_id):
+            calls.append(post_id)
+            return {'likes': 40, 'replies': 2, 'reposts': 5}
+
+        self.act.get_counters = counters
+        rows = [{'post_id': 'p1', 'at': NOW}]
+        out = await self.reporter._refresh_counters(rows, 1000.0)
+        self.assertEqual((out[0]['likes'], out[0]['replies'], out[0]['reposts']), (40, 2, 5))
+        await self.reporter._refresh_counters(rows, 1100.0)
+        self.assertEqual(calls, ['p1'])
+        await self.reporter._refresh_counters(rows, 1000.0 + 301.0)
+        self.assertEqual(calls, ['p1', 'p1'])
+
+    async def test_a_read_budget_caps_one_step(self):
+        calls = []
+
+        async def counters(post_id):
+            calls.append(post_id)
+            return {'likes': 1, 'replies': 0, 'reposts': 0}
+
+        self.act.get_counters = counters
+        rows = [{'post_id': f'p{i}', 'at': NOW} for i in range(12)]
+        await self.reporter._refresh_counters(rows, 1000.0)
+        self.assertEqual(len(calls), 8)
 
 
 class SwitchTests(unittest.TestCase):

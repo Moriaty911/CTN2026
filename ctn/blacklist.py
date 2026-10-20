@@ -313,6 +313,15 @@ def rank_candidates(rows, *, policy=POLICY, now=None, price_counts=None, hidden_
     return ranked
 
 
+def rerank(store, rows, *, policy=POLICY, now=None):
+    """Rank again after the counters were refreshed, with the same price and evidence context."""
+    ts = time.time() if now is None else float(now)
+    with store._lock:
+        costs = _price_counts(store, ts)
+        proven = hidden_clusters(store)
+    return rank_candidates(rows, policy=policy, now=ts, price_counts=costs, hidden_clusters=proven)
+
+
 def pending_targets(store, limit=20, *, policy=POLICY, now=None):
     """Visible posts by active blacklisted authors that we may report right now, best evidence first.
 
@@ -337,7 +346,7 @@ def pending_targets(store, limit=20, *, policy=POLICY, now=None):
             "AND NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
             "     AND CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(o.author_id AS TEXT) AND a.created_at>?) "
             "AND NOT EXISTS(SELECT 1 FROM blacklist_account_reports r WHERE r.author_id=o.author_id AND r.reported_at>?) "
-            'ORDER BY at DESC LIMIT ?', (cap, ts - retry_after, ts - retry_after, max(pool, int(limit))))]
+            'ORDER BY trending DESC, at DESC LIMIT ?', (cap, ts - retry_after, ts - retry_after, max(pool, int(limit))))]
         costs = _price_counts(store, ts)
         proven = hidden_clusters(store)
     return rank_candidates(rows, policy=policy, now=ts, price_counts=costs, hidden_clusters=proven)[:int(limit)]
@@ -387,6 +396,7 @@ class BlacklistReporter:
         self._accounts = list(accounts) if accounts is not None else None
         self._next = 0
         self._last_scan = 0.0
+        self._counters = {}
         ensure_schema(store)
 
     # -- reporter accounts --------------------------------------------------------------------------- #
@@ -437,9 +447,11 @@ class BlacklistReporter:
     async def _report_next_post(self, ts):
         if await asyncio.to_thread(self.store.request_backlog, 'route:post_report', now=ts) > float(self.policy['report']['max_route_backlog_seconds']):
             return None
-        targets = await asyncio.to_thread(pending_targets, self.store, 5, policy=self.policy, now=ts)
+        targets = await asyncio.to_thread(pending_targets, self.store, 20, policy=self.policy, now=ts)
         if not targets:
             return None
+        targets = await self._refresh_counters(targets, ts)
+        targets = await asyncio.to_thread(rerank, self.store, targets, policy=self.policy, now=ts)
         entries = active(self.store)
         for target in targets:
             entry = entries.get(int(target['author_id']))
@@ -456,6 +468,37 @@ class BlacklistReporter:
             result = await self.actuator.report(account, str(target['post_id']), reason='inauthentic', detail=detail, context=context)
             return {'post_id': str(target['post_id']), 'author_id': int(target['author_id']), 'status': result.status, 'detail': result.detail}
         return None
+
+    async def _refresh_counters(self, rows, ts):
+        """Fill in real like/reply/repost counts for the posts we are about to rank.
+
+        `observed_posts` keeps the counters from the last crawl, which for a trending post can be hours
+        old, so ranking on it would treat a post with 160 likes as cold. Reads are cached for
+        `counter_cache_seconds` and capped at `counter_refresh_per_tick` per step (300 reads a minute).
+        """
+        ranking = self.policy.get('ranking') or {}
+        ttl = float(ranking.get('counter_cache_seconds', 300))
+        budget = int(ranking.get('counter_refresh_per_tick', 8))
+        out = []
+        for row in rows:
+            row = dict(row)
+            cached = self._counters.get(str(row['post_id']))
+            if cached and ts - cached[0] < ttl:
+                row.update(cached[1])
+            elif budget > 0:
+                budget -= 1
+                try:
+                    counters = await self.actuator.get_counters(str(row['post_id'])) or {}
+                except Exception:
+                    counters = {}
+                if counters:
+                    fresh = {k: int(counters.get(k) or 0) for k in ('likes', 'replies', 'reposts')}
+                    self._counters[str(row['post_id'])] = (ts, fresh)
+                    row.update(fresh)
+            out.append(row)
+        if len(self._counters) > 400:
+            self._counters = {k: v for k, v in self._counters.items() if ts - v[0] < ttl}
+        return out
 
     async def _check_reported_posts(self, ts):
         """Re-read a few posts we reported: a post that is gone was most likely hidden by the moderator."""

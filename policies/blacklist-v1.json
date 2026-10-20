@@ -49,13 +49,33 @@
   },
   "ranking": {
     "candidate_pool": 60,
-    "evidence_weight": {"ring": 1.0, "leak": 1.0, "ring_anchor": 0.95, "copy_paste": 0.9, "operator": 0.8, "shared_text": 0.5},
+    "evidence_weight": {
+      "ring": 1.0,
+      "leak": 1.0,
+      "ring_anchor": 0.95,
+      "copy_paste": 0.9,
+      "operator": 0.8,
+      "shared_text": 0.5
+    },
     "default_weight": 0.5,
     "trending_multiplier": 1.5,
     "engagement_weight": 0.25,
-    "fresh_hours": {"fresh": 3, "stale": 12, "fresh_factor": 1.0, "stale_factor": 0.8, "old_factor": 0.5},
-    "price": {"full_first": 5, "half_until": 10, "half_factor": 0.5, "rest_factor": 0.1},
+    "fresh_hours": {
+      "fresh": 3,
+      "stale": 12,
+      "fresh_factor": 1.0,
+      "stale_factor": 0.8,
+      "old_factor": 0.5
+    },
+    "price": {
+      "full_first": 5,
+      "half_until": 10,
+      "half_factor": 0.5,
+      "rest_factor": 0.1
+    },
     "shared_text_requires_hidden_in_cluster": true,
-    "notes": "2026-10-21: rank by evidence instead of recency. A trending post pays the same 25/5 blue points, so the ranking buys denial (a hidden post stops earning its team likes 5, replies 15, reposts 10 and change-of-mind 160) and keeps six-hour bans away by spending slots on hard evidence first. We cannot see target teams, so the daily price decay (25 for the first 5 reports against a team, then 5, then 10%) is applied per price group: one shared campaign text, one ring (its anchor threads) or one author. shared_text is only reported once a post of the same cluster is already hidden, because it was right 7/12 times against 6/6 for ring - one wrong report costs six hours of reporting for the whole team."
+    "notes": "2026-10-21: rank by evidence instead of recency. A trending post pays the same 25/5 blue points, so the ranking buys denial (a hidden post stops earning its team likes 5, replies 15, reposts 10 and change-of-mind 160) and keeps six-hour bans away by spending slots on hard evidence first. We cannot see target teams, so the daily price decay (25 for the first 5 reports against a team, then 5, then 10%) is applied per price group: one shared campaign text, one ring (its anchor threads) or one author. shared_text is only reported once a post of the same cluster is already hidden, because it was right 7/12 times against 6/6 for ring - one wrong report costs six hours of reporting for the whole team.",
+    "counter_cache_seconds": 300,
+    "counter_refresh_per_tick": 8
   }
 }
