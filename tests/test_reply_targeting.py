@@ -105,8 +105,8 @@ class AudienceTests(unittest.TestCase):
         self.assertGreaterEqual(task['next_attempt_at'], now + 600)
 
     def test_cold_skip_needs_age_low_engagement_and_likely_bot(self):
-        # Suspicion below the hard floor (0.7) but a suspected-bot status: this is the cold ordering rule, not the filter.
-        registry(self.store, 'botty', 0.6, status='suspected_bot')
+        # Suspicion below the hard floor (40 on the 0-100 scale) but a suspected-bot status: this is the cold ordering rule, not the filter.
+        registry(self.store, 'botty', 6, status='suspected_bot')
         now = time.time()
         fresh = self.post('b5', 'botty', created_at=now)
         self.assertEqual(targeting.skip_reason(self.store, fresh, now=now), '')
@@ -360,16 +360,26 @@ class BotAuthorFilterTests(unittest.TestCase):
         registry(self.store, author, value, status=status)
 
     def test_hot_post_by_a_suspected_bot_is_skipped(self):
-        now = time.time(); self.score('enemybot', 0.9)
+        now = time.time(); self.score('enemybot', 90)
         hot = self.post('q1', 'enemybot', created_at=now, likes=40, replies=12)
         self.assertEqual(targeting.skip_reason(self.store, hot, now=now), 'targeting:bot_author')
 
     def test_quiet_citizen_is_still_targeted(self):
-        now = time.time(); self.score('citizen9', 0.2)
+        now = time.time(); self.score('citizen9', 20)
         self.assertEqual(targeting.skip_reason(self.store, self.post('q2', 'citizen9', created_at=now), now=now), '')
 
+    def test_a_weak_signal_does_not_hide_a_real_author(self):
+        # 2026-10-20: the floor was written as 0.7 against a 0-100 score, so a score of 5 hid 32% of authors.
+        now = time.time(); self.score('weak_signal', 5)
+        self.assertEqual(targeting.skip_reason(self.store, self.post('q4', 'weak_signal', created_at=now), now=now), '')
+
+    def test_the_shipped_floor_uses_the_detector_scale(self):
+        # ctn/moderation/detector.py scores 0-100 (it confirms bots at >=85). A floor written as 0.7
+        # skips every author with any signal at all, which removed 32% of authors on 2026-10-20.
+        self.assertGreaterEqual(float(targeting.POLICY['bot_filter']['min_suspicion']), 1.0)
+
     def test_our_own_accounts_are_never_filtered(self):
-        now = time.time(); self.score('ours', 0.95, status='own_bot')
+        now = time.time(); self.score('ours', 95, status='own_bot')
         self.assertEqual(targeting.skip_reason(self.store, self.post('q3', 'ours', created_at=now), now=now), '')
 
 

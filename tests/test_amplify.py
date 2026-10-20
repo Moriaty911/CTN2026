@@ -387,9 +387,9 @@ class PushIntervalTests(unittest.TestCase):
         publish(self.store, 'o1', self.accounts[0])
         publish(self.store, 'o2', self.accounts[1])
 
-    def test_the_push_spec_is_sized_for_page_one(self):
+    def test_the_push_spec_stays_small_while_our_reposts_are_deleted(self):
         push = amplify.POLICY['push']
-        self.assertEqual((push['reposts'], push['replies'], push['max_per_account_per_day']), (14, 9, 3))
+        self.assertEqual((push['reposts'], push['replies'], push['max_per_account_per_day']), (3, 4, 3))
 
     def test_a_second_push_inside_the_minimum_interval_is_refused(self):
         gap = float(amplify.POLICY['push']['min_seconds_between_pushes'])

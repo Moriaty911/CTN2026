@@ -17,8 +17,8 @@
   },
   "freshness_half_life_seconds": 1800,
   "bot_filter": {
-    "notes": "Our own 24h data (2026-10-20): of 2392 replies, 852 went to accounts the detector scores >=0.9 and every one of them was created after the competition started - competitor bots, which cannot change their minds and whose posts only gain a reply count from us. 209 replies went to low-suspicion pre-start citizens. Skipping the high-suspicion set cuts replies by ~39% without touching that group; 77 pre-start accounts with a high score are collateral and accepted.",
-    "min_suspicion": 0.7
+    "notes": "Suspicion is scored on 0-100 (ctn/moderation/detector.py uses >=85 to confirm a bot; the Discord panel says the score is not a probability). 2026-10-20 22:00: the first version of this rule said 0.7 because it was written as if the score were 0-1, so every author with any signal at all was skipped (1457 of 4575 accounts, 32%) and replies fell from 116/h to 72/h. The live distribution is 3116 accounts at 0, 520 at 1-9, 844 at 10-39, 91 at 40-69, 2 at 70+. 40 filters 93 accounts (2%) and leaves the weak signals alone; accounts that simply do not answer us are handled by caps.second_reply_requires_response instead.",
+    "min_suspicion": 40
   },
   "author_history_posts": 20,
   "cold": {
