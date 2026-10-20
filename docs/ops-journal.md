@@ -2,6 +2,38 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-20 18:30 数据库锁：定位与改代码（未提交、未部署）
+- 现象：`ops status` 上一个 300s 窗口 `fleet.db_lock` hold_share 0.532、`max_hold 44.569s`（`pipeline/crawl.py:ingest_rows`）、`max_wait 213.1s`（别的 worker 在排队）；`slow db transaction` 里 `ingest_history` 也有 32.4s。macro-agent 6 小时里 11 次以 `database is locked` 退出，docker 自动重启又撞回同一把锁。
+- 判断：**不是检测器算得慢**。在线上库副本上实测：一页 40 帖走真实 `_ingest_page` 路径（upsert + 检测 + 证据）只要 **0.15s**（4ms/条），检测器单独跑 30 条 p50 4ms。44s 几乎全在写事务的 commit / WAL checkpoint / fsync。诱因：16:05 那轮 `docker build`（GB 级写盘）+ 685MB `ops backup`、库当天涨到 702MB、8 个备份共 2.9GB，全在同一块 46G 盘上。结构上的放大器：整个 feed 页塞进一个写事务且检测器在里面跑，`busy_timeout` 5s 挡不住，于是 macro 直接退出、fleet 的 worker 没有兜底也会整进程退出（`sqlite3.OperationalError` 不是 `OSError`，会 raise 到 `asyncio.gather`）。
+- 处理（代码改完，`./scripts/docker.sh verify` 通过，892 条测试；**未 commit、未重启**）：
+  1. `ctn/pipeline/crawl.py`：`_ingest` 拆成 `_store_post`（存储）/`_inspect_post`（检测）；`_ingest_page`、`ingest_history`、`ingest_comments` 先在一个短事务里提交整页，再逐条跑检测。顺带发现 `extra_delta`/`extra_tag`（coordinated_reply_burst）从来没被用上，删掉这条死代码。
+  2. `ctn/storage/sqlite_store.py`：`busy_timeout` 5s→15s；`slow db transaction` 和 `db_lock.slow` 增加 `commit_s`，下次能直接分清“盘慢”还是“事务里代码慢”。
+  3. `ctn/macro/worker.py`：启动时写库和每轮 `macro_health` 遇锁指数退避重试，`step()` 的锁错误降级成 `deferred` 一轮，不再退出进程。
+  4. `ctn/main.py`：fleet 的 worker 循环里锁错误不再让整个进程退出（原逻辑会 11 个 worker 一起死）；新增 `worker_error_fatal()` 便于测试。
+  5. `ctn/discord_bot.py` + `ctn/storage/lifecycle.py`：outbox 循环整体加 try/except（原来 `refresh_report_reviews` 抛一次错，这个 task 就永久消失，容器 unhealthy 但进程活着、之后所有提醒卡住）；空 `candidate_id` 的坏 payload 和连续失败 25 次的提醒标记 `status='failed'` 放弃，不再永远重试。
+- 待办 / 待用户决定：是否提交并重启（重启前按 runbook 先 `ops backup`）；是否删旧备份（只留最新 2 个）、比赛期间避免在宿主机 `docker build`；是否清理 `observed_posts.raw_json` 的老数据缩库（702MB，对 checkpoint/fsync 影响最大）。
+
+## 2026-10-20 17:05 巡检（用户上线；读代码 + 看运行状况）
+- 现象：
+  - 17:00 已切 shaping。50/50 号 `initialise_status=ready`；`managed_accounts` 49 active + 1 suspended（nolan_mercer standby）。
+  - 发帖+回复约 120–150 条/小时（平台全队上限 180/小时），近 4h 无 429。`action_intents`：succeeded 11085 / failed 30 / sending 2（在途）。
+  - 回读 712 条自己帖子全 visible；`moderation_events` 空；没有新封号。
+  - 当天原创 129 条（上限 196，slot 7.3 分钟）。新闻 claims 442 passed / 65 rejected。
+  - **Discord 提醒循环 16:17:47 起又停了**：`discord_health.at` 不再更新，healthcheck `FailingStreak=81`，容器 unhealthy；16:14:43 之后没有任何 `delivery deferred` 日志。
+  - 19 条 `discord_outbox` 仍 queued、`attempts` 20–21，payload 全是 `{"candidate_id": "", "type": "candidate"}`（黑名单举报事件），永远发不出。
+  - **DB 锁升级**：16:53 `pipeline/crawl.py:ingest_rows:288` 持锁 44.6s，16:55 又 39.6s；一次写等待 213s；macro-agent 在 `store.set_policy('macro_health')` 上报 `sqlite3.OperationalError: database is locked` 崩了一次（当天原创有 1 条 `skipped:OperationalError`）。上一窗口 `hold_share=0.532`、`max_wait_s=213`。
+  - **回复花在哪**（近 6h，765 条 micro 回复）：99 条（13%）给开服前的市民（id ≤ 2343）；98 条给 `report_blacklist` 里的号；396 条给“6 小时 ≥6 帖”的高频号（开服前市民里只有 7% 这么高频）；172 条给低频新号（新 NPC 与别队号混在一起，分不清）。同期观察到 741 条市民新帖，我们只回了 99 条。
+  - 18 条 02:27–02:29 的举报在 `report_attempts` 里仍是 pending、`ruled_at=0`，库里没有裁决回流。
+  - 最好的原创 41 赞 / 1–2 条回复 / 0 转发（赞大部分来自我们的互刷）；3 次 push 之后仍无一条进 trending。
+  - 官方 Scoring 页现在写“第一次举报后 6 小时裁决”（每多一个队减半），不是 `CLAUDE.md` 写的 24 小时；02:27 举报 → 09:09 出结果正好符合 6 小时。
+- 判断：
+  - Discord：根因确认在 `ctn/discord_bot.py:399` 的 `outbox()`——`store.refresh_report_reviews`、`set_policy('discord_health')` 都没有 try/except，一次数据库锁就让整条任务静默退出，进程和网关连接还在，所以只是 unhealthy、不会重启。09:44–16:06 已经这样丢过 6.5 小时提醒，这次是第二次。
+  - DB 锁已到 `CLAUDE.md` 第 4 节的修阈值（hold_share > 0.5、max_wait 远超 1s），并且开始产生真实失败（macro-agent 崩、原创丢 1 槽）。根因是 README TODO 记的“检测器在爬虫的写事务里运行”。
+  - 回复预算大半花在和别队高频号对话上：这些回复不给分（互动只认市民），还会抬高对方帖的回复数（hot 分里有 ln(1+回复)）。不是零收益（在对方热帖里留我方论述），但顶掉的是“改变看法”的机会。
+  - 举报裁决没有回流，黑名单就分不清“判真人”的号（每次判真人 = 6 小时全队禁报），误判号也去不掉；重开举报前要先补这一环。
+- 处理：只读巡检，没有改任何状态、没有重启、没有提交。
+- 待办 / 待用户决定：①Discord 循环加 try/except + 跳过空 `candidate_id`（改代码 + 重启 discord-review）；②把检测/入队移出 `crawl.ingest_rows` 写事务；③回复目标给市民加权、给高频号降权（A/B）；④黑名单举报何时重开、要不要先做裁决回流；⑤`CLAUDE.md` 第 2 节的 24 小时改 6 小时。
+
 ## 2026-10-20 16:30 推送结果、去重修复、点赞上限、Discord 卡住
 - 现象：
   - 4 次推送：30629（09:24，4 转发、只发出 1 条回复、36 赞）**10:38 进过 trending**，市民回复 0；46809（15:18，4 转发 4 回复 0 赞）、

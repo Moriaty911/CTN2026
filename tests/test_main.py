@@ -15,11 +15,33 @@ from ctn.client.mock import MockLegitClient
 from ctn.config import JevConfig, LLMConfig, PlatformConfig, RateConfig, Settings
 from ctn.jev import JevClient
 from ctn.llm import DeepSeekClient
-from ctn.main import serve
+from ctn.main import serve, worker_error_fatal
 from ctn.models import Side
 from ctn.storage import StateStore
 from tests.test_jev_actions import set_score
 from tests.test_jev_evaluator import FakeTransport, choose, content
+
+
+class WorkerErrorPolicyTests(unittest.TestCase):
+    """One busy database used to end the whole fleet: sqlite3.OperationalError is not an OSError,
+    so it fell through to `raise` in the worker loop and killed every worker at once."""
+
+    def test_lock_timeouts_are_retried_next_tick(self):
+        import sqlite3
+
+        from ctn.storage import is_lock_error
+
+        exc = sqlite3.OperationalError("database is locked")
+        self.assertTrue(is_lock_error(exc))
+        self.assertFalse(worker_error_fatal(exc))
+
+    def test_network_errors_are_retried_next_tick(self):
+        self.assertFalse(worker_error_fatal(ConnectionError("reset")))
+        self.assertFalse(worker_error_fatal(TimeoutError()))
+
+    def test_programming_errors_still_stop_the_fleet(self):
+        self.assertTrue(worker_error_fatal(KeyError("missing")))
+        self.assertTrue(worker_error_fatal(ValueError("bad config")))
 
 
 class ServiceJevWiringTests(unittest.IsolatedAsyncioTestCase):

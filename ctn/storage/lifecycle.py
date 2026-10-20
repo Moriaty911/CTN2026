@@ -5,6 +5,7 @@ The database is the source of execution policy. No method performs network I/O.
 from __future__ import annotations
 import hashlib
 import json
+import logging
 import math
 import os
 import time
@@ -211,6 +212,14 @@ class LifecycleStoreMixin:
         ts=time.time() if now is None else now
         with self.batch_transaction():
             return self._conn.execute("UPDATE discord_outbox SET status=?,next_attempt_at=?,lease_until=0 WHERE id=? AND owner=? AND status='claimed'",('sent' if ok else 'queued',ts+min(300,2**min(job['attempts']+1,8)),job['id'],job['owner'])).rowcount==1
+
+    def abandon_discord_outbox(self, job, *, reason='', now=None):
+        """Stop retrying a notification that can never be delivered (malformed payload, poison row)."""
+        ts=time.time() if now is None else now
+        with self.batch_transaction():
+            done=self._conn.execute("UPDATE discord_outbox SET status='failed',next_attempt_at=?,lease_until=0 WHERE id=? AND owner=? AND status='claimed'",(ts,job['id'],job['owner'])).rowcount==1
+        if done:logging.getLogger(__name__).warning('Discord outbox row %s abandoned: %s',job['id'],reason)
+        return done
 
     def report_review(self, candidate):
         with self._lock:

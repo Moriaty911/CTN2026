@@ -5,6 +5,7 @@ from .sqlite_store import (
     StateStore,
     compute_post_norm_hash,
     current_sydney_day,
+    is_lock_error,
     normalize_text,
 )
 
@@ -13,6 +14,7 @@ __all__ = [
     "StateStore",
     "compute_post_norm_hash",
     "current_sydney_day",
+    "is_lock_error",
     "normalize_text",
 ]
 

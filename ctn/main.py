@@ -22,11 +22,24 @@ from .pipeline.brain import JevLlmBrain
 from .pipeline.loop import BotLoop
 from .moderation.events import UnavailableModerationSource,consume_events,probe_report_targets
 from .ratelimit import build_gate,build_ledger
-from .storage import StateStore
+from .storage import StateStore,is_lock_error
 from .telemetry import Telemetry
 from .reconcile import reconcile_unknown_posts
 from .jev.rubrics import ACTIVE_POST_VERSION
 from .analytics import PerformanceCollector
+
+def worker_error_fatal(exc: Exception) -> bool:
+    """Whether a worker tick must end the process (as opposed to being retried next tick).
+
+    Platform/network hiccups and SQLite lock contention are transient; anything else is a bug or a
+    configuration error and should stop the fleet instead of being swallowed.
+    """
+    from .client.base import PlatformError
+    if is_lock_error(exc):return False
+    if isinstance(exc,(PlatformError,TimeoutError)):return False
+    if isinstance(exc,OSError):return not isinstance(exc,(TimeoutError,ConnectionError))
+    return True
+
 
 async def serve(settings,*,mode=None,state_file=None,once=False):
     mode=settings.execution_mode(mode)
@@ -121,11 +134,13 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
                 progress[name].pop('error',None)
                 progress[name]['completed_at']=time.time()
             except Exception as exc:
-                from .client.base import PlatformError
-                if not isinstance(exc,(PlatformError,TimeoutError,OSError)) or isinstance(exc,OSError) and not isinstance(exc,(TimeoutError,ConnectionError)):
+                lock_busy=is_lock_error(exc)
+                if worker_error_fatal(exc):
                     raise
-                progress[name]['error']=type(exc).__name__
-                telemetry.error('worker dependency failed',worker=name,error=type(exc).__name__)
+                # One busy database used to end the whole fleet: every worker shares this process.
+                progress[name]['error']='database is locked' if lock_busy else type(exc).__name__
+                telemetry.error('worker database busy' if lock_busy else 'worker dependency failed',
+                                worker=name,error=type(exc).__name__)
             duration=round(time.monotonic()-start,3)
             telemetry.metric('worker',worker=name,duration_s=duration)
             # Last and 5-minute max step duration, for `ops status` (lock contention shows up here first).

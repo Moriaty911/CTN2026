@@ -48,15 +48,32 @@ class DiscordConfig:
         if not administrator and (admin or not reviewer):raise ValueError('insufficient review permission')
 
 
+MAX_OUTBOX_ATTEMPTS=25
+
+
 async def deliver_one(store,transport):
     """At-least-once notifications; business review/submission is independently idempotent."""
     job=await asyncio.to_thread(store.claim_discord_outbox)
     if job is None:return False
+    log=logging.getLogger(__name__)
+    try:payload=json.loads(job['payload_json'])
+    except ValueError:payload={}
+    attempts=int(job.get('attempts') or 0)+1
+    reason=''
+    if not isinstance(payload,dict):reason='payload is not an object'
+    elif payload.get('type')=='candidate' and not str(payload.get('candidate_id') or '').strip():reason='candidate payload without candidate_id'
+    elif attempts>=MAX_OUTBOX_ATTEMPTS:reason=f'{attempts} failed attempts'
+    if reason:
+        # Such a row can never be delivered; retrying it forever also starved the queue behind it
+        # (19 empty-candidate_id notifications sat at the head on 2026-10-20).
+        await asyncio.to_thread(store.abandon_discord_outbox,job,reason=reason)
+        log.warning('Discord notification abandoned (%s)',reason)
+        return True
     try:
-        await transport(json.loads(job['payload_json']))
+        await transport(payload)
     except Exception:
         await asyncio.to_thread(store.finish_discord_outbox,job,ok=False)
-        logging.getLogger(__name__).warning('Discord delivery deferred')
+        log.warning('Discord delivery deferred')
     else:await asyncio.to_thread(store.finish_discord_outbox,job,ok=True)
     return True
 
@@ -398,19 +415,27 @@ def build_bot(config,store):
                 self.panel_message=message;self.panel_signature=signature;self.panel_error=None;self.panel_checked_at=time.time()
         async def outbox(self):
             await self.wait_until_ready();next_panel=0
+            log=logging.getLogger(__name__)
             while not self.is_closed():
-                await panels.expire_idle()
-                await asyncio.to_thread(store.refresh_report_reviews)
-                now=time.time()
-                if now>=next_panel:
-                    try:await self.ensure_control_panel()
-                    except Exception as exc:
-                        self.panel_error=type(exc).__name__
-                        logging.getLogger(__name__).warning('Control panel refresh failed: %s',self.panel_error)
-                    next_panel=now+30
-                if store.policy('discord_health',{}).get('at',0)<time.time()-20:
-                    await asyncio.to_thread(store.set_policy,'discord_health',{'at':time.time(),'connected':self.is_ready(),'panel_error':self.panel_error})
-                if not await deliver_one(store,self.deliver):await asyncio.sleep(2)
+                try:
+                    await panels.expire_idle()
+                    await asyncio.to_thread(store.refresh_report_reviews)
+                    now=time.time()
+                    if now>=next_panel:
+                        try:await self.ensure_control_panel()
+                        except Exception as exc:
+                            self.panel_error=type(exc).__name__
+                            log.warning('Control panel refresh failed: %s',self.panel_error)
+                        next_panel=now+30
+                    if store.policy('discord_health',{}).get('at',0)<time.time()-20:
+                        await asyncio.to_thread(store.set_policy,'discord_health',{'at':time.time(),'connected':self.is_ready(),'panel_error':self.panel_error})
+                    if not await deliver_one(store,self.deliver):await asyncio.sleep(2)
+                except Exception as exc:
+                    # This task ended for good on 2026-10-20 (a database lock raised inside
+                    # refresh_report_reviews). The bot stayed connected, so nothing restarted it and
+                    # every later notification queued behind the corpse. Keep the loop alive instead.
+                    log.warning('Outbox tick failed: %s: %s',type(exc).__name__,exc)
+                    await asyncio.sleep(10)
         async def deliver(self,payload):
             channel=await self.fetch_channel(config.channel_id)
             if not getattr(channel,'guild',None) or channel.guild.id!=config.guild_id:raise ValueError('configured channel is outside team guild')

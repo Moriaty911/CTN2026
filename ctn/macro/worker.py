@@ -6,11 +6,12 @@ from contextlib import closing
 import json
 import os
 from pathlib import Path
+import sqlite3
 import time
 
 from ctn.config import PLATFORM_MAX_CHARS, Settings, _env_bool
 from ctn.persona import PersonaRegistry,PersonaRouter
-from ctn.storage import StateStore
+from ctn.storage import StateStore,is_lock_error
 from ctn.rag.corpus import Corpus
 from .publisher import StrategicPublisher
 from .state import MacroStateCollector
@@ -206,22 +207,53 @@ def execution_mode(settings, *, force_mock=False, live=False):
     return mode if mode!='live' or enabled else 'dry-run'
 
 
+def _lock_error(exc: BaseException) -> bool:
+    """Kept as a thin alias so the call sites below read uniformly."""
+    return is_lock_error(exc)
+
+
+async def _retry_locked(action,*,label,attempts=5,delay=5.0):
+    """Run one store write, backing off while another process holds the write lock.
+
+    `busy_timeout` covers ordinary contention. The fleet's crawler page transaction has held the
+    write lock for tens of seconds, and an uncaught lock error here used to end the process;
+    docker then restarted it straight back into the same lock (six crash loops on 2026-10-20).
+    """
+    for attempt in range(1,attempts+1):
+        try:return action()
+        except sqlite3.OperationalError as exc:
+            if not _lock_error(exc) or attempt==attempts:raise
+            pause=min(delay*2**(attempt-1),60.0)
+            print(json.dumps({'status':'blocked','reason':f'{label}: {exc}','retry_in_s':pause}),flush=True)
+            await asyncio.sleep(pause)
+
+
 async def serve(args):
     from .cli import _setup_environment
     settings=Settings.load();path=settings.database_path(args.state_file)
     mode=execution_mode(settings,force_mock=args.mock,live=args.live)
     with closing(StateStore(path,migrate=False)) as store:
-        store.bind_data_source('mock' if mode=='mock' else 'real')
-        registry=PersonaRegistry().attach(store);router=PersonaRouter(registry=registry,store=store,default_side=settings.side.value)
+        corpus=Corpus(settings.rag_corpus or None)
+        def startup():
+            store.bind_data_source('mock' if mode=='mock' else 'real')
+            registry=PersonaRegistry().attach(store)
+            corpus.install_sources(store)
+            return registry
+        registry=await _retry_locked(startup,label='startup',attempts=8)
+        router=PersonaRouter(registry=registry,store=store,default_side=settings.side.value)
         actuator,postflight=_setup_environment(store=store,dry_run=mode=='dry-run',force_mock=mode=='mock',live=mode=='live',side=settings.side.value)
-        corpus=Corpus(settings.rag_corpus or None);corpus.install_sources(store)
         async def offline_pi(payload):return {'act':False,'reason':'offline_mock'}
         worker=MacroWorker(store,actuator,router,postflight,corpus,harness_path=args.harness,pi_runner=offline_pi if mode=='mock' else run_pi)
         try:
             while True:
-                store.set_policy('macro_health',{'at':time.time()})
-                write_harness(store,args.harness)
-                result=await worker.step();print(json.dumps(result),flush=True)
+                try:
+                    await _retry_locked(lambda: store.set_policy('macro_health',{'at':time.time()}),label='macro_health')
+                    write_harness(store,args.harness)
+                    result=await worker.step()
+                except sqlite3.OperationalError as exc:
+                    if not _lock_error(exc):raise
+                    result={'status':'deferred','reason':f'{type(exc).__name__}:{exc}'}
+                print(json.dumps(result),flush=True)
                 if args.once:return
                 await asyncio.sleep(30)
         finally:

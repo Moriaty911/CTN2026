@@ -210,15 +210,17 @@ class LockStatsTests(unittest.TestCase):
         before = store.lock_stats()['current']['transactions']
         with store.batch_transaction():
             with store.batch_transaction():pass          # nested blocks are not counted twice
-        clock = iter([0.0, 0.0, 1.5])                     # requested, acquired, finished
+        clock = iter([0.0, 0.0, 1.4, 1.45, 1.5])          # requested, acquired, body end, commit end, finished
         with patch('ctn.storage.sqlite_store.time.perf_counter', side_effect=lambda: next(clock)), \
              self.assertLogs('ctn.db', level='WARNING') as logs:
             with store.batch_transaction():pass
         snap = store.lock_stats()['current']
         self.assertEqual(snap['transactions'] - before, 2)
         self.assertEqual(snap['max_hold_s'], 1.5)
+        self.assertEqual(snap['slow'][0]['commit_s'], 0.05)  # 0.05 of the 1.5s hold was fsync/WAL time
         self.assertIn('test_launch.py', snap['slow'][0]['caller'])
         self.assertIn('slow db transaction', logs.output[0])
+        self.assertIn('commit=0.05s', logs.output[0])
 
 
 if __name__ == '__main__':

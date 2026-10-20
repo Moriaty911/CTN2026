@@ -215,6 +215,12 @@ def _migration_lock(path):
 _DB_LOG = logging.getLogger("ctn.db")
 
 
+def is_lock_error(exc: BaseException) -> bool:
+    """True when SQLite refused the write because another process held the lock (busy_timeout expired)."""
+    text = str(exc).lower()
+    return isinstance(exc, sqlite3.OperationalError) and ("locked" in text or "busy" in text)
+
+
 class LockStats:
     """Diagnostics for the store lock: how long write transactions wait for it and hold it.
 
@@ -249,7 +255,7 @@ class LockStats:
             frame = frame.f_back
         return "unknown"
 
-    def note(self, wait: float, hold: float) -> None:
+    def note(self, wait: float, hold: float, commit_s: float = 0.0) -> None:
         slow = wait >= self.SLOW_SECONDS or hold >= self.SLOW_SECONDS
         caller = self._caller() if slow else ""
         now = time.time()
@@ -263,12 +269,15 @@ class LockStats:
             cur["max_hold_s"] = max(cur["max_hold_s"], hold)
             cur["max_wait_s"] = max(cur["max_wait_s"], wait)
             if slow:
-                cur["slow"] = sorted(cur["slow"] + [{"caller": caller, "hold_s": round(hold, 3), "wait_s": round(wait, 3),
-                                                     "at": round(now, 1)}], key=lambda r: -max(r["hold_s"], r["wait_s"]))[:5]
+                cur["slow"] = sorted(cur["slow"] + [{"caller": caller, "hold_s": round(hold, 3), "commit_s": round(commit_s, 3),
+                                                     "wait_s": round(wait, 3), "at": round(now, 1)}],
+                                       key=lambda r: -max(r["hold_s"], r["wait_s"]))[:5]
                 if now - self._logged_at >= self.LOG_EVERY:
                     self._logged_at, log = now, True
         if log:
-            _DB_LOG.warning("slow db transaction caller=%s hold=%.2fs wait=%.2fs", caller, hold, wait)
+            # `commit` is fsync/WAL time, `hold - commit` is the statement work: apart they say whether
+            # a stall came from the disk or from the code inside the transaction.
+            _DB_LOG.warning("slow db transaction caller=%s hold=%.2fs commit=%.2fs wait=%.2fs", caller, hold, commit_s, wait)
 
     @staticmethod
     def _finish(window: dict[str, Any], now: float) -> dict[str, Any]:
@@ -297,12 +306,12 @@ class StateStore(NewsStoreMixin, LifecycleStoreMixin, OperationsStoreMixin, Camp
             fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
             os.close(fd)
             path.chmod(0o600)
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0)
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=15.0)
         self._finalizer = weakref.finalize(self, self._conn.close)
         self._conn.row_factory = sqlite3.Row
         with self._lock, _migration_lock(self.db_path):
             self._conn.execute("PRAGMA temp_store=MEMORY")
-            self._conn.execute("PRAGMA busy_timeout=5000")
+            self._conn.execute("PRAGMA busy_timeout=15000")
             if self.db_path != ":memory:":
                 self._conn.execute("PRAGMA journal_mode=WAL")
                 self._conn.execute("PRAGMA synchronous=FULL")
@@ -354,6 +363,7 @@ class StateStore(NewsStoreMixin, LifecycleStoreMixin, OperationsStoreMixin, Camp
     def batch_transaction(self) -> Iterator[None]:
         """Short write transaction; nested blocks have independent savepoints."""
         requested = time.perf_counter()
+        commit_s = 0.0
         with self._lock:
             acquired = time.perf_counter()
             depth = self._batch_depth
@@ -375,14 +385,16 @@ class StateStore(NewsStoreMixin, LifecycleStoreMixin, OperationsStoreMixin, Camp
                     self._conn.execute(f'RELEASE {savepoint}')
                 raise
             else:
+                body_end = time.perf_counter()
                 if depth == 0:
                     self._conn.commit()
                 else:
                     self._conn.execute(f'RELEASE {savepoint}')
+                commit_s = time.perf_counter() - body_end if depth == 0 else 0.0
             finally:
                 self._batch_depth = depth
                 if depth == 0:
-                    self._lock_stats.note(acquired - requested, time.perf_counter() - acquired)
+                    self._lock_stats.note(acquired - requested, time.perf_counter() - acquired, commit_s=commit_s)
 
     def lock_stats(self) -> dict[str, Any]:
         """Write-transaction lock wait/hold statistics for this process (see LockStats)."""

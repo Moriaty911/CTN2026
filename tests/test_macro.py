@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -358,6 +359,54 @@ class TestMacroCli(unittest.TestCase):
             # With force_mock=True, falls back to MockLegitClient
             actuator_mock, _ = _setup_environment(dry_run=True, store=store, force_mock=True)
             self.assertIsInstance(actuator_mock._client, MockLegitClient)
+
+
+class MacroLockRetryTests(unittest.IsolatedAsyncioTestCase):
+    """macro-agent crashed 11x in 6h on `database is locked` and docker restarted it into the same lock."""
+
+    async def test_retries_while_another_process_holds_the_lock(self):
+        from ctn.macro.worker import _retry_locked
+
+        calls: list[int] = []
+
+        def action():
+            calls.append(1)
+            if len(calls) < 3:
+                raise sqlite3.OperationalError("database is locked")
+            return "ok"
+
+        self.assertEqual(await _retry_locked(action, label="macro_health", delay=0.0), "ok")
+        self.assertEqual(len(calls), 3)
+
+    async def test_gives_up_after_the_attempt_budget(self):
+        from ctn.macro.worker import _retry_locked
+
+        def action():
+            raise sqlite3.OperationalError("database is locked")
+
+        with self.assertRaises(sqlite3.OperationalError):
+            await _retry_locked(action, label="startup", attempts=2, delay=0.0)
+
+    async def test_other_database_errors_are_not_retried(self):
+        from ctn.macro.worker import _retry_locked
+
+        calls: list[int] = []
+
+        def action():
+            calls.append(1)
+            raise sqlite3.OperationalError("no such table: runtime_policy")
+
+        with self.assertRaises(sqlite3.OperationalError):
+            await _retry_locked(action, label="x", delay=0.0)
+        self.assertEqual(len(calls), 1)
+
+    def test_lock_error_classification(self):
+        from ctn.macro.worker import _lock_error
+
+        self.assertTrue(_lock_error(sqlite3.OperationalError("database is locked")))
+        self.assertTrue(_lock_error(sqlite3.OperationalError("database table is locked")))
+        self.assertFalse(_lock_error(sqlite3.OperationalError("no such table: x")))
+        self.assertFalse(_lock_error(ValueError("database is locked")))
 
 
 if __name__ == "__main__":

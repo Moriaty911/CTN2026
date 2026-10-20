@@ -1,5 +1,9 @@
 """Two-layer crawler: frontline stream + comment crawler, offline with a scripted client."""
 
+import os
+import shutil
+import sqlite3
+import tempfile
 import unittest
 
 from ctn.actuator import Actuator
@@ -226,6 +230,64 @@ class CrawlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(calls),2)
         self.assertIsNotNone(self.store.get_observed_post('history'))
         self.assertEqual(self.store.policy('audit:suspect'),1001)
+
+
+class DetectionRunsAfterCommitTests(unittest.IsolatedAsyncioTestCase):
+    """The detector must not run inside the page write transaction.
+
+    BotDetector.inspect_post both reads a lot and writes evidence rows; wrapped in the page
+    transaction it held the write lock for up to 44s on 2026-10-20 and starved every other writer
+    (fleet, macro-agent, discord-review). The probe below proves the point: while the detector runs,
+    a second connection must be able to take the write lock.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.path = os.path.join(self.dir, "lock.sqlite3")
+        self.client = ScriptedClient()
+        self.actuator = Actuator(self.client, build_gate(FAST), build_ledger(BudgetConfig()))
+        self.store = StateStore(self.path)
+        self.addCleanup(self.store.close)
+        self.seen: list[str] = []
+
+    def probe_detector(self):
+        path = self.path
+        seen = self.seen
+
+        class ProbeDetector:
+            def inspect_post(self, observed, *, record_observation=False, now=None):
+                # timeout=0: if the page transaction were still open this raises "database is locked"
+                conn = sqlite3.connect(path, timeout=0)
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    conn.execute("CREATE TABLE IF NOT EXISTS probe(x INTEGER)")
+                    conn.execute("INSERT INTO probe VALUES(1)")
+                    conn.commit()
+                    seen.append(observed.post_id)
+                finally:
+                    conn.close()
+                return None
+
+        return ProbeDetector()
+
+    async def test_frontline_page_is_committed_before_detection(self):
+        self.client.feed_rows = [post("p1"), post("p2")]
+        crawler = FrontlineCrawler(self.actuator, self.store, feed_account="bot_001", aux_every=4,
+                                   audit_suspects=False, detector=self.probe_detector())
+        report = await crawler.step(now=10.0)
+        self.assertEqual([p.post_id for p in report.new_posts], ["p1", "p2"])
+        self.assertEqual(self.seen, ["p1", "p2"])
+        self.assertIsNotNone(self.store.get_observed_post("p1"))
+
+    async def test_comment_page_is_committed_before_detection(self):
+        self.store.upsert_observed_post(post("top", replies=2), now=1.0)
+        self.client.comment_rows["top"] = [post("c1", author="u1"), post("c2", author="u2")]
+        crawler = CommentCrawler(self.actuator, self.store, page_size=50, cooldown_s=0.0,
+                                 audit_suspects=False, detector=self.probe_detector())
+        report = await crawler.step(now=100.0)
+        self.assertEqual(len(report.new_comments), 2)
+        self.assertEqual(self.seen, ["c1", "c2"])
 
 
 if __name__ == "__main__":

@@ -43,6 +43,33 @@ def _is_question(text: str) -> bool:
     return text.rstrip().endswith("?")
 
 
+def _store_post(store: StateStore, post: Post, *, now: float) -> tuple[bool, dict[str, Any]]:
+    """Storage half of `_ingest`: upsert the post and the author's counters, no detection.
+
+    Deliberately separate from `_inspect_post` so a crawler can commit the page and *then* run the
+    detector. `BotDetector.inspect_post` reads a lot and writes single evidence rows; keeping it
+    inside the page transaction held the write lock for up to 44s and stalled every other writer
+    (2026-10-20). Returns `(changed, record)`.
+    """
+    is_new, rec = store.upsert_observed_post(post, now=now)
+    if not is_new and not rec.get('content_changed'):
+        return False, rec
+    if post.author and (post.raw.get('verified') is True or post.raw.get('platform_level')=='verified'):
+        if store.get_bot_profile(post.author)['status']!='own_bot': store.register_verified_accounts([post.author])
+    if post.author and is_new:
+        store.record_author_observation(post.author,platform_account_id=int(rec.get('author_id') or 0),
+            is_question=_is_question(post.text),has_valid_timestamp=post.created_at>0,
+            now=post.created_at if post.created_at>0 else now)
+    return True, rec
+
+
+def _inspect_post(store: StateStore, post: Post, *, now: float, detector: BotDetector | None) -> DetectionResult | None:
+    """Detection half of `_ingest`; every write inside it is its own short transaction."""
+    if detector is None:
+        return None
+    return detector.inspect_post(post, record_observation=False, now=now)
+
+
 def _ingest(
     store: StateStore,
     post: Post,
@@ -52,22 +79,11 @@ def _ingest(
     extra_tag: str = "",
     detector: BotDetector | None = None,
 ) -> tuple[bool, dict[str, Any], DetectionResult | None]:
-    """Upsert one post. For brand-new posts also update the author's behavioural profile."""
-    is_new, rec = store.upsert_observed_post(post, now=now)
-    if not is_new and not rec.get('content_changed'):
-        return False,rec,None
-    if post.author and (post.raw.get('verified') is True or post.raw.get('platform_level')=='verified'):
-        if store.get_bot_profile(post.author)['status']!='own_bot': store.register_verified_accounts([post.author])
-    if post.author and is_new:
-        store.record_author_observation(post.author,platform_account_id=int(rec.get('author_id') or 0),
-            is_question=_is_question(post.text),has_valid_timestamp=post.created_at>0,
-            now=post.created_at if post.created_at>0 else now)
-    detection = (
-        detector.inspect_post(post, record_observation=False, now=now)
-        if detector is not None
-        else None
-    )
-    return is_new or bool(rec.get("content_changed")), rec, detection
+    """Upsert one post, then detect on it. Callers inside a page transaction use the two halves."""
+    changed, rec = _store_post(store, post, now=now)
+    if not changed:
+        return False, rec, None
+    return True, rec, _inspect_post(store, post, now=now, detector=detector)
 
 
 async def audit_suspected_account(
@@ -99,7 +115,8 @@ async def audit_suspected_account(
     rows = await actuator.get_account_posts(clean_author, limit=limit)
     if rows: store.set_policy('audit:'+clean_author,ts)
     detections: list[DetectionResult] = []
-    def ingest_history():
+    def store_history():
+        fresh: list[Post] = []
         with store.batch_transaction():
             for row in rows:
                 if not isinstance(row, dict):
@@ -107,10 +124,15 @@ async def audit_suspected_account(
                 post = post_from_dict(row)
                 if post is None:
                     continue
-                is_new, _, det = _ingest(store, post, now=ts, detector=detector)
-                if is_new and det is not None:
-                    detections.append(det)
-    await asyncio.to_thread(ingest_history)
+                changed, _ = _store_post(store, post, now=ts)
+                if changed:
+                    fresh.append(post)
+        return fresh
+
+    for post in await asyncio.to_thread(store_history):
+        det = await asyncio.to_thread(_inspect_post, store, post, now=ts, detector=detector)
+        if det is not None:
+            detections.append(det)
     return detections
 
 
@@ -284,7 +306,10 @@ class FrontlineCrawler:
         rows=hydrated
 
         suspect_authors: list[str] = []
-        def ingest_rows():
+
+        def store_rows():
+            """One short write transaction per page: storage only, no detection."""
+            fresh: list[Post] = []
             with self.store.batch_transaction():
                 for row in rows:
                     if not isinstance(row, dict):
@@ -293,15 +318,21 @@ class FrontlineCrawler:
                     if post is None:
                         continue
                     report.fetched += 1
-                    is_new, _, det = _ingest(self.store, post, now=ts, detector=self.detector)
-                    if is_new:
-                        report.new_posts.append(post)
-                        if det is not None:
-                            report.detections.append(det)
-                            if det.is_suspected_bot and post.author and post.author not in suspect_authors:
-                                suspect_authors.append(post.author)
+                    changed, _ = _store_post(self.store, post, now=ts)
+                    if changed:
+                        fresh.append(post)
+            return fresh
 
-        await asyncio.to_thread(ingest_rows)
+        fresh = await asyncio.to_thread(store_rows)
+        # Detection runs after the page is committed: it reads many rows and writes its own evidence
+        # rows, and inside the page transaction it stretched the write lock to tens of seconds.
+        for post in fresh:
+            det = await asyncio.to_thread(_inspect_post, self.store, post, now=ts, detector=self.detector)
+            report.new_posts.append(post)
+            if det is not None:
+                report.detections.append(det)
+                if det.is_suspected_bot and post.author and post.author not in suspect_authors:
+                    suspect_authors.append(post.author)
 
         if self.audit_suspects and self.detector is not None and suspect_authors:
             for suspect in suspect_authors:
@@ -434,32 +465,30 @@ class CommentCrawler:
                 parsed.append(post)
         report.fetched = len(parsed)
 
-        burst = self._burst_authors(
-            [p for p in parsed if self.store.get_observed_post(p.post_id) is None]
-        )
+        # `coordinated_reply_burst` was never actually applied (`_ingest` accepted the delta and
+        # dropped it), so the burst set is no longer computed; BotDetector has its own burst rule.
         hit_existing = False
         suspect_authors: list[str] = []
-        def ingest_comments():
+        def store_comments():
+            """Short write transaction: storage only (see `_store_post`)."""
+            nonlocal hit_existing
+            fresh: list[Post] = []
             with self.store.batch_transaction():
                 for post in parsed:
-                    is_new, _, det = _ingest(
-                        self.store,
-                        post,
-                        now=ts,
-                        extra_delta=COORDINATED_BURST_DELTA if post.author in burst else 0.0,
-                        extra_tag="coordinated_reply_burst" if post.author in burst else "",
-                        detector=self.detector,
-                    )
-                    if is_new:
-                        report.new_comments.append(post)
-                        if det is not None:
-                            report.detections.append(det)
-                            if det.is_suspected_bot and post.author and post.author not in suspect_authors:
-                                suspect_authors.append(post.author)
+                    changed, _ = _store_post(self.store, post, now=ts)
+                    if changed:
+                        fresh.append(post)
                     else:
                         hit_existing = True
+            return fresh
 
-        await asyncio.to_thread(ingest_comments)
+        for post in await asyncio.to_thread(store_comments):
+            report.new_comments.append(post)
+            det = await asyncio.to_thread(_inspect_post, self.store, post, now=ts, detector=self.detector)
+            if det is not None:
+                report.detections.append(det)
+                if det.is_suspected_bot and post.author and post.author not in suspect_authors:
+                    suspect_authors.append(post.author)
 
         if self.audit_suspects and self.detector is not None and suspect_authors:
             for suspect in suspect_authors:
