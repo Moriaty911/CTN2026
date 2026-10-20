@@ -41,6 +41,10 @@
     "account_report_min_actions": 100,
     "account_report_recheck_seconds": 3600,
     "hidden_check_every_seconds": 600,
-    "hidden_checks_per_step": 3
+    "hidden_checks_per_step": 3,
+    "max_post_reports_per_author": 1,
+    "author_retry_after_seconds": 86400,
+    "author_retry_limit": 1,
+    "author_notes": "One post report per author; extra posts stay in the pool. A dismissal is invisible to us, so one retry per author is allowed once 24 h have passed."
   }
 }

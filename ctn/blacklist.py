@@ -219,15 +219,64 @@ def detail_for(entry, policy=POLICY):
     return (policy['report_detail']['prefix'] + text)[:900]
 
 
-def pending_targets(store, limit=20):
-    """Visible posts by active blacklisted authors we have not reported yet, newest first."""
+def _author_rules(policy):
+    rules = policy['report']
+    return (int(rules.get('max_post_reports_per_author', 1)) + int(rules.get('author_retry_limit', 1)),
+            float(rules.get('author_retry_after_seconds', 86400)))
+
+
+def pending_targets(store, limit=20, *, policy=POLICY, now=None):
+    """Visible posts by active blacklisted authors that we may report right now, newest first.
+
+    One author is reported once; further posts stay in the pool. A single retry is allowed
+    `author_retry_after_seconds` after the previous report, because we cannot see dismissals.
+    """
+    ts = time.time() if now is None else float(now)
+    cap, retry_after = _author_rules(policy)
     with store._lock:
         return [dict(r) for r in store._conn.execute(
             "SELECT o.post_id,o.author_id,o.text,COALESCE(NULLIF(o.created_at,0),o.first_seen_at) at FROM observed_posts o "
             "JOIN report_blacklist b ON b.author_id=o.author_id AND b.status='active' "
             "WHERE NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.target_id=o.post_id AND a.status!='failed') "
             "AND NOT EXISTS(SELECT 1 FROM blacklist_post_checks c WHERE c.post_id=o.post_id AND c.state='gone') "
-            'ORDER BY at DESC LIMIT ?', (int(limit),))]
+            "AND (SELECT COUNT(*) FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
+            "     AND CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(o.author_id AS TEXT))<? "
+            "AND NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
+            "     AND CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(o.author_id AS TEXT) AND a.created_at>?) "
+            "AND NOT EXISTS(SELECT 1 FROM blacklist_account_reports r WHERE r.author_id=o.author_id AND r.reported_at>?) "
+            'ORDER BY at DESC LIMIT ?', (cap, ts - retry_after, ts - retry_after, int(limit)))]
+
+
+def pool_summary(store, *, policy=POLICY, now=None):
+    """How much evidence is waiting: one report per author, everything else sits in the pool."""
+    ensure_schema(store)
+    ts = time.time() if now is None else float(now)
+    cap, _ = _author_rules(policy)
+    with store._lock:
+        waiting = store._conn.execute(
+            "SELECT COUNT(*) FROM observed_posts o JOIN report_blacklist b ON b.author_id=o.author_id AND b.status='active' "
+            "WHERE NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.target_id=o.post_id AND a.status!='failed') "
+            "AND NOT EXISTS(SELECT 1 FROM blacklist_post_checks c WHERE c.post_id=o.post_id AND c.state='gone')").fetchone()[0]
+        reported_posts = store._conn.execute(
+            "SELECT COUNT(DISTINCT a.target_id) FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
+            "AND json_extract(a.metadata_json,'$.engine')='blacklist'").fetchone()[0]
+        authors = store._conn.execute("SELECT COUNT(*) FROM report_blacklist WHERE status='active'").fetchone()[0]
+        reported_authors = store._conn.execute(
+            "SELECT COUNT(DISTINCT CAST(json_extract(metadata_json,'$.target_author') AS TEXT)) FROM action_intents "
+            "WHERE kind='report' AND status!='failed' AND json_extract(metadata_json,'$.engine')='blacklist'").fetchone()[0]
+        closed = store._conn.execute(
+            "SELECT COUNT(*) FROM (SELECT COUNT(*) n FROM action_intents WHERE kind='report' AND status!='failed' "
+            "AND json_extract(metadata_json,'$.engine')='blacklist' GROUP BY CAST(json_extract(metadata_json,'$.target_author') AS TEXT) "
+            'HAVING n>=?)', (cap,)).fetchone()[0]
+        ready = store._conn.execute(
+            "SELECT COUNT(DISTINCT c.author_id) FROM blacklist_post_checks c JOIN report_blacklist b "
+            "ON b.author_id=c.author_id AND b.status='active' WHERE c.state='gone'").fetchone()[0]
+        accounts = {r[0]: r[1] for r in store._conn.execute('SELECT status,COUNT(*) FROM blacklist_account_reports GROUP BY status')}
+    reportable = len(pending_targets(store, 100000, policy=policy, now=ts))
+    return {'authors_active': authors, 'authors_reported': reported_authors, 'authors_closed': closed,
+            'authors_ready_for_account_report': ready, 'account_reports': accounts,
+            'posts_visible_unreported': waiting, 'posts_reportable_now': reportable,
+            'posts_pooled': max(0, waiting - reportable), 'posts_reported': reported_posts}
 
 
 def reporting_enabled(store):
@@ -292,7 +341,7 @@ class BlacklistReporter:
     async def _report_next_post(self, ts):
         if await asyncio.to_thread(self.store.request_backlog, 'route:post_report', now=ts) > float(self.policy['report']['max_route_backlog_seconds']):
             return None
-        targets = await asyncio.to_thread(pending_targets, self.store, 5)
+        targets = await asyncio.to_thread(pending_targets, self.store, 5, policy=self.policy, now=ts)
         if not targets:
             return None
         entries = active(self.store)
@@ -387,6 +436,7 @@ def stats(store, *, since=None):
             'AND created_at>=? GROUP BY status', (since,))}
         gone = store._conn.execute("SELECT COUNT(*) FROM blacklist_post_checks WHERE state='gone'").fetchone()[0]
         accounts = {r[0]: r[1] for r in store._conn.execute('SELECT status,COUNT(*) FROM blacklist_account_reports GROUP BY status')}
+    pool = pool_summary(store, now=ts)
     return {'enabled': reporting_enabled(store), 'blacklist': listed, 'post_reports_24h': sent, 'reported_posts_gone': gone,
-            'account_reports': accounts, 'queue': len(pending_targets(store, 1000)),
-            'suspended_s': store.is_reporting_suspended(now=ts)[1]}
+            'account_reports': accounts, 'queue': pool['posts_visible_unreported'], 'reportable_now': pool['posts_reportable_now'],
+            'pool': pool, 'suspended_s': store.is_reporting_suspended(now=ts)[1]}

@@ -25,7 +25,10 @@ def main(argv=None):
     p.add_argument('--size',type=int,choices=[30,50],default=30);p.add_argument('--account');p.add_argument('--source')
     p.add_argument('--persona-id',help='explicit unused persona for replacement registration')
     p.add_argument('--execute',action='store_true',help='explicitly execute the reviewed registration plan')
-    p=subs.add_parser('reports');p.add_argument('operation',choices=['list','approve','reject','defer','clearance','pause','affiliation','automation','calibration'])
+    p=subs.add_parser('reports');p.add_argument('operation',choices=['list','approve','reject','defer','clearance','pause','affiliation','automation','calibration','audit'])
+    p.add_argument('--limit',type=int,default=200,help='audit: how many reported posts to re-read')
+    p.add_argument('--no-accounts',action='store_true',help='audit: skip the blacklisted-author action counts')
+    p.add_argument('--dry-run',action='store_true',help='audit: report what changed without writing checks')
     p.add_argument('--shadow',choices=['on','off'],help='automation: on records decisions only; off lets enabled buckets send')
     p.add_argument('--buckets',help='automation: comma-separated buckets that may send automatically')
     p.add_argument('--p-floor',type=float,help='automation: raise the minimum bot probability (never below 0.7)')
@@ -144,6 +147,20 @@ def main(argv=None):
             elif args.operation=='calibration':
                 from .moderation.decision import calibration_summary
                 result=calibration_summary(store)
+            elif args.operation=='audit':
+                import asyncio
+                from .client.legit_v1 import OfficialLegitClient
+                from .reporting_audit import run_audit
+                if not settings.platform.api_key:parser.error('platform credentials required')
+                if args.limit<=0:parser.error('--limit must be positive')
+                client=OfficialLegitClient(url=settings.platform.base_url or None,team_key=settings.platform.api_key,
+                    default_password=settings.platform.bot_password,auto_register=False,store=store)
+                client.configure_pacing(settings.rate,settings.budget)
+                async def perform_audit():
+                    try:
+                        return await run_audit(client,store,limit=args.limit,accounts=not args.no_accounts,dry_run=args.dry_run)
+                    finally:await client.close()
+                result=asyncio.run(perform_audit())
             elif args.operation=='affiliation':
                 if not args.source:parser.error('source JSON required')
                 proof=json.loads(Path(args.source).read_text())

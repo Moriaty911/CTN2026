@@ -28,6 +28,15 @@ DEFAULT_POLICY = json.loads((Path(__file__).resolve().parents[2] / 'policies/rep
 HARD_P_FLOOR = 0.7
 OVERRIDE_KEYS = ('shadow', 'auto_buckets', 'p_floor', 'max_expected_genuine')
 _SUSPENSION_WORDS = re.compile(r'suspend|ban|disabled|not allowed', re.IGNORECASE)
+# The six-hour stop after a "this is a real person" ruling reads "unable to report any post or
+# account for six hours": it never says suspend, so it needs its own pattern.
+_SIX_HOUR_BAN = re.compile(r'unable to report.{0,80}?(?:six|6)\s*hours', re.IGNORECASE)
+
+
+def starts_six_hour_stop(message: str) -> bool:
+    """True when a 403 message means the team is barred from reporting for six hours."""
+    text = str(message or '')
+    return bool(_SUSPENSION_WORDS.search(text) or _SIX_HOUR_BAN.search(text))
 
 
 def policy(store):
@@ -242,7 +251,7 @@ def record_report_forbidden(store, message, *, now=None):
     with store.batch_transaction():
         store.set_policy('report_forbidden', {'at': ts, 'message': str(message)[:300]})
         store.set_policy('report_clearance', {})
-        if _SUSPENSION_WORDS.search(str(message)):
+        if starts_six_hour_stop(message):
             until = int((ts + pol['suspension_seconds']) * 1000)
             store.set_counter('report_suspended_until_ms', max(store.get_counter('report_suspended_until_ms'), until))
 

@@ -2,6 +2,43 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-20 23:55 举报改成“一个号只报一次，多出来的进池子”（未提交、未部署）
+- 现象：`pending_targets` 只按“帖子”去重，同一个黑名单号有 N 条帖就会被报 N 次。平台对同一目标队每天只有前 5 条满价
+  （25），之后 5、再之后 10%；而每次举报都占一个未决槽位（平台上限 20）并且各带一份“判真人 → 6 小时禁报”的风险。
+  实测 19 条里 14 条成立、5 条被驳回或未处理，`shared_text` 只有 7/12。对同一个号连报到第 4 条，收益已经低于风险。
+- 判断：用户提出“一个账号只举报一次，发现的多出来的扔到一个 pool 里”。这既省槽位又分散风险，还让“先报哪一条”变成
+  真正的决策：如果成功了，这个号进账号举报（15 分）；如果没成功（我们看不到驳回），24 小时后允许用池子里下一条重试。
+- 处理：
+  1. `ctn/blacklist.py pending_targets()` 加作者闸门：同一作者已有非 failed 的举报且在
+     `author_retry_after_seconds`（86400）内 → 该作者所有帖都不出现在候选里；总举报数达到
+     `max_post_reports_per_author`(1) + `author_retry_limit`(1) = 2 → 永久关闭该作者的帖举报。
+     该作者已有账号举报（`blacklist_account_reports.reported_at` 在窗口内）→ 同样不报帖。
+  2. 新增 `pool_summary()`：`posts_visible_unreported` / `posts_reportable_now` / `posts_pooled` /
+     `authors_reported` / `authors_closed` / `authors_ready_for_account_report` / `account_reports`；
+     `stats()` 把它和 `queue`、`reportable_now` 一起输出，`ops blacklist stats` 直接能看到池子有多大。
+  3. `policies/blacklist-v1.json` 新增三个可调参数（1 / 86400 / 1）+ 说明。
+  4. 测试：新增 `test_reports_one_post_per_author_newest_first`、`test_the_extra_posts_of_a_reported_author_wait_in_the_pool`、
+     `test_one_retry_per_author_is_allowed_after_the_window`、`test_an_account_report_parks_the_authors_remaining_posts`、
+     `test_new_posts_from_a_fresh_author_are_reported_too`；改写了原来两条“同一作者逐条报”的测试。
+     `./scripts/docker.sh verify` = 933 条通过。
+- 待办 / 待用户决定：
+  - 部署（build all + up -d）才能生效，会短暂打断发送，需要先 `ops backup`。
+  - 池子里的帖不删除，等作者重新够格时自动回到队列；如果之后发现精度够高，可以把 `author_retry_limit` 调大。
+
+## 2026-10-20 23:20 举报对账工具 `ops reports audit` + 识别“判真人”后的 6 小时禁报（未提交、未部署）
+- 现象：
+  - 裁决**无法自动获取**（只有用户能从官方界面看到）。能自动观测的只有三样：帖子 `get_post` 返回 404（=被隐藏）、我们自己的写操作 403、以及账号动作数。之前 02:27–02:29 报出的 19 条，`report_attempts` 全部停在 `pending`、`ruled_at=0`；我在容器里逐条回读才发现 **14 条已被隐藏**（ring 6/6、copy_paste 1/1、shared_text 7/12），`stats` 里 `reported_posts_gone` 却是 0——因为我们从来没系统回读过。
+  - “判真人”造成的 6 小时禁报识别不了：`ctn/moderation/decision.py:30` 的 `_SUSPENSION_WORDS` 只认 `suspend|ban|disabled|not allowed`，而平台原文是 “Your team is unable to report any post or account for six hours.”，一个词都不匹配。于是被判真人时只写 900 秒退避，之后每 15 分钟再撞一次 403，持续整整 6 小时。
+  - 平台账号状态**读不出来**：实测 `get_profile`/`get_account_posts` 对被封的 nolan_mercer(2374)、pete_aranda(3534) 仍正常返回，没有任何 suspended 字段。所以封号只能靠用户贴的通知或我们自己写操作 403 发现。
+- 判断：举报侧真正缺的不是“多发”，而是“知道结果 + 知道代价”。先做一个只读对账，把精度算出来，再谈排序和名额管理。
+- 处理：
+  1. 新模块 `ctn/reporting_audit.py`：`reported_posts()`（去重后列出所有报过的帖）、`sweep_reported_posts()`（逐条回读，404 记 `blacklist_post_checks.state='gone'`，429/其它错误只计数不乱判）、`account_readiness()`（有隐藏帖的黑名单号 → 拉动作数 → `ready` / `waiting_actions:N`）、`forbidden_summary()`（最后一次 403 原文、pending 数量与最老等待时长、最近失败）、`precision()`（按证据类型算 hidden/filed）、`run_audit()` 汇总。不写任何裁决：`report_attempts.outcome` 仍留给官方事件导入。
+  2. `ctn/moderation/decision.py`：新增 `starts_six_hour_stop()`，除原有关键词外匹配 `unable to report … (six|6) hours`；`record_report_forbidden()` 改用它。现在真被判真人会立刻置 6 小时停报，不再每 15 分钟撞一次。
+  3. `ctn/ops.py`：新增 `ops reports audit [--limit N] [--no-accounts] [--dry-run]`，自带客户端（只读）。
+  4. 测试：`tests/test_reporting_audit.py`（15 条：可见/隐藏记账、dry-run 不写、429 不误判、同一帖只读一次、账号候选需 6 条隐藏+100 动作、按 reason 的精度去重、403 汇总、6 小时措辞识别与 20 条上限措辞的不误判）。
+- 验证：`./scripts/docker.sh verify` 通过，**930 条测试**。
+- 待办 / 待用户决定：需要部署（build + `up -d fleet`）才能运行；部署后先跑 `--dry-run --no-accounts` 看 19 条的真实结局，再跑正式版。蓝分记录仍需用户提供（唯一能核对精度的来源）。
+
 ## 2026-10-20 21:40 四个号被封、补 4 个新号、修 bot_filter 量纲、互刷降档（已部署）
 - 现象：
   - 4 个号被封：`nolan_mercer` 19:15、`pete_aranda` 19:19、`rowan_iqbal77` 20:38、`vhaddad_dev` 20:39。平台原文：“It was reported for inauthentic (bot) activity, it already had a post hidden by the moderator, and it had taken at least 100 actions.”

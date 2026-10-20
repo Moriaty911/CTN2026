@@ -620,6 +620,41 @@ P(upheld) × R  >  P(genuine) × C      and      p ≥ 0.7 (hard floor, never lo
 - `probe_report_targets` records which status-like fields pending report targets expose (`report_target_observations`).
   It never creates rulings. Rulings are still entered by an administrator until those fields are verified.
 
+## Reporting audit (what actually happened to a report)
+
+A ruling cannot be read back: there is no ruling endpoint, and account status is not exposed either (`get_profile`
+answers normally for a suspended account). `ops reports audit` therefore records only what is observable.
+
+```sh
+python -m ctn.ops reports audit --dry-run --no-accounts   # read-only pass, writes nothing
+python -m ctn.ops reports audit                            # records blacklist_post_checks
+```
+
+- `sweep_reported_posts` re-reads every post we reported. A 404 means the moderator hid it (recorded in
+  `blacklist_post_checks`); 429 and other failures are counted as `unreadable` and never judged either way.
+- `account_readiness` lists blacklisted authors that have a hidden post, their public action count, and whether they
+  already clear the 100-action bar (`ready` / `waiting_actions:N`).
+- `forbidden_summary` prints the last 403 wording, the pending pile and the oldest wait; `precision` gives
+  hidden/filed per evidence reason.
+- A 403 reading "unable to report any post or account for six hours" arms the six-hour stop
+  (`ctn/moderation/decision.py:starts_six_hour_stop`). The "20 reports awaiting a moderator's ruling" refusal does not.
+- Rulings stay empty until an administrator imports the official event: the audit never invents an outcome.
+
+### One report per author, the rest waits in the pool
+
+A dismissal is invisible to us, so retrying forever burns slots and multiplies the risk of a six-hour stop. `pending_targets`
+(`ctn/blacklist.py`) therefore reports **one post per blacklisted author** and parks every other post of that author:
+
+- `max_post_reports_per_author` (1) + `author_retry_limit` (1) caps an author at two post reports in total.
+- A second post becomes eligible only after `author_retry_after_seconds` (86400) — the retry budget for a report that
+  produced no hidden post.
+- Once an account report is filed, the author's remaining posts wait a full retry window instead of piling onto the same
+  target team's daily diminishing returns.
+- `pool_summary` / `ops blacklist stats` show `posts_reportable_now` versus `posts_pooled`, plus
+  `authors_reported`, `authors_closed` and `authors_ready_for_account_report`, so the pool is visible rather than
+  silently dropped. Nothing is deleted: pooled posts stay in `observed_posts` and re-enter the queue when their author
+  becomes eligible again.
+
 Automation needs `CTN_REPORT_MODE=hybrid` and is **shadow by default** (decisions are recorded, nothing is sent
 automatically). Operator commands:
 

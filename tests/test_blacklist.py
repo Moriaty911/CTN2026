@@ -198,25 +198,60 @@ class ReporterTests(unittest.IsolatedAsyncioTestCase):
             pid = f'b{i}'
             self.platform.posts[pid] = MockPost(post_id=pid, author='3001', text='As an AI...', created_at=at)
             post(self.store, pid, 3001, 'As an AI...', at=at)
+        for author, pid, at in ((3002, 'c0', now - 50), (3003, 'c1', now - 40)):
+            blacklist.add(self.store, author, reason='leak', evidence={'match': 'As an AI'})
+            self.platform.posts[pid] = MockPost(post_id=pid, author=str(author), text='As an AI...', created_at=at)
+            post(self.store, pid, author, 'As an AI...', at=at)
         post(self.store, 'clean', 3999, 'Not listed.')
 
     def reported(self):
         return [r[0] for r in self.store._conn.execute("SELECT target_id FROM action_intents WHERE kind='report' ORDER BY created_at")]
 
-    async def test_reports_every_post_newest_first_one_per_step(self):
-        for _ in range(4):
+    async def test_reports_one_post_per_author_newest_first(self):
+        for _ in range(5):
             await self.reporter.step()
-        self.assertEqual(self.reported(), ['b1', 'b2', 'b0'])
+        self.assertEqual(self.reported(), ['c1', 'c0', 'b1'])
         meta = json.loads(self.store._conn.execute("SELECT metadata_json FROM action_intents WHERE kind='report' LIMIT 1").fetchone()[0])
-        self.assertEqual((meta['engine'], meta['blacklist_reason'], meta['target_author']), ('blacklist', 'leak', '3001'))
+        self.assertEqual((meta['engine'], meta['blacklist_reason'], meta['target_author']), ('blacklist', 'leak', '3003'))
         self.assertTrue(meta['detail'].startswith('I think that this content is inauthentic (bot) activity because'))
         self.assertEqual(len({r[0] for r in self.store._conn.execute("SELECT account_id FROM action_intents WHERE kind='report'")}), 2)
 
-    async def test_new_posts_seen_later_are_reported_too(self):
+    async def test_the_extra_posts_of_a_reported_author_wait_in_the_pool(self):
         for _ in range(3):
             await self.reporter.step()
-        self.platform.posts['b9'] = MockPost(post_id='b9', author='3001', text='As an AI again', created_at=time.time())
-        post(self.store, 'b9', 3001, 'As an AI again', at=time.time())
+        summary = blacklist.pool_summary(self.store, now=time.time())
+        self.assertEqual(summary['authors_reported'], 3)
+        self.assertEqual(summary['posts_visible_unreported'], 2)
+        self.assertEqual(summary['posts_reportable_now'], 0)
+        self.assertEqual(summary['posts_pooled'], 2)
+        self.assertIsNone((await self.reporter.step())['reported'])
+
+    async def test_one_retry_per_author_is_allowed_after_the_window(self):
+        for _ in range(3):
+            await self.reporter.step()
+        now = time.time()
+        retry_after = float(blacklist.POLICY['report']['author_retry_after_seconds'])
+        self.assertEqual(blacklist.pending_targets(self.store, 5, now=now + retry_after - 60), [])
+        self.assertEqual(len(blacklist.pending_targets(self.store, 5, now=now + retry_after + 60)), 2)
+        strict = dict(blacklist.POLICY, report=dict(blacklist.POLICY['report'], author_retry_limit=0))
+        self.assertEqual(blacklist.pending_targets(self.store, 5, policy=strict, now=now + retry_after + 60), [])
+
+    async def test_an_account_report_parks_the_authors_remaining_posts(self):
+        await self.reporter.step()
+        await self.reporter.step()
+        await self.reporter.step()
+        ts = time.time()
+        with self.store.batch_transaction():
+            self.store._conn.execute('INSERT INTO blacklist_account_reports VALUES(?,?,?,?)', (3001, ts, 'succeeded', ''))
+        self.assertEqual(blacklist.pending_targets(self.store, 5, now=ts + 3600), [])
+        self.assertGreater(len(blacklist.pending_targets(self.store, 5, now=ts + 86400 + 60)), 0)
+
+    async def test_new_posts_from_a_fresh_author_are_reported_too(self):
+        for _ in range(4):
+            await self.reporter.step()
+        blacklist.add(self.store, 3004, reason='leak', evidence={'match': 'As an AI'})
+        self.platform.posts['b9'] = MockPost(post_id='b9', author='3004', text='As an AI again', created_at=time.time())
+        post(self.store, 'b9', 3004, 'As an AI again', at=time.time())
         out = await self.reporter.step()
         self.assertEqual(out['reported']['post_id'], 'b9')
 
@@ -268,7 +303,7 @@ class ReporterTests(unittest.IsolatedAsyncioTestCase):
     async def test_too_few_actions_waits(self):
         for _ in range(3):
             await self.reporter.step()
-        del self.platform.posts['b0']
+        del self.platform.posts['b1']
         with patch('ctn.moderation.reporter.BlueTeamReporter.refresh_account_activity', return_value={'action_count': 40}):
             out = await self.reporter.step()
             self.assertEqual(out['account_reported']['status'], 'waiting_actions:40')
