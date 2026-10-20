@@ -338,5 +338,17 @@ class PushWorkerTests(unittest.IsolatedAsyncioTestCase):
         meta = json.loads(self.store._conn.execute("SELECT metadata_json FROM action_intents WHERE kind='repost'").fetchone()[0])
         self.assertEqual(meta['engine'], 'amplify')
 
+
+class AmplifyReplyKeyTests(unittest.TestCase):
+    """Live 2026-10-20: a pushed post got 1 of 7 replies; the rest hit the one-team-reply-per-target dedupe (action_succeeded)."""
+    def test_each_account_may_reply_once_to_our_post_but_citizen_replies_stay_one_per_target(self):
+        store, _ = setup_store(); self.addCleanup(store.close)
+        a, b = amplify.amplifiable_accounts(store)[:2]
+        amp = {'engine': 'amplify'}
+        self.assertNotEqual(store.action_key('reply', a, 'o1', 'x', amp), store.action_key('reply', b, 'o1', 'y', amp))
+        self.assertEqual(store.action_key('reply', a, 'o1', 'x', amp), store.action_key('reply', a, 'o1', 'z', amp))
+        self.assertEqual(store.action_key('reply', a, 'c1', 'x', {}), store.action_key('reply', b, 'c1', 'y', {}))
+        self.assertNotEqual(store.action_key('reply', a, 'o1', 'x', amp), store.action_key('reply', a, 'o1', 'x', {}))
+
 if __name__ == '__main__':
     unittest.main()

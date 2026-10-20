@@ -224,6 +224,9 @@ class RuntimeStoreMixin:
             subject='initialise';owner=account
         if kind=='reply' and (metadata or {}).get('reply_batch_id'):
             subject=[str(target),metadata['reply_batch_id'],metadata['reply_slot']]
+        if kind=='reply' and (metadata or {}).get('engine')=='amplify':
+            # Several of our accounts reply to one of our own posts; one team reply per target is for citizen posts.
+            subject=[str(target),'amplify',account]
         return hashlib.sha256(json.dumps([self.policy('campaign_id','ctn2026'),kind,owner,subject]).encode()).hexdigest()
 
     def claim_action(self, kind, account, target='', text='', *, metadata=None, now=None):
