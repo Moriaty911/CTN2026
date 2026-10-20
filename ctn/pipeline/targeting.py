@@ -205,12 +205,35 @@ def initial_schedule(store, post, now=None):
     return info, start
 
 
+def suspicion_score(store, author):
+    """Heuristic bot detector score for an author; 0.0 for anything we have never profiled."""
+    if not author:
+        return 0.0
+    return float((store.get_bot_profile(author) or {}).get('suspicion_score') or 0.0)
+
+
+def author_responded(store, author, since):
+    """True when the author replied directly to one of our publications after `since`."""
+    if not author or not since:
+        return False
+    with store._lock:
+        return store._conn.execute(
+            'SELECT 1 FROM observed_posts o JOIN publications p ON p.post_id=o.parent_id '
+            'WHERE o.author=? AND o.created_at>? LIMIT 1', (author, float(since))).fetchone() is not None
+
+
 def skip_reason(store, post, relative_stance=None, now=None):
     """Drop a cold post by a likely bot. Before assessment any stance; after assessment opposing only."""
     ts = time.time() if now is None else now
     deep = deep_thread_reason(store, post, ts)
     if deep:
         return deep
+    # A competitor bot never changes its mind, and our reply only raises its reply count (hot score).
+    floor = float((POLICY.get('bot_filter') or {}).get('min_suspicion') or 0.0)
+    if floor and not replies_to_us(store, post):
+        prof = store.get_bot_profile(post.get('author', '')) if post.get('author') else {}
+        if prof.get('status') != 'own_bot' and float(prof.get('suspicion_score') or 0.0) >= floor:
+            return 'targeting:bot_author'
     p_bot = bot_probability(store, post.get('author', ''))
     if p_bot is None or p_bot < POLICY['cold']['min_bot_probability']:
         return ''
@@ -242,6 +265,9 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
                                        f"AND json_extract(metadata_json,'$.target_author')=? AND {NOT_AMPLIFY}", (target_author,)).fetchone()[0]
             if last and ts - float(last) < float(caps.get('per_author_min_gap_seconds', 0)):
                 return 'author_min_gap'
+            if (n >= 1 and caps.get('second_reply_requires_response')
+                    and not author_responded(store, target_author, last)):
+                return 'author_not_responding'
         if root_post_id:
             n = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE kind='reply' AND {live} AND created_at>=? "
                                     f"AND COALESCE(json_extract(metadata_json,'$.root_post_id'),target_id)=? AND {NOT_AMPLIFY}",

@@ -38,6 +38,25 @@ def intent(store, account, target, *, author='', root='', purpose='', kind='repl
                              at or time.time(), json.dumps(meta)))
 
 
+def responded(store, author, *, account='a1', at=None):
+    """Record that `author` answered one of our publications, so a second reply is allowed."""
+    ts = time.time() if at is None else at
+    with store.batch_transaction():
+        store._conn.execute('INSERT INTO publications VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                            ('act' + author, 'ours_' + author, account, 'p', 1, 'g', 'reply', '', '', '', 0,
+                             ts - 120, ts - 120, '{}'))
+    store.upsert_observed_post({'post_id': 'back_' + author, 'author': author, 'text': 'A reply to you.',
+                                'created_at': ts, 'parent_id': 'ours_' + author})
+
+
+def registry(store, author, score, *, status='unknown'):
+    """Pin an author's detector score so a test does not depend on the evidence pipeline."""
+    with store.batch_transaction():
+        store._conn.execute('INSERT INTO bot_registry(account_id,status,suspicion_score) VALUES(?,?,?) '
+                            'ON CONFLICT(account_id) DO UPDATE SET suspicion_score=excluded.suspicion_score,'
+                            'status=excluded.status', (author, status, score))
+
+
 class AudienceTests(unittest.TestCase):
     def setUp(self):
         self.store = StateStore(); self.addCleanup(self.store.close)
@@ -86,7 +105,8 @@ class AudienceTests(unittest.TestCase):
         self.assertGreaterEqual(task['next_attempt_at'], now + 600)
 
     def test_cold_skip_needs_age_low_engagement_and_likely_bot(self):
-        confirm(self.store, 'botty')
+        # Suspicion below the hard floor (0.7) but a suspected-bot status: this is the cold ordering rule, not the filter.
+        registry(self.store, 'botty', 0.6, status='suspected_bot')
         now = time.time()
         fresh = self.post('b5', 'botty', created_at=now)
         self.assertEqual(targeting.skip_reason(self.store, fresh, now=now), '')
@@ -108,7 +128,8 @@ class CapTests(unittest.TestCase):
 
     def test_author_thread_and_account_caps(self):
         self.store.set_policy('reply_pacing', {'per_hour': 1000, 'min_gap_seconds': 0})  # daily caps only; pacing has its own test
-        intent(self.store, 'a1', 't1', author='enemy', root='root1')
+        intent(self.store, 'a1', 't1', author='enemy', root='root1', at=time.time() - 60)
+        responded(self.store, 'enemy', at=time.time() - 30)
         self.assertEqual(targeting.cap_reason(self.store, target_author='enemy'), '')
         intent(self.store, 'a2', 't2', author='enemy', root='root2', status='sending')
         self.assertEqual(targeting.cap_reason(self.store, target_author='enemy'), 'author_daily_cap')
@@ -125,7 +146,8 @@ class CapTests(unittest.TestCase):
         yesterday = targeting.sydney_day_start() - 3600
         intent(self.store, 'a1', 't1', author='enemy', at=yesterday)
         intent(self.store, 'a2', 't2', author='enemy', status='failed')
-        intent(self.store, 'a3', 't3', author='enemy')
+        intent(self.store, 'a3', 't3', author='enemy', at=time.time() - 60)
+        responded(self.store, 'enemy', at=time.time() - 30)
         self.assertEqual(targeting.cap_reason(self.store, target_author='enemy'), '')
 
     def test_claim_action_enforces_caps_and_router_skips_capped_accounts(self):
@@ -268,7 +290,7 @@ class EarlySkipTests(unittest.IsolatedAsyncioTestCase):
         act = Actuator(MockLegitClient(failure_rate=0, latency_ms=(0, 0)), build_gate(FAST), build_ledger(BudgetConfig()), dry_run=True, store=store)
         brain = FakeBrain(store)
         loop = BotLoop(act, side=Side.YES, accounts=['bot_001'], store=store, brain=brain)
-        confirm(store, 'botty')
+        registry(store, 'botty', 0.6, status='suspected_bot')  # below the hard floor: the cold ordering rule decides
         store.upsert_observed_post(Post('cold', 'botty', 'Quiet post', time.time() - 900))
         intent(store, 'x', 'a', author='loud'); intent(store, 'y', 'b', author='loud')
         store.upsert_observed_post(Post('capped', 'loud', 'Another post', time.time()))
@@ -319,4 +341,55 @@ class ThreadDepthAndAuthorGapTests(unittest.TestCase):
         self.store.set_policy('reply_pacing', {'per_hour': 1000, 'min_gap_seconds': 0})
         intent(self.store, 'a1', 't1', author='npc1', at=time.time() - 600)
         self.assertEqual(targeting.cap_reason(self.store, target_author='npc1'), 'author_min_gap')
+        responded(self.store, 'npc1', at=time.time() - 500)
         self.assertEqual(targeting.cap_reason(self.store, target_author='npc1', now=time.time() + 1300), '')
+
+
+class BotAuthorFilterTests(unittest.TestCase):
+    """A reply to an account the detector already scores as a bot earns nothing and raises its hot score."""
+
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+
+    def post(self, pid, author, **kw):
+        self.store.upsert_observed_post({'post_id': pid, 'author': author, 'text': 'A question about venues?',
+                                         'created_at': kw.pop('created_at', time.time()), **kw})
+        return self.store.get_observed_post(pid)
+
+    def score(self, author, value, status='unknown'):
+        registry(self.store, author, value, status=status)
+
+    def test_hot_post_by_a_suspected_bot_is_skipped(self):
+        now = time.time(); self.score('enemybot', 0.9)
+        hot = self.post('q1', 'enemybot', created_at=now, likes=40, replies=12)
+        self.assertEqual(targeting.skip_reason(self.store, hot, now=now), 'targeting:bot_author')
+
+    def test_quiet_citizen_is_still_targeted(self):
+        now = time.time(); self.score('citizen9', 0.2)
+        self.assertEqual(targeting.skip_reason(self.store, self.post('q2', 'citizen9', created_at=now), now=now), '')
+
+    def test_our_own_accounts_are_never_filtered(self):
+        now = time.time(); self.score('ours', 0.95, status='own_bot')
+        self.assertEqual(targeting.skip_reason(self.store, self.post('q3', 'ours', created_at=now), now=now), '')
+
+
+class AuthorResponseTests(unittest.TestCase):
+    """A second reply to the same author only goes out when that author answered us in between."""
+
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+        gap = patch.dict(targeting.POLICY['caps'], {'per_author_min_gap_seconds': 0}); gap.start(); self.addCleanup(gap.stop)
+        self.store.set_policy('reply_pacing', {'per_hour': 1000, 'min_gap_seconds': 0})
+
+    def test_second_reply_needs_an_answer_from_the_author(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='npc7', at=now - 60)
+        self.assertEqual(targeting.cap_reason(self.store, target_author='npc7', now=now), 'author_not_responding')
+        responded(self.store, 'npc7', at=now - 30)
+        self.assertEqual(targeting.cap_reason(self.store, target_author='npc7', now=now), '')
+
+    def test_answering_someone_else_does_not_count(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='npc8', at=now - 60)
+        responded(self.store, 'someone_else', at=now - 20)
+        self.assertEqual(targeting.cap_reason(self.store, target_author='npc8', now=now), 'author_not_responding')
