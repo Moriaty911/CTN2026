@@ -318,6 +318,66 @@ class ReporterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn((3050, 'leak'), out['added'])
 
 
+class RankingTests(Base):
+    def rows(self):
+        return [
+            {'post_id': 'weak', 'author_id': 1, 'at': NOW, 'reason': 'shared_text', 'cluster': 'text:aaa',
+             'evidence_json': json.dumps({'n': 5}), 'likes': 0, 'replies': 0, 'reposts': 0, 'trending': 0},
+            {'post_id': 'ring', 'author_id': 2, 'at': NOW - 900, 'reason': 'ring', 'cluster': 'ring',
+             'evidence_json': json.dumps({'n': 3, 'threads': ['900', '800', '700']}), 'likes': 0, 'replies': 0,
+             'reposts': 0, 'trending': 0},
+            {'post_id': 'copy', 'author_id': 3, 'at': NOW - 1800, 'reason': 'copy_paste', 'cluster': '',
+             'evidence_json': json.dumps({'n': 4}), 'likes': 0, 'replies': 0, 'reposts': 0, 'trending': 0},
+        ]
+
+    def test_hard_evidence_beats_a_newer_weak_text_post(self):
+        ranked = blacklist.rank_candidates(self.rows(), now=NOW, price_counts={}, hidden_clusters={'text:aaa'})
+        self.assertEqual([r['post_id'] for r in ranked], ['ring', 'copy', 'weak'])
+
+    def test_weak_text_waits_until_its_cluster_has_a_hidden_post(self):
+        ranked = blacklist.rank_candidates(self.rows(), now=NOW, price_counts={}, hidden_clusters=set())
+        self.assertNotIn('weak', [r['post_id'] for r in ranked])
+        self.assertEqual([r['post_id'] for r in ranked], ['ring', 'copy'])
+
+    def test_trending_and_busy_posts_come_first(self):
+        rows = self.rows()
+        rows[1].update(trending=1, likes=40, replies=10, reposts=12)
+        ranked = blacklist.rank_candidates(rows, now=NOW, price_counts={}, hidden_clusters={'text:aaa'})
+        self.assertEqual(ranked[0]['post_id'], 'ring')
+
+    def test_slots_are_spread_once_a_campaign_has_had_its_five(self):
+        def score(price_counts):
+            return blacklist.rank_candidates(self.rows(), now=NOW, price_counts=price_counts,
+                                             hidden_clusters={'text:aaa'})[-1]['rank_score']
+        group = blacklist.price_group(self.rows()[0])
+        self.assertEqual(group, 'text:aaa')
+        self.assertAlmostEqual(score({group: 4}), score({}), places=6)
+        self.assertAlmostEqual(score({group: 5}), round(score({}) / 2, 6), places=6)
+        self.assertAlmostEqual(score({group: 10}), round(score({}) / 10, 6), places=6)
+
+    def test_ring_price_group_uses_its_anchor_threads(self):
+        self.assertEqual(blacklist.price_group(self.rows()[1]), 'ring:700')
+        self.assertEqual(blacklist.price_group(self.rows()[2]), 'author:3')
+
+    def test_pending_targets_carry_the_ranking(self):
+        blacklist.add(self.store, 3001, reason='shared_text', cluster='text:aaa', evidence={'n': 5})
+        blacklist.add(self.store, 3002, reason='ring', cluster='ring', evidence={'n': 3, 'threads': ['900']})
+        post(self.store, 'weak', 3001, 'Vote yes for the mandate before November 2!', at=NOW)
+        post(self.store, 'ring', 3002, 'Count me in.', at=NOW - 60)
+        self.assertEqual([r['post_id'] for r in blacklist.pending_targets(self.store, 5, now=NOW)], ['ring'])
+        self.store._conn.execute(
+            'INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,lease_until,'
+            "created_at,updated_at,metadata_json) VALUES('i1','k1','report','a1','w0','','succeeded','',0,?,?,?)",
+            (NOW - 2 * 86400, NOW - 2 * 86400, json.dumps({'engine': 'blacklist', 'target_author': '3001'})))
+        self.store._conn.execute('INSERT INTO blacklist_post_checks(post_id,author_id,state,checked_at) VALUES(?,?,?,?)',
+                                 ('w0', 3001, 'gone', NOW))
+        self.store._conn.commit()
+        ranked = blacklist.pending_targets(self.store, 5, now=NOW)
+        self.assertEqual([r['post_id'] for r in ranked], ['ring', 'weak'])
+        self.assertEqual({r['post_id']: r['price_group'] for r in ranked}, {'ring': 'ring:900', 'weak': 'text:aaa'})
+        self.assertGreater(ranked[0]['rank_score'], ranked[1]['rank_score'])
+
+
 class SwitchTests(unittest.TestCase):
     def test_legacy_reporter_paused_and_blacklist_on_by_default(self):
         from ctn.main import reporting_workers

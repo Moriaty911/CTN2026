@@ -2,6 +2,22 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-21 00:11 举报按证据排序（未部署前先写日志）
+- 现象：举报打开后 10 分钟发出 23 条，按“最新”排序——`shared_text` 占 10 条（历史精度 58%），
+  而 `ring` 9 条（6/6）。平台上 trending 的 165 条帖里 48 条（29%）来自我们黑名单里的号，我们一条没报。
+- 判断：举报的蓝分与热度无关（25/5/15 固定），所以排序要买的是两件事——**断掉对手的得分**（隐藏的帖不再收
+  点赞 5/回复 15/转发 10/改变看法 160）和**保住精度**（一次判真人 = 6 小时全队禁报 ≈ 30-40 个名额）。
+- 处理（改代码，`ctn/blacklist.py`）：
+  - 新增 `price_group()`（无法看到目标队，用“同一文案 / 同一 ring 的 anchor / 单作者”代理）、`_price_counts()`、
+    `hidden_clusters()`、`rank_candidates()`；`pending_targets()` 先取 60 条候选再排序。
+  - 排序：`evidence_weight(ring/leak 1.0、copy_paste 0.9、shared_text 0.5) × 互动 × 新鲜度 × 价格因子`，
+    `trending` 再 ×1.5；`shared_text` 只有在同 cluster 已有帖被隐藏后才进入候选。
+  - 举报 payload 增加 `price_group`、`rank_score`，供以后按队/按 cluster 对账。
+  - `policies/blacklist-v1.json` 新增 `ranking` 段（阈值都在这里）；README 补一段说明。
+  - 测试：`tests/test_blacklist.py::RankingTests` 6 个（证据优先、weak 需先有隐藏、trending/互动、
+    价格衰减 1/0.5/0.1、price_group 取值、pending_targets 端到端）；`./scripts/docker.sh verify` 939 tests OK。
+- 待办：部署后看新排序实际发出的前 10 条是否都是 ring/leak；等裁决（只能由用户提供）核对精度。
+
 ## 2026-10-21 00:45 部署 d0b2b27（对账工具 + 一号一报），打开举报，首批 12 条发出
 - 现象（部署前的实测）：
   - 裁决确实看不到，但**结果可以推断**：容器里逐条回读 19 条举报 → **16 条 404（被隐藏）= 89% 成立**。

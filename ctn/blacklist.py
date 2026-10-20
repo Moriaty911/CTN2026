@@ -15,7 +15,8 @@ or by an operator (`ops blacklist add/import`). Accounts registered before the c
 genuine stops all our reporting for six hours.
 
 The reporter sends at most one post report per step while the team's post-report route (3 a minute) has no
-backlog, newest posts first, stops during a reporting suspension and backs off after any report 403. Once a
+backlog, best evidence first (ring/leak/copy-paste, then trending and busy posts, weak shared-text last),
+stops during a reporting suspension and backs off after any report 403. Once a
 reported post of an account has disappeared (likely hidden by the moderator) and the account shows 100+
 actions, the account itself is reported (15 points per reporting team if suspended; a dismissed account
 report costs nothing and can be repeated later).
@@ -25,6 +26,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 import json
+import math
 from pathlib import Path
 import re
 import statistics
@@ -225,17 +227,108 @@ def _author_rules(policy):
             float(rules.get('author_retry_after_seconds', 86400)))
 
 
+def price_group(entry):
+    """Coarse stand-in for the target team the scoring page prices per day.
+
+    We cannot see which team an account belongs to, so the 25-point slots are spread over distinct
+    campaigns instead: one shared campaign text, one ring (its anchor threads), or one author.
+    """
+    cluster = str(entry.get('cluster') or '').strip()
+    if cluster.startswith('text:'):
+        return cluster
+    try:
+        evidence = json.loads(entry.get('evidence_json') or '{}')
+    except (TypeError, ValueError):
+        evidence = {}
+    if entry.get('reason') in ('ring', 'ring_anchor') and isinstance(evidence, dict):
+        threads = evidence.get('threads') or evidence.get('posts') or []
+        if threads:
+            return 'ring:' + str(sorted(str(t) for t in threads)[0])
+    if cluster:
+        return cluster
+    return 'author:' + str(entry.get('author_id'))
+
+
+def _price_counts(store, now, *, hours=24.0):
+    """How many post reports we have already spent on each price group today."""
+    with store._lock:
+        return {str(g or ''): int(n) for g, n in store._conn.execute(
+            "SELECT json_extract(payload_json,'$.price_group') g,COUNT(*) FROM report_attempts "
+            "WHERE subject_kind='post' AND submitted_at>? GROUP BY 1", (float(now) - float(hours) * 3600.0,))}
+
+
+def hidden_clusters(store):
+    """Clusters that already have a post the moderator hid, i.e. evidence the cluster is real."""
+    with store._lock:
+        return {str(r[0]) for r in store._conn.execute(
+            "SELECT DISTINCT b.cluster FROM report_blacklist b "
+            "JOIN action_intents a ON CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(b.author_id AS TEXT) "
+            "JOIN blacklist_post_checks c ON c.post_id=a.target_id AND c.state='gone' "
+            "WHERE COALESCE(b.cluster,'')!=''")}
+
+
+def rank_candidates(rows, *, policy=POLICY, now=None, price_counts=None, hidden_clusters=None):
+    """Order the pool: hard evidence first, trending and busy posts before cold ones, spread the slots.
+
+    Points per upheld report do not depend on how popular the post is (25 for the first five against a
+    team each day, then 5, then 10%), so the ranking buys two other things: a hidden post stops earning
+    its team engagement and change-of-mind points, and hard evidence keeps our six-hour bans away.
+    """
+    ts = time.time() if now is None else float(now)
+    ranking = policy.get('ranking') or {}
+    weights = ranking.get('evidence_weight') or {}
+    price = ranking.get('price') or {}
+    fresh = ranking.get('fresh_hours') or {}
+    full_first = int(price.get('full_first', 5))
+    half_until = int(price.get('half_until', 10))
+    ranked = []
+    for row in rows:
+        reason = str(row.get('reason') or '')
+        cluster = str(row.get('cluster') or '')
+        if reason == 'shared_text' and ranking.get('shared_text_requires_hidden_in_cluster', True):
+            if cluster not in (hidden_clusters or set()):
+                continue
+        group = price_group(row)
+        spent = int((price_counts or {}).get(group, 0))
+        if spent >= half_until:
+            price_factor = float(price.get('rest_factor', 0.1))
+        elif spent >= full_first:
+            price_factor = float(price.get('half_factor', 0.5))
+        else:
+            price_factor = 1.0
+        age_h = max(0.0, (ts - float(row.get('at') or ts)) / 3600.0)
+        if age_h <= float(fresh.get('fresh', 3)):
+            age_factor = float(fresh.get('fresh_factor', 1.0))
+        elif age_h <= float(fresh.get('stale', 12)):
+            age_factor = float(fresh.get('stale_factor', 0.8))
+        else:
+            age_factor = float(fresh.get('old_factor', 0.5))
+        engagement = 1.0 + float(ranking.get('engagement_weight', 0.25)) * math.log1p(
+            float(row.get('likes') or 0) + 2 * float(row.get('replies') or 0) + 2 * float(row.get('reposts') or 0))
+        score = float(weights.get(reason, ranking.get('default_weight', 0.5))) * engagement * age_factor * price_factor
+        if row.get('trending'):
+            score *= float(ranking.get('trending_multiplier', 1.5))
+        ranked.append(dict(row, price_group=group, rank_score=round(score, 6)))
+    ranked.sort(key=lambda r: (-r['rank_score'], -float(r.get('at') or 0)))
+    return ranked
+
+
 def pending_targets(store, limit=20, *, policy=POLICY, now=None):
-    """Visible posts by active blacklisted authors that we may report right now, newest first.
+    """Visible posts by active blacklisted authors that we may report right now, best evidence first.
 
     One author is reported once; further posts stay in the pool. A single retry is allowed
     `author_retry_after_seconds` after the previous report, because we cannot see dismissals.
     """
     ts = time.time() if now is None else float(now)
     cap, retry_after = _author_rules(policy)
+    pool = int((policy.get('ranking') or {}).get('candidate_pool', 60))
     with store._lock:
-        return [dict(r) for r in store._conn.execute(
-            "SELECT o.post_id,o.author_id,o.text,COALESCE(NULLIF(o.created_at,0),o.first_seen_at) at FROM observed_posts o "
+        rows = [dict(r) for r in store._conn.execute(
+            "SELECT o.post_id,o.author_id,o.text,COALESCE(NULLIF(o.created_at,0),o.first_seen_at) at,"
+            "b.reason,b.cluster,b.evidence_json,COALESCE(o.likes,0) likes,COALESCE(o.replies,0) replies,"
+            "COALESCE(o.reposts,0) reposts,"
+            "EXISTS(SELECT 1 FROM trending_seen t WHERE t.post_id=o.post_id) trending "
+            "FROM observed_posts o "
             "JOIN report_blacklist b ON b.author_id=o.author_id AND b.status='active' "
             "WHERE NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.target_id=o.post_id AND a.status!='failed') "
             "AND NOT EXISTS(SELECT 1 FROM blacklist_post_checks c WHERE c.post_id=o.post_id AND c.state='gone') "
@@ -244,7 +337,10 @@ def pending_targets(store, limit=20, *, policy=POLICY, now=None):
             "AND NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
             "     AND CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(o.author_id AS TEXT) AND a.created_at>?) "
             "AND NOT EXISTS(SELECT 1 FROM blacklist_account_reports r WHERE r.author_id=o.author_id AND r.reported_at>?) "
-            'ORDER BY at DESC LIMIT ?', (cap, ts - retry_after, ts - retry_after, int(limit)))]
+            'ORDER BY at DESC LIMIT ?', (cap, ts - retry_after, ts - retry_after, max(pool, int(limit))))]
+        costs = _price_counts(store, ts)
+        proven = hidden_clusters(store)
+    return rank_candidates(rows, policy=policy, now=ts, price_counts=costs, hidden_clusters=proven)[:int(limit)]
 
 
 def pool_summary(store, *, policy=POLICY, now=None):
@@ -354,7 +450,9 @@ class BlacklistReporter:
                 return None
             detail = detail_for(entry, self.policy)
             context = {'engine': 'blacklist', 'target_author': str(target['author_id']), 'reason': 'inauthentic',
-                       'blacklist_reason': entry['reason'], 'cluster': entry['cluster'], 'report_attempt_id': uuid.uuid4().hex}
+                       'blacklist_reason': entry['reason'], 'cluster': entry['cluster'],
+                       'price_group': target.get('price_group') or price_group(entry),
+                       'rank_score': target.get('rank_score'), 'report_attempt_id': uuid.uuid4().hex}
             result = await self.actuator.report(account, str(target['post_id']), reason='inauthentic', detail=detail, context=context)
             return {'post_id': str(target['post_id']), 'author_id': int(target['author_id']), 'status': result.status, 'detail': result.detail}
         return None

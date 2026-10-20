@@ -655,6 +655,15 @@ A dismissal is invisible to us, so retrying forever burns slots and multiplies t
   silently dropped. Nothing is deleted: pooled posts stay in `observed_posts` and re-enter the queue when their author
   becomes eligible again.
 
+**Ranking inside the pool** (`ranking` in `policies/blacklist-v1.json`, `rank_candidates`): the pool is ordered by
+`evidence_weight × engagement × freshness × price`, with a `trending_multiplier` for posts we saw on the trending
+feed. Points do not depend on popularity (25 for the first five reports against a team each day, then 5, then 10%), so
+the ranking buys denial — a hidden post stops earning its team likes, replies, reposts and change-of-mind points —
+while hard evidence (`ring`, `leak`, `copy_paste`) keeps our six-hour bans away. `shared_text` is only reported once a
+post of the same cluster is already hidden (it was right 7/12 times against 6/6 for `ring`). Because target teams are
+invisible to us, the daily price decay is applied per **price group**: one shared campaign text, one ring (its anchor
+threads) or one author; the group is stored in the report payload as `price_group`.
+
 Automation needs `CTN_REPORT_MODE=hybrid` and is **shadow by default** (decisions are recorded, nothing is sent
 automatically). Operator commands:
 
