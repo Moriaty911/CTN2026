@@ -3,6 +3,7 @@
 > 运行与恢复以 [v6 runbook](docs/repair-and-discord-2026-10-18/runbook.md) 为准，当前三棵逻辑树见 [logic-trees](docs/repair-and-discord-2026-10-18/logic-trees.md)。
 > 开服后要做的事见 [上线后 TODO](#上线后-todo)。官方服务器行为仍需开服验证。
 > 服务器值班：`CLAUDE.md`（服务器上的 Claude Code 自动读取的值班说明和巡检流程）、`docs/ops-journal.md`（值班日志）、`scripts/dbq.py`（只读查库）、`docs/system-map.html`（模块地图）。
+> 2026-10-20 的四处改动（数据库锁、自有帖子测量、push 规格与带 tag 转发、回复削减）汇总在 [changes-2026-10-20](docs/changes-2026-10-20.md)：为什么改、改了什么、上线后看什么、怎么退。
 
 80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[80 人预览](docs/personas-80/preview.md)。新人设默认未绑定，绑定后待命。
 
