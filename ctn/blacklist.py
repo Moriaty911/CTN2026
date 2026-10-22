@@ -270,10 +270,17 @@ def _price_counts(store, now, *, hours=24.0):
     Account reports count against the same quota as post reports: the platform's is one bucket per
     target team, and an upheld account report pays 15 from that same bucket.
     """
+    counts = {}
     with store._lock:
-        return {str(g or ''): int(n) for g, n in store._conn.execute(
-            "SELECT json_extract(payload_json,'$.price_group') g,COUNT(*) FROM report_attempts "
-            "WHERE submitted_at>? GROUP BY 1", (float(now) - float(hours) * 3600.0,))}
+        rows = list(store._conn.execute(
+            "SELECT json_extract(payload_json,'$.price_group') g,json_extract(payload_json,'$.blacklist_reason') r,"
+            "COUNT(*) FROM report_attempts WHERE submitted_at>? GROUP BY 1,2", (float(now) - float(hours) * 3600.0,)))
+    for group, reason, n in rows:
+        # Rows filed before the family grouping carry a per-thread `price_group`, but they still spent the
+        # family's full-price slots, so the reason decides the bucket whenever it is one of the families.
+        key = _FAMILY.get(str(reason or '')) or str(group or '')
+        counts[key] = counts.get(key, 0) + int(n)
+    return counts
 
 
 def hidden_clusters(store):
@@ -670,9 +677,12 @@ def stats(store, *, since=None):
     pool = pool_summary(store, now=ts)
     full_first = int((((POLICY.get('ranking') or {}).get('price') or {}).get('full_first')) or 5)
     with store._lock:
-        spent = {str(r[0] or ''): int(r[1]) for r in store._conn.execute(
-            "SELECT json_extract(payload_json,'$.price_group') g,COUNT(*) FROM report_attempts "
-            'WHERE submitted_at>=? GROUP BY 1', (since,))}
+        spent = {}
+        for group, reason, n in store._conn.execute(
+                "SELECT json_extract(payload_json,'$.price_group') g,json_extract(payload_json,'$.blacklist_reason') r,"
+                'COUNT(*) FROM report_attempts WHERE submitted_at>=? GROUP BY 1,2', (since,)):
+            key = _FAMILY.get(str(reason or '')) or str(group or '')
+            spent[key] = spent.get(key, 0) + int(n)
         window = float((POLICY.get('report') or {}).get('pool_window_seconds') or 0)
         pending = int(store._conn.execute(
             "SELECT COUNT(*) FROM report_attempts WHERE status IN ('claimed','sending','pending','unknown') AND submitted_at>=?",

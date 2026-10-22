@@ -521,6 +521,14 @@ class BudgetTests(unittest.IsolatedAsyncioTestCase):
         gone = [r[0] for r in self.store._conn.execute("SELECT post_id FROM blacklist_post_checks WHERE state='gone'")]
         self.assertEqual(gone, ['z0'])
 
+    def test_old_thread_groups_count_against_their_family(self):
+        with self.store.batch_transaction():
+            self.store._conn.execute(
+                "INSERT INTO report_attempts(id,action_id,subject_kind,subject_id,author,report_id,status,submitted_at,ruled_at,outcome,payload_json)"
+                " VALUES('old','old','post','oldp','a','','pending',?,0,'',?)",
+                (self.t0 - 60, json.dumps({'price_group': 'ring:6793', 'blacklist_reason': 'ring'})))
+        self.assertEqual(blacklist._price_counts(self.store, self.t0).get('ring'), 1)
+
     def test_account_reports_count_against_the_same_price_group(self):
         with self.store.batch_transaction():
             for kind, ident, group in (('post', 'p1', 'ring'), ('account', '3100', 'ring'), ('post', 'p2', 'shared_text')):
