@@ -363,6 +363,16 @@ def pending_targets(store, limit=20, *, policy=POLICY, now=None):
     cap, retry_after = _author_rules(policy)
     pool = int((policy.get('ranking') or {}).get('candidate_pool', 60))
     with store._lock:
+        costs = _price_counts(store, ts)
+        proven = hidden_clusters(store)
+        price = (policy.get('ranking') or {}).get('price') or {}
+        full_first = int(price.get('full_first', 5))
+        # A family that already spent its full-price slots is left out of the query, not just the ranking:
+        # the newest sixty candidates are almost all ring posts, so filtering afterwards would starve the
+        # families that still have quota.
+        spent_families = {f for f, n in costs.items() if int(n) >= full_first and not bool(price.get('allow_diminished', False))}
+        blocked = sorted(reason for reason, family in _FAMILY.items() if family in spent_families)
+        reason_filter = ' AND b.reason NOT IN (%s)' % ','.join('?' * len(blocked)) if blocked else ''
         rows = [dict(r) for r in store._conn.execute(
             "SELECT o.post_id,o.author_id,o.text,COALESCE(NULLIF(o.created_at,0),o.first_seen_at) at,"
             "b.reason,b.cluster,b.evidence_json,COALESCE(o.likes,0) likes,COALESCE(o.replies,0) replies,"
@@ -377,9 +387,8 @@ def pending_targets(store, limit=20, *, policy=POLICY, now=None):
             "AND NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
             "     AND CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(o.author_id AS TEXT) AND a.created_at>?) "
             "AND NOT EXISTS(SELECT 1 FROM blacklist_account_reports r WHERE r.author_id=o.author_id AND r.reported_at>?) "
-            'ORDER BY trending DESC, at DESC LIMIT ?', (cap, ts - retry_after, ts - retry_after, max(pool, int(limit))))]
-        costs = _price_counts(store, ts)
-        proven = hidden_clusters(store)
+            + reason_filter + ' ORDER BY trending DESC, at DESC LIMIT ?',
+            (cap, ts - retry_after, ts - retry_after, *blocked, max(pool, int(limit))))]
     return rank_candidates(rows, policy=policy, now=ts, price_counts=costs, hidden_clusters=proven)[:int(limit)]
 
 

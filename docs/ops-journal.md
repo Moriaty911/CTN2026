@@ -21,7 +21,13 @@
 - 池子只数窗口内的未决（`pool_window_seconds`=7200）：库里 `pending` 累计 183 条（0-6h 46 条），
   其中大部分早就裁决过、只是我们没回读；若按全部未决计数，部署后会被自己的历史记录永久卡死。
   `stats` 同时给 `pending`（窗口内）和 `pending_total`（全部）。
-- 验证：`./scripts/docker.sh verify` 通过，950 个测试（+2：族配额压住账号举报、窗口外的旧记录不占池子）。
+- 另一个坑（部署后第一次看 stats 才发现）：老数据里 `price_group` 是线程级的（`ring:6793`、`text:…`），
+  单纯按 payload 计数会把 ring 算成 0 条，于是立刻又从 0.1 倍开始报。改为：payload 里的
+  `blacklist_reason` 能映射到族时按族计，否则才用 `price_group`。
+- 还有候选饥饿：SQL 按 `trending DESC, at DESC` 取 60 条，最新 60 条几乎全是 ring，族配额在排序阶段才生效 →
+  leak/shared_text 永远进不了候选。改为在 SQL 里就排除已满族的 reason（`b.reason NOT IN (...)`）。
+- 验证：`./scripts/docker.sh verify` 通过，952 个测试（+4：族配额压住账号举报、窗口外旧记录不占池子、
+  旧线程组归入族、满族不饿死其他族）。
 - 待办：部署后先看 `ops blacklist stats` 的族分布，确认只报 `leak`/`shared_text` 的剩余名额；等用户给蓝分
   对账（这是唯一能验证“要么 25 要么不报”是否成立的方式）。
 

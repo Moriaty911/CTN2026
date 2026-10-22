@@ -521,6 +521,18 @@ class BudgetTests(unittest.IsolatedAsyncioTestCase):
         gone = [r[0] for r in self.store._conn.execute("SELECT post_id FROM blacklist_post_checks WHERE state='gone'")]
         self.assertEqual(gone, ['z0'])
 
+    def test_a_saturated_family_does_not_starve_the_others(self):
+        with self.store.batch_transaction():
+            for i in range(5):                               # ring already spent its five full-price slots
+                self.store._conn.execute(
+                    "INSERT INTO report_attempts(id,action_id,subject_kind,subject_id,author,report_id,status,submitted_at,ruled_at,outcome,payload_json)"
+                    " VALUES(?,?,'post',?,'a','','pending',?,0,'',?)",
+                    (f'n{i}', f'na{i}', f'np{i}', self.t0 - 60, json.dumps({'price_group': 'ring', 'blacklist_reason': 'ring'})))
+        blacklist.add(self.store, 3200, reason='leak', cluster='text:leak', evidence={'match': 'As an AI'}, now=self.t0)
+        post(self.store, 'l0', 3200, 'As an AI...', at=self.t0 - 30)      # older than the ring posts, still eligible
+        targets = blacklist.pending_targets(self.store, 5, now=self.t0)
+        self.assertEqual([t['post_id'] for t in targets], ['l0'])
+
     def test_old_thread_groups_count_against_their_family(self):
         with self.store.batch_transaction():
             self.store._conn.execute(
