@@ -284,13 +284,16 @@ def _price_counts(store, now, *, hours=24.0):
 
 
 def hidden_clusters(store):
-    """Clusters that already have a post the moderator hid, i.e. evidence the cluster is real."""
+    """Clusters that already have a post the moderator hid, i.e. evidence the cluster is real.
+
+    `blacklist_post_checks.author_id` is the author of the post we re-read, so the join on a JSON column
+    (which cannot use an index and cost five seconds) is not needed: an author with a gone post is enough.
+    """
     with store._lock:
-        return {str(r[0]) for r in store._conn.execute(
-            "SELECT DISTINCT b.cluster FROM report_blacklist b "
-            "JOIN action_intents a ON CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(b.author_id AS TEXT) "
-            "JOIN blacklist_post_checks c ON c.post_id=a.target_id AND c.state='gone' "
-            "WHERE COALESCE(b.cluster,'')!=''")}
+        hidden_authors = {int(r[0]) for r in store._conn.execute(
+            "SELECT DISTINCT author_id FROM blacklist_post_checks WHERE state='gone'")}
+        rows = list(store._conn.execute("SELECT author_id,cluster FROM report_blacklist WHERE status='active'"))
+    return {str(cluster) for author, cluster in rows if int(author) in hidden_authors and str(cluster or '')}
 
 
 def rank_candidates(rows, *, policy=POLICY, now=None, price_counts=None, hidden_clusters=None):
@@ -362,33 +365,55 @@ def pending_targets(store, limit=20, *, policy=POLICY, now=None):
     ts = time.time() if now is None else float(now)
     cap, retry_after = _author_rules(policy)
     pool = int((policy.get('ranking') or {}).get('candidate_pool', 60))
+    price = (policy.get('ranking') or {}).get('price') or {}
+    full_first = int(price.get('full_first', 5))
     with store._lock:
         costs = _price_counts(store, ts)
         proven = hidden_clusters(store)
-        price = (policy.get('ranking') or {}).get('price') or {}
-        full_first = int(price.get('full_first', 5))
         # A family that already spent its full-price slots is left out of the query, not just the ranking:
         # the newest sixty candidates are almost all ring posts, so filtering afterwards would starve the
         # families that still have quota.
-        spent_families = {f for f, n in costs.items() if int(n) >= full_first and not bool(price.get('allow_diminished', False))}
+        spent_families = {f for f, n in costs.items()
+                          if int(n) >= full_first and not bool(price.get('allow_diminished', False))}
         blocked = sorted(reason for reason, family in _FAMILY.items() if family in spent_families)
-        reason_filter = ' AND b.reason NOT IN (%s)' % ','.join('?' * len(blocked)) if blocked else ''
-        rows = [dict(r) for r in store._conn.execute(
-            "SELECT o.post_id,o.author_id,o.text,COALESCE(NULLIF(o.created_at,0),o.first_seen_at) at,"
-            "b.reason,b.cluster,b.evidence_json,COALESCE(o.likes,0) likes,COALESCE(o.replies,0) replies,"
-            "COALESCE(o.reposts,0) reposts,"
-            "EXISTS(SELECT 1 FROM trending_seen t WHERE t.post_id=o.post_id) trending "
-            "FROM observed_posts o "
-            "JOIN report_blacklist b ON b.author_id=o.author_id AND b.status='active' "
-            "WHERE NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.target_id=o.post_id AND a.status!='failed') "
-            "AND NOT EXISTS(SELECT 1 FROM blacklist_post_checks c WHERE c.post_id=o.post_id AND c.state='gone') "
-            "AND (SELECT COUNT(*) FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
-            "     AND CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(o.author_id AS TEXT))<? "
-            "AND NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
-            "     AND CAST(json_extract(a.metadata_json,'$.target_author') AS TEXT)=CAST(o.author_id AS TEXT) AND a.created_at>?) "
-            "AND NOT EXISTS(SELECT 1 FROM blacklist_account_reports r WHERE r.author_id=o.author_id AND r.reported_at>?) "
-            + reason_filter + ' ORDER BY trending DESC, at DESC LIMIT ?',
-            (cap, ts - retry_after, ts - retry_after, *blocked, max(pool, int(limit))))]
+        # Collect the filters once. Each used to be a correlated NOT EXISTS with json_extract inside,
+        # which made this query take ninety seconds on a 35k-post table.
+        reported = [str(r[0]) for r in store._conn.execute(
+            "SELECT DISTINCT target_id FROM action_intents WHERE kind='report' AND status!='failed'")]
+        closed = set()
+        for author, n, last in store._conn.execute(
+                "SELECT CAST(json_extract(metadata_json,'$.target_author') AS TEXT) a,COUNT(*),MAX(created_at) "
+                "FROM action_intents WHERE kind='report' AND status!='failed' GROUP BY 1"):
+            if int(n) >= cap or float(last or 0) > ts - retry_after:
+                closed.add(str(author))
+        for author, at in store._conn.execute('SELECT author_id,reported_at FROM blacklist_account_reports'):
+            if float(at or 0) > ts - retry_after:
+                closed.add(str(author))
+        # No `text` here: fetching long post bodies was the whole cost of this query (1200 rows took
+        # fifteen seconds on a cold page cache) and nothing downstream reads it.
+        sql = ("SELECT o.post_id,o.author_id,COALESCE(NULLIF(o.created_at,0),o.first_seen_at) at,"
+               "b.reason,b.cluster,b.evidence_json,COALESCE(o.likes,0) likes,COALESCE(o.replies,0) replies,"
+               "COALESCE(o.reposts,0) reposts,"
+               "(t.post_id IS NOT NULL) trending "
+               "FROM observed_posts o "
+               "JOIN report_blacklist b ON b.author_id=o.author_id AND b.status='active' "
+               "LEFT JOIN blacklist_post_checks c ON c.post_id=o.post_id AND c.state='gone' "
+               "LEFT JOIN trending_seen t ON t.post_id=o.post_id "
+               "WHERE c.post_id IS NULL")
+        params = []
+        if reported:
+            sql += ' AND o.post_id NOT IN (%s)' % ','.join('?' * len(reported)); params += reported
+        if closed:
+            sql += ' AND CAST(o.author_id AS TEXT) NOT IN (%s)' % ','.join('?' * len(closed)); params += sorted(closed)
+        if blocked:
+            sql += ' AND b.reason NOT IN (%s)' % ','.join('?' * len(blocked)); params += blocked
+        # Order on the indexed column: ordering by the computed `at` forces a full scan of observed_posts,
+        # and every extra row scanned costs another index probe for the trending flag.
+        sql += ' ORDER BY o.first_seen_at DESC LIMIT ?'
+        # Fetch exactly the ranking window. Every extra row costs two index probes on a cold page cache,
+        # and asking for 20x the pool made this query take fifteen seconds to find rows it then threw away.
+        params.append(min(2000, max(1, max(pool, int(limit)))))
+        rows = [dict(r) for r in store._conn.execute(sql, params)]
     return rank_candidates(rows, policy=policy, now=ts, price_counts=costs, hidden_clusters=proven)[:int(limit)]
 
 
@@ -398,10 +423,16 @@ def pool_summary(store, *, policy=POLICY, now=None):
     ts = time.time() if now is None else float(now)
     cap, _ = _author_rules(policy)
     with store._lock:
-        waiting = store._conn.execute(
-            "SELECT COUNT(*) FROM observed_posts o JOIN report_blacklist b ON b.author_id=o.author_id AND b.status='active' "
-            "WHERE NOT EXISTS(SELECT 1 FROM action_intents a WHERE a.kind='report' AND a.target_id=o.post_id AND a.status!='failed') "
-            "AND NOT EXISTS(SELECT 1 FROM blacklist_post_checks c WHERE c.post_id=o.post_id AND c.state='gone')").fetchone()[0]
+        # The reported ids go in as parameters: as a NOT IN subquery every one of the 35k visible posts
+        # paid for a fresh scan of action_intents.
+        reported_ids = [str(r[0]) for r in store._conn.execute(
+            "SELECT DISTINCT target_id FROM action_intents WHERE kind='report' AND status!='failed'")]
+        waiting_sql = ("SELECT COUNT(*) FROM observed_posts o JOIN report_blacklist b ON b.author_id=o.author_id "
+                       "AND b.status='active' LEFT JOIN blacklist_post_checks c ON c.post_id=o.post_id "
+                       "AND c.state='gone' WHERE c.post_id IS NULL")
+        if reported_ids:
+            waiting_sql += ' AND o.post_id NOT IN (%s)' % ','.join('?' * len(reported_ids))
+        waiting = store._conn.execute(waiting_sql, reported_ids).fetchone()[0]
         reported_posts = store._conn.execute(
             "SELECT COUNT(DISTINCT a.target_id) FROM action_intents a WHERE a.kind='report' AND a.status!='failed' "
             "AND json_extract(a.metadata_json,'$.engine')='blacklist'").fetchone()[0]
@@ -417,7 +448,7 @@ def pool_summary(store, *, policy=POLICY, now=None):
             "SELECT COUNT(DISTINCT c.author_id) FROM blacklist_post_checks c JOIN report_blacklist b "
             "ON b.author_id=c.author_id AND b.status='active' WHERE c.state='gone'").fetchone()[0]
         accounts = {r[0]: r[1] for r in store._conn.execute('SELECT status,COUNT(*) FROM blacklist_account_reports GROUP BY status')}
-    reportable = len(pending_targets(store, 100000, policy=policy, now=ts))
+    reportable = len(pending_targets(store, 500, policy=policy, now=ts))
     return {'authors_active': authors, 'authors_reported': reported_authors, 'authors_closed': closed,
             'authors_ready_for_account_report': ready, 'account_reports': accounts,
             'posts_visible_unreported': waiting, 'posts_reportable_now': reportable,

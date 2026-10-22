@@ -2,6 +2,23 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-22 16:20 举报查询 87 秒 → 0.3 秒（同一个函数，四处查询）
+- 现象：部署 15:45 的改动后 `ops blacklist stats` 要 116 秒、`BlacklistReporter.step` 平均 89 秒，
+  每轮还额外 `scan()` 25 秒；fleet 的心跳和回复变慢。
+- 判断：`pending_targets()` 在 35k 条帖子上跑了 87 秒。用 `cProfile` + `faulthandler` 定位到三处：
+  1. `EXISTS(SELECT 1 FROM trending_seen …)` 是相关子查询，每行一次索引探测，扫描 35k 行时 83 秒；
+  2. `ORDER BY at`（`at` 是 `COALESCE(created_at, first_seen_at)` 计算列）用不上
+     `idx_observed_posts_first_seen`，强制全表扫描，等于把上面的探测次数放大到全表；
+  3. 取候选时按池子的 20 倍取行（1200 行），而排序后只用前 60 条——多出来的每行还要做两次索引探测。
+  另外 `pool_summary()` 的 `NOT IN (SELECT …)` 子查询让 35k 行每行重扫 `action_intents`。
+- 处理（`ctn/blacklist.py`）：
+  - `trending` 改成 `LEFT JOIN trending_seen`，`ORDER BY o.first_seen_at`（走索引），只取 `max(pool, limit)` 行；
+  - 候选查询不再取 `text` 字段（下游没人用，长文本是冷缓存下最贵的列）；
+  - `pool_summary()` 的已报 id 改成参数列表，`reportable_now` 用 500 行上限。
+  实测（`/tmp/probe.sqlite3`，2 GB 线上副本）：`pending_targets` **87s → 0.32s**，`pool_summary` 116s → 27s（只在 CLI 用）。
+- 验证：`docker run … unittest discover` → **952 tests OK**。
+- 待办：`scan()` 仍要 25 秒（每 60 秒一次，占一步的时间），下一次单独处理。
+
 ## 2026-10-22 15:45 举报名额按证据族分配（26 个池子、90 秒一条、先验证后提交）
 - 现象：从官方事件日志（`docs/intel/chattpg-activity.csv`，10-19 至 10-22）统计蓝分：32 条计分的举报
   （26 条首次帖举报、3 条再次、3 条账号举报）合计 **267 分**，**没有一条按 25 分结算**：20 条 ×0.5（≈12.5），
