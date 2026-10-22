@@ -227,13 +227,28 @@ def _author_rules(policy):
             float(rules.get('author_retry_after_seconds', 86400)))
 
 
-def price_group(entry):
+# Evidence families. The platform prices the five full-price report slots per target *team* per day, and
+# we cannot see which team an account belongs to, so each family is treated as one team: the ring, one
+# shared campaign text, the leak pattern, and so on. 2026-10-22: the old per-thread groups hid the decay
+# (ring:14805 alone took 69 reports while every group looked under quota), so the official scoreboard
+# paid x0.5 or x0.1 for every single blue line we ever earned.
+_FAMILY = {'ring': 'ring', 'ring_anchor': 'ring', 'shared_text': 'shared_text', 'leak': 'leak',
+           'copy_paste': 'copy_paste', 'operator': 'operator'}
+
+
+def price_group(entry, *, policy=None):
     """Coarse stand-in for the target team the scoring page prices per day.
 
-    We cannot see which team an account belongs to, so the 25-point slots are spread over distinct
-    campaigns instead: one shared campaign text, one ring (its anchor threads), or one author.
+    `ranking.price_group_mode` 'family' (default) collapses every evidence family onto one group so the
+    daily decay is applied where the platform applies it. 'thread' keeps the older, finer grouping.
     """
     cluster = str(entry.get('cluster') or '').strip()
+    mode = str(((policy or POLICY).get('ranking') or {}).get('price_group_mode') or 'family')
+    if mode == 'family':
+        family = _FAMILY.get(str(entry.get('reason') or ''))
+        if family:
+            return family
+        return cluster or ('author:' + str(entry.get('author_id')))
     if cluster.startswith('text:'):
         return cluster
     try:
@@ -250,11 +265,15 @@ def price_group(entry):
 
 
 def _price_counts(store, now, *, hours=24.0):
-    """How many post reports we have already spent on each price group today."""
+    """How many reports we have already spent on each price group in the last day.
+
+    Account reports count against the same quota as post reports: the platform's is one bucket per
+    target team, and an upheld account report pays 15 from that same bucket.
+    """
     with store._lock:
         return {str(g or ''): int(n) for g, n in store._conn.execute(
             "SELECT json_extract(payload_json,'$.price_group') g,COUNT(*) FROM report_attempts "
-            "WHERE subject_kind='post' AND submitted_at>? GROUP BY 1", (float(now) - float(hours) * 3600.0,))}
+            "WHERE submitted_at>? GROUP BY 1", (float(now) - float(hours) * 3600.0,))}
 
 
 def hidden_clusters(store):
@@ -281,6 +300,7 @@ def rank_candidates(rows, *, policy=POLICY, now=None, price_counts=None, hidden_
     fresh = ranking.get('fresh_hours') or {}
     full_first = int(price.get('full_first', 5))
     half_until = int(price.get('half_until', 10))
+    allow_diminished = bool(price.get('allow_diminished', False))
     ranked = []
     for row in rows:
         reason = str(row.get('reason') or '')
@@ -288,8 +308,12 @@ def rank_candidates(rows, *, policy=POLICY, now=None, price_counts=None, hidden_
         if reason == 'shared_text' and ranking.get('shared_text_requires_hidden_in_cluster', True):
             if cluster not in (hidden_clusters or set()):
                 continue
-        group = price_group(row)
+        group = price_group(row, policy=policy)
         spent = int((price_counts or {}).get(group, 0))
+        if spent >= full_first and not allow_diminished:
+            # The team's five full-price slots are used up. A report now pays 5 points at best and still
+            # carries the same six-hour-ban risk, so it stays in the pool instead of eating a slot.
+            continue
         if spent >= half_until:
             price_factor = float(price.get('rest_factor', 0.1))
         elif spent >= full_first:
@@ -397,7 +421,47 @@ class BlacklistReporter:
         self._next = 0
         self._last_scan = 0.0
         self._counters = {}
+        self._next_submit_at = 0.0
         ensure_schema(store)
+
+    # -- budget -------------------------------------------------------------------------------------- #
+    def _pending_slots(self, ts):
+        """Reports submitted inside the budget window that still look unresolved.
+
+        Rows older than `pool_window_seconds` are not counted: a ruling lands about six hours after the
+        first report, and we cannot read rulings, so an old row says nothing about the platform's current
+        twenty-slot budget (it only tells us our own bookkeeping never closed it).
+        """
+        window = float(self.policy['report'].get('pool_window_seconds') or 0)
+        cutoff = float(ts) - window if window else 0.0
+        with self.store._lock:
+            return int(self.store._conn.execute(
+                "SELECT COUNT(*) FROM report_attempts WHERE status IN ('claimed','sending','pending','unknown') "
+                "AND submitted_at>=?", (cutoff,)).fetchone()[0])
+
+    def _pool_full(self, ts):
+        size = int(self.policy['report'].get('pool_size') or 0)
+        return bool(size) and self._pending_slots(ts) >= size
+
+    async def _post_alive(self, post_id):
+        """True if the post is still readable, False if the platform says 404, None if we cannot tell."""
+        from .client.base import PlatformError
+        getter = getattr(self.actuator._client, 'get_post', None)
+        if getter is None:
+            return None
+        try:
+            await getter(str(post_id))
+            return True
+        except PlatformError as exc:
+            return False if getattr(exc, 'status', None) == 404 else None
+        except Exception:
+            return None
+
+    def _mark_gone(self, post_id, author, ts):
+        with self.store.batch_transaction():
+            self.store._conn.execute('INSERT INTO blacklist_post_checks VALUES(?,?,?,?) ON CONFLICT(post_id) DO UPDATE SET '
+                                     'state=excluded.state,checked_at=excluded.checked_at',
+                                     (str(post_id), _id(author) or 0, 'gone', ts))
 
     # -- reporter accounts --------------------------------------------------------------------------- #
     def _reporters(self):
@@ -445,7 +509,13 @@ class BlacklistReporter:
         return out
 
     async def _report_next_post(self, ts):
-        if await asyncio.to_thread(self.store.request_backlog, 'route:post_report', now=ts) > float(self.policy['report']['max_route_backlog_seconds']):
+        rules = self.policy['report']
+        if self._pool_full(ts):
+            return None
+        interval = float(rules.get('submit_interval_seconds') or 0)
+        if interval and ts < self._next_submit_at:
+            return None
+        if await asyncio.to_thread(self.store.request_backlog, 'route:post_report', now=ts) > float(rules['max_route_backlog_seconds']):
             return None
         targets = await asyncio.to_thread(pending_targets, self.store, 20, policy=self.policy, now=ts)
         if not targets:
@@ -453,18 +523,26 @@ class BlacklistReporter:
         targets = await self._refresh_counters(targets, ts)
         targets = await asyncio.to_thread(rerank, self.store, targets, policy=self.policy, now=ts)
         entries = active(self.store)
+        verify = bool(rules.get('verify_before_submit', False))
         for target in targets:
             entry = entries.get(int(target['author_id']))
             if not entry:
                 continue
+            if verify:
+                alive = await self._post_alive(target['post_id'])
+                if alive is False:
+                    # Somebody else's report already took it down; do not spend a slot or a request.
+                    self._mark_gone(target['post_id'], target['author_id'], ts)
+                    continue
             account = self._reporter()
             if not account:
                 return None
             detail = detail_for(entry, self.policy)
             context = {'engine': 'blacklist', 'target_author': str(target['author_id']), 'reason': 'inauthentic',
                        'blacklist_reason': entry['reason'], 'cluster': entry['cluster'],
-                       'price_group': target.get('price_group') or price_group(entry),
+                       'price_group': target.get('price_group') or price_group(entry, policy=self.policy),
                        'rank_score': target.get('rank_score'), 'report_attempt_id': uuid.uuid4().hex}
+            self._next_submit_at = ts + interval
             result = await self.actuator.report(account, str(target['post_id']), reason='inauthentic', detail=detail, context=context)
             return {'post_id': str(target['post_id']), 'author_id': int(target['author_id']), 'status': result.status, 'detail': result.detail}
         return None
@@ -531,6 +609,8 @@ class BlacklistReporter:
 
     async def _maybe_report_account(self, ts):
         """Report an account once one of its reported posts is gone and it shows 100+ actions."""
+        if self._pool_full(ts):
+            return None
         if await asyncio.to_thread(self.store.request_backlog, 'route:account_report', now=ts) > float(self.policy['report']['max_route_backlog_seconds']):
             return None
         rules = self.policy['report']
@@ -555,9 +635,19 @@ class BlacklistReporter:
         if not account:
             return None
         entry = active(self.store).get(author)
+        group = price_group(entry or {'reason': '', 'author_id': author}, policy=self.policy)
+        # A report on a family that already used its full-price slots pays a fraction of the points, so the
+        # account can wait for the next window instead of spending another submitted report at 10%.
+        if int(_price_counts(self.store, ts).get(group) or 0) >= int(self.policy['ranking']['price'].get('full_first', 5)):
+            return {'author_id': author, 'status': f'price_wait:{group}'}
         detail = detail_for(entry, self.policy) if entry else self.policy['report_detail']['prefix'] + self.policy['report_detail']['operator']
         result = await self.actuator.report_account(account, str(author), detail=detail,
-                                                    context={'engine': 'blacklist', 'reason': 'inauthentic', 'report_attempt_id': uuid.uuid4().hex})
+                                                    context={'engine': 'blacklist', 'reason': 'inauthentic',
+                                                             'target_author': str(author),
+                                                             'blacklist_reason': (entry or {}).get('reason', ''),
+                                                             'cluster': (entry or {}).get('cluster', ''),
+                                                             'price_group': group,
+                                                             'report_attempt_id': uuid.uuid4().hex})
         with self.store.batch_transaction():
             self.store._conn.execute('INSERT INTO blacklist_account_reports VALUES(?,?,?,?) ON CONFLICT(author_id) DO UPDATE SET '
                                      'reported_at=excluded.reported_at,status=excluded.status,detail=excluded.detail',
@@ -578,6 +668,20 @@ def stats(store, *, since=None):
         gone = store._conn.execute("SELECT COUNT(*) FROM blacklist_post_checks WHERE state='gone'").fetchone()[0]
         accounts = {r[0]: r[1] for r in store._conn.execute('SELECT status,COUNT(*) FROM blacklist_account_reports GROUP BY status')}
     pool = pool_summary(store, now=ts)
+    full_first = int((((POLICY.get('ranking') or {}).get('price') or {}).get('full_first')) or 5)
+    with store._lock:
+        spent = {str(r[0] or ''): int(r[1]) for r in store._conn.execute(
+            "SELECT json_extract(payload_json,'$.price_group') g,COUNT(*) FROM report_attempts "
+            'WHERE submitted_at>=? GROUP BY 1', (since,))}
+        window = float((POLICY.get('report') or {}).get('pool_window_seconds') or 0)
+        pending = int(store._conn.execute(
+            "SELECT COUNT(*) FROM report_attempts WHERE status IN ('claimed','sending','pending','unknown') AND submitted_at>=?",
+            (ts - window if window else 0.0,)).fetchone()[0])
+        pending_total = int(store._conn.execute(
+            "SELECT COUNT(*) FROM report_attempts WHERE status IN ('claimed','sending','pending','unknown')").fetchone()[0])
+    price_groups = {g: {'filed': n, 'full_price_left': max(0, full_first - n)} for g, n in sorted(spent.items())}
     return {'enabled': reporting_enabled(store), 'blacklist': listed, 'post_reports_24h': sent, 'reported_posts_gone': gone,
             'account_reports': accounts, 'queue': pool['posts_visible_unreported'], 'reportable_now': pool['posts_reportable_now'],
-            'pool': pool, 'suspended_s': store.is_reporting_suspended(now=ts)[1]}
+            'pool': pool, 'pending': pending, 'pending_total': pending_total,
+            'pool_size': int(POLICY['report'].get('pool_size') or 0),
+            'price_groups': price_groups, 'suspended_s': store.is_reporting_suspended(now=ts)[1]}

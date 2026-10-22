@@ -664,6 +664,30 @@ post of the same cluster is already hidden (it was right 7/12 times against 6/6 
 invisible to us, the daily price decay is applied per **price group**: one shared campaign text, one ring (its anchor
 threads) or one author; the group is stored in the report payload as `price_group`.
 
+**Price groups, not target teams** (`ranking.price_group_mode`, default `family`): every target team is invisible to
+us, so the per-team daily decay is approximated by evidence family — `ring` covers a ring and its anchor threads,
+`shared_text`/`copy_paste` are families of their own, `leak` and `operator` are hard evidence. The 2026-10-19…22 event
+log (`docs/intel/chattpg-activity.csv`) explains why: across 32 report units that scored (26 first post reports, 3 later
+post reports, 3 upheld account reports) **not one** was paid at the full 25 — 20 units were billed at ×0.5 (≈12.5) and
+12 at ×0.1 (≈2.5, including account reports at 1.5), for 267 points in total. We were almost always past the fifth
+report against the team we were hitting, because the queue was dominated by one family (`ring`: 151 of the 24 h
+before the change, against `copy_paste` 10 and `shared_text` 1).
+
+With `report.price.allow_diminished` off (default), `rank_candidates` **skips** a candidate whose family already spent
+its `full_first` (5) reports in the rolling 24 h window, and `_maybe_report_account` holds account reports back the
+same way (`price_wait:<group>`). The pool is then a standing reserve for the next window rather than a queue that
+keeps firing at 10% of the price.
+
+**The pool budget** is `report.pool_size` (26): submissions stop once the outstanding slot count — posts and accounts
+alike, submitted inside `report.pool_window_seconds` (7200) — reaches it. Rows older than that window are not counted:
+a ruling lands about six hours after the first report and we cannot read rulings, so a three-day-old `pending` row says
+nothing about the platform's current twenty-slot budget, only that our bookkeeping never closed it (`stats` shows both
+`pending` and `pending_total`). The platform cap is 20 unresolved reports per team and `CTN_MAX_PENDING_REPORTS` (40) caps distinct
+authors, so 26 keeps room for a burst without sitting blind on the real limit. Submissions are also spaced by
+`report.submit_interval_seconds` (90) and each post is re-read before it is reported (`verify_before_submit`): a target
+that 404s is recorded as `gone` instead of spending a report. `ops blacklist stats` now reports `pending`, `pool_size`
+and per-family `price_groups` usage (`filed` / `full_price_left`).
+
 Automation needs `CTN_REPORT_MODE=hybrid` and is **shadow by default** (decisions are recorded, nothing is sent
 automatically). Operator commands:
 

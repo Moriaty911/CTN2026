@@ -207,9 +207,14 @@ class ReporterTests(unittest.IsolatedAsyncioTestCase):
     def reported(self):
         return [r[0] for r in self.store._conn.execute("SELECT target_id FROM action_intents WHERE kind='report' ORDER BY created_at")]
 
+    async def step(self):
+        """One reporter tick with the submit interval cleared; pacing has its own tests."""
+        self.reporter._next_submit_at = 0.0
+        return await self.reporter.step()
+
     async def test_reports_one_post_per_author_newest_first(self):
         for _ in range(5):
-            await self.reporter.step()
+            await self.step()
         self.assertEqual(self.reported(), ['c1', 'c0', 'b1'])
         meta = json.loads(self.store._conn.execute("SELECT metadata_json FROM action_intents WHERE kind='report' LIMIT 1").fetchone()[0])
         self.assertEqual((meta['engine'], meta['blacklist_reason'], meta['target_author']), ('blacklist', 'leak', '3003'))
@@ -218,17 +223,17 @@ class ReporterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_the_extra_posts_of_a_reported_author_wait_in_the_pool(self):
         for _ in range(3):
-            await self.reporter.step()
+            await self.step()
         summary = blacklist.pool_summary(self.store, now=time.time())
         self.assertEqual(summary['authors_reported'], 3)
         self.assertEqual(summary['posts_visible_unreported'], 2)
         self.assertEqual(summary['posts_reportable_now'], 0)
         self.assertEqual(summary['posts_pooled'], 2)
-        self.assertIsNone((await self.reporter.step())['reported'])
+        self.assertIsNone((await self.step())['reported'])
 
     async def test_one_retry_per_author_is_allowed_after_the_window(self):
         for _ in range(3):
-            await self.reporter.step()
+            await self.step()
         now = time.time()
         retry_after = float(blacklist.POLICY['report']['author_retry_after_seconds'])
         self.assertEqual(blacklist.pending_targets(self.store, 5, now=now + retry_after - 60), [])
@@ -237,9 +242,9 @@ class ReporterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(blacklist.pending_targets(self.store, 5, policy=strict, now=now + retry_after + 60), [])
 
     async def test_an_account_report_parks_the_authors_remaining_posts(self):
-        await self.reporter.step()
-        await self.reporter.step()
-        await self.reporter.step()
+        await self.step()
+        await self.step()
+        await self.step()
         ts = time.time()
         with self.store.batch_transaction():
             self.store._conn.execute('INSERT INTO blacklist_account_reports VALUES(?,?,?,?)', (3001, ts, 'succeeded', ''))
@@ -248,48 +253,48 @@ class ReporterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_new_posts_from_a_fresh_author_are_reported_too(self):
         for _ in range(4):
-            await self.reporter.step()
+            await self.step()
         blacklist.add(self.store, 3004, reason='leak', evidence={'match': 'As an AI'})
         self.platform.posts['b9'] = MockPost(post_id='b9', author='3004', text='As an AI again', created_at=time.time())
         post(self.store, 'b9', 3004, 'As an AI again', at=time.time())
-        out = await self.reporter.step()
+        out = await self.step()
         self.assertEqual(out['reported']['post_id'], 'b9')
 
     async def test_waits_while_the_report_route_is_backed_up(self):
         with patch.object(self.store, 'request_backlog', return_value=30.0):
-            out = await self.reporter.step()
+            out = await self.step()
         self.assertIsNone(out['reported'])
         self.assertEqual(self.reported(), [])
 
     async def test_stops_when_suspended_switched_off_or_after_a_403(self):
         self.store.set_report_suspension(now=time.time())
-        self.assertEqual((await self.reporter.step())['blocked'], 'reporting_suspended')
+        self.assertEqual((await self.step())['blocked'], 'reporting_suspended')
         self.store.clear_report_suspension()
         self.store.set_policy('blacklist_reporting', False)
-        self.assertEqual((await self.reporter.step())['blocked'], 'blacklist_reporting_off')
+        self.assertEqual((await self.step())['blocked'], 'blacklist_reporting_off')
         self.store.set_policy('blacklist_reporting', True)
         self.store.set_policy('report_forbidden', {'at': time.time(), 'message': 'forbidden'})
-        self.assertEqual((await self.reporter.step())['blocked'], 'recent_report_403')
+        self.assertEqual((await self.step())['blocked'], 'recent_report_403')
         self.store.set_policy('report_forbidden', {'at': time.time() - 3600, 'message': 'forbidden'})
-        self.assertIn('reported', await self.reporter.step())
+        self.assertIn('reported', await self.step())
         self.assertEqual(len(self.reported()), 1)
 
     async def test_a_report_403_with_suspension_wording_stops_reporting(self):
         async def forbidden(*a, **k):
             raise PlatformError('reporting suspended for six hours', retryable=False, status=403)
         self.platform.report = forbidden
-        await self.reporter.step()
+        await self.step()
         self.assertTrue(self.store.is_reporting_suspended()[0])
-        self.assertEqual((await self.reporter.step())['blocked'], 'reporting_suspended')
+        self.assertEqual((await self.step())['blocked'], 'reporting_suspended')
 
     async def test_gone_post_and_enough_actions_lead_to_one_account_report(self):
         for _ in range(3):
-            await self.reporter.step()
+            await self.step()
         del self.platform.posts['b1']                            # hidden by the moderator (reads 404)
         with self.store.batch_transaction():
             self.store._conn.execute('UPDATE blacklist_post_checks SET checked_at=0')
         with patch('ctn.moderation.reporter.BlueTeamReporter.refresh_account_activity', return_value={'action_count': 150}):
-            out = await self.reporter.step()
+            out = await self.step()
         self.assertEqual(out['checked'], 3)
         self.assertEqual(out['account_reported']['author_id'], 3001)
         rows = self.store._conn.execute("SELECT target_id,json_extract(metadata_json,'$.engine') FROM action_intents WHERE kind='report_account'").fetchall()
@@ -297,24 +302,39 @@ class ReporterTests(unittest.IsolatedAsyncioTestCase):
         gone = self.store._conn.execute("SELECT post_id FROM blacklist_post_checks WHERE state='gone'").fetchall()
         self.assertEqual([r[0] for r in gone], ['b1'])
         with patch('ctn.moderation.reporter.BlueTeamReporter.refresh_account_activity', return_value={'action_count': 150}):
-            out = await self.reporter.step()
+            out = await self.step()
         self.assertIsNone(out['account_reported'])               # not again within the recheck window
 
     async def test_too_few_actions_waits(self):
         for _ in range(3):
-            await self.reporter.step()
+            await self.step()
         del self.platform.posts['b1']
         with patch('ctn.moderation.reporter.BlueTeamReporter.refresh_account_activity', return_value={'action_count': 40}):
-            out = await self.reporter.step()
+            out = await self.step()
             self.assertEqual(out['account_reported']['status'], 'waiting_actions:40')
-            self.assertIsNone((await self.reporter.step())['account_reported'])   # rechecked after an hour, not every step
+            self.assertIsNone((await self.step())['account_reported'])   # rechecked after an hour, not every step
+        self.assertIsNone(self.store._conn.execute("SELECT 1 FROM action_intents WHERE kind='report_account'").fetchone())
+
+    async def test_a_saturated_family_holds_its_account_reports_back(self):
+        for _ in range(3):
+            await self.step()
+        del self.platform.posts['b1']
+        with self.store.batch_transaction():
+            for i in range(5):                                # the ring family already used its full-price slots
+                self.store._conn.execute(
+                    "INSERT INTO report_attempts(id,action_id,subject_kind,subject_id,author,report_id,status,submitted_at,ruled_at,outcome,payload_json)"
+                    " VALUES(?,?,'post',?,'a','','pending',?,0,'',?)",
+                    (f'q{i}', f'qa{i}', f'qp{i}', time.time() - i - 1, json.dumps({'price_group': 'leak'})))
+        with patch('ctn.moderation.reporter.BlueTeamReporter.refresh_account_activity', return_value={'action_count': 150}):
+            out = await self.step()
+        self.assertEqual(out['account_reported']['status'], 'price_wait:leak')
         self.assertIsNone(self.store._conn.execute("SELECT 1 FROM action_intents WHERE kind='report_account'").fetchone())
 
     async def test_scan_runs_inside_the_step(self):
         self.reporter._last_scan = 0
         post(self.store, 'leak2', 3050, "Sure, here's a draft: thanks!")
         self.platform.posts['leak2'] = MockPost(post_id='leak2', author='3050', text='x', created_at=time.time())
-        out = await self.reporter.step()
+        out = await self.step()
         self.assertIn((3050, 'leak'), out['added'])
 
 
@@ -345,19 +365,35 @@ class RankingTests(Base):
         ranked = blacklist.rank_candidates(rows, now=NOW, price_counts={}, hidden_clusters={'text:aaa'})
         self.assertEqual(ranked[0]['post_id'], 'ring')
 
-    def test_slots_are_spread_once_a_campaign_has_had_its_five(self):
-        def score(price_counts):
-            return blacklist.rank_candidates(self.rows(), now=NOW, price_counts=price_counts,
-                                             hidden_clusters={'text:aaa'})[-1]['rank_score']
-        group = blacklist.price_group(self.rows()[0])
-        self.assertEqual(group, 'text:aaa')
-        self.assertAlmostEqual(score({group: 4}), score({}), places=6)
-        self.assertAlmostEqual(score({group: 5}), round(score({}) / 2, 6), places=6)
-        self.assertAlmostEqual(score({group: 10}), round(score({}) / 10, 6), places=6)
+    def test_a_family_is_dropped_once_its_five_full_price_slots_are_used(self):
+        rows = self.rows()
+        group = blacklist.price_group(rows[0])
+        self.assertEqual(group, 'shared_text')
+        kept = blacklist.rank_candidates(rows, now=NOW, price_counts={group: 4}, hidden_clusters={'text:aaa'})
+        self.assertIn('weak', [r['post_id'] for r in kept])
+        dropped = blacklist.rank_candidates(rows, now=NOW, price_counts={group: 5}, hidden_clusters={'text:aaa'})
+        self.assertNotIn('weak', [r['post_id'] for r in dropped])
 
-    def test_ring_price_group_uses_its_anchor_threads(self):
-        self.assertEqual(blacklist.price_group(self.rows()[1]), 'ring:700')
-        self.assertEqual(blacklist.price_group(self.rows()[2]), 'author:3')
+    def test_diminished_prices_stay_available_only_when_allowed(self):
+        rows = self.rows()
+        group = blacklist.price_group(rows[0])
+        permissive = dict(blacklist.POLICY, ranking=dict(blacklist.POLICY['ranking'], price=dict(
+            blacklist.POLICY['ranking']['price'], allow_diminished=True)))
+        ranked = blacklist.rank_candidates(rows, now=NOW, price_counts={group: 5}, hidden_clusters={'text:aaa'}, policy=permissive)
+        self.assertIn('weak', [r['post_id'] for r in ranked])
+        self.assertLess(ranked[-1]['rank_score'], 0.5)
+
+    def test_price_group_is_one_family_per_evidence_type(self):
+        self.assertEqual(blacklist.price_group(self.rows()[1]), 'ring')
+        self.assertEqual(blacklist.price_group(self.rows()[2]), 'copy_paste')
+        thread = dict(blacklist.POLICY, ranking=dict(blacklist.POLICY['ranking'], price_group_mode='thread'))
+        self.assertEqual(blacklist.price_group(self.rows()[1], policy=thread), 'ring:700')
+        self.assertEqual(blacklist.price_group(self.rows()[2], policy=thread), 'author:3')
+
+    def test_ring_accounts_share_one_price_group_whatever_thread_they_came_from(self):
+        first = {'post_id': 'a', 'author_id': 1, 'reason': 'ring', 'evidence_json': json.dumps({'threads': ['900']})}
+        second = {'post_id': 'b', 'author_id': 2, 'reason': 'ring_anchor', 'evidence_json': json.dumps({'posts': ['55']})}
+        self.assertEqual(blacklist.price_group(first), blacklist.price_group(second))
 
     def test_trending_posts_enter_the_pool_before_newer_cold_posts(self):
         blacklist.add(self.store, 3001, reason='ring', cluster='ring', evidence={'n': 3, 'threads': ['1']})
@@ -385,7 +421,7 @@ class RankingTests(Base):
         self.store._conn.commit()
         ranked = blacklist.pending_targets(self.store, 5, now=NOW)
         self.assertEqual([r['post_id'] for r in ranked], ['ring', 'weak'])
-        self.assertEqual({r['post_id']: r['price_group'] for r in ranked}, {'ring': 'ring:900', 'weak': 'text:aaa'})
+        self.assertEqual({r['post_id']: r['price_group'] for r in ranked}, {'ring': 'ring', 'weak': 'shared_text'})
         self.assertGreater(ranked[0]['rank_score'], ranked[1]['rank_score'])
 
 
@@ -423,6 +459,76 @@ class CounterRefreshTests(unittest.IsolatedAsyncioTestCase):
         rows = [{'post_id': f'p{i}', 'at': NOW} for i in range(12)]
         await self.reporter._refresh_counters(rows, 1000.0)
         self.assertEqual(len(calls), 8)
+
+
+class BudgetTests(unittest.IsolatedAsyncioTestCase):
+    """The pool budget, the submit interval and the pre-submit liveness check."""
+
+    async def asyncSetUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+        self.router = bound_router(self.store, ('yes_001', 'yes_002'))
+        self.platform = MockLegitClient(failure_rate=0, latency_ms=(0, 0))
+        self.act = actor(self.platform, self.store)
+        self.act.catalog_hash = self.router.registry.catalog_hash
+        self.store.set_policy('report_mode', 'hybrid')
+        blacklist.ensure_schema(self.store)
+        self.t0 = NOW
+        for i in range(4):
+            author = 3100 + i
+            pid = f'z{i}'
+            at = self.t0 - 60 * (i + 1)                     # z0 is the newest, so it ranks first
+            blacklist.add(self.store, author, reason='ring', cluster='ring',
+                          evidence={'n': 3, 'threads': [str(author)]}, now=self.t0)
+            self.platform.posts[pid] = MockPost(post_id=pid, author=str(author), text='Count me in.', created_at=at)
+            post(self.store, pid, author, 'Count me in.', at=at)
+        self.reporter = blacklist.BlacklistReporter(self.act, self.store)
+        self.reporter._last_scan = self.t0 + 10**9           # scanning is tested on its own
+
+    def reported(self):
+        return [r[0] for r in self.store._conn.execute("SELECT target_id FROM action_intents WHERE kind='report' ORDER BY created_at")]
+
+    async def test_one_submission_per_submit_interval(self):
+        self.assertTrue((await self.reporter.step(now=self.t0))['reported'])
+        self.assertIsNone((await self.reporter.step(now=self.t0 + 30))['reported'])
+        self.assertTrue((await self.reporter.step(now=self.t0 + 91))['reported'])
+
+    async def test_the_pool_stops_submissions_when_it_is_full(self):
+        with self.store.batch_transaction():
+            for i in range(26):
+                self.store._conn.execute(
+                    "INSERT INTO report_attempts(id,action_id,subject_kind,subject_id,author,report_id,status,submitted_at,ruled_at,outcome,payload_json)"
+                    " VALUES(?,?,'post',?,'a','','pending',?,0,'','{}')", (f'r{i}', f'a{i}', f'p{i}', self.t0 - 10))
+        out = await self.reporter.step(now=self.t0)
+        self.assertIsNone(out['reported'])
+        self.assertEqual(self.reported(), [])
+        summary = blacklist.stats(self.store, since=self.t0 - 3600)
+        self.assertEqual((summary['pending'], summary['pool_size']), (26, 26))
+
+    async def test_rows_older_than_the_budget_window_do_not_block_the_pool(self):
+        with self.store.batch_transaction():
+            for i in range(26):                              # unresolved as far as our bookkeeping knows
+                self.store._conn.execute(
+                    "INSERT INTO report_attempts(id,action_id,subject_kind,subject_id,author,report_id,status,submitted_at,ruled_at,outcome,payload_json)"
+                    " VALUES(?,?,'post',?,'a','','pending',?,0,'','{}')", (f'o{i}', f'oa{i}', f'op{i}', self.t0 - 3 * 3600))
+        self.assertFalse(self.reporter._pool_full(self.t0))
+        self.assertTrue((await self.reporter.step(now=self.t0))['reported'])
+
+    async def test_a_target_that_already_disappeared_is_marked_gone_and_skipped(self):
+        del self.platform.posts['z0']                        # somebody else's report took it down
+        out = await self.reporter.step(now=self.t0)
+        self.assertEqual(out['reported']['post_id'], 'z1')
+        self.assertEqual(self.reported(), ['z1'])
+        gone = [r[0] for r in self.store._conn.execute("SELECT post_id FROM blacklist_post_checks WHERE state='gone'")]
+        self.assertEqual(gone, ['z0'])
+
+    def test_account_reports_count_against_the_same_price_group(self):
+        with self.store.batch_transaction():
+            for kind, ident, group in (('post', 'p1', 'ring'), ('account', '3100', 'ring'), ('post', 'p2', 'shared_text')):
+                self.store._conn.execute(
+                    "INSERT INTO report_attempts(id,action_id,subject_kind,subject_id,author,report_id,status,submitted_at,ruled_at,outcome,payload_json)"
+                    " VALUES(?,?,?,?,'a','','pending',?,0,'',?)",
+                    (ident, ident, kind, ident, self.t0 - 10, json.dumps({'price_group': group})))
+        self.assertEqual(blacklist._price_counts(self.store, self.t0), {'ring': 2, 'shared_text': 1})
 
 
 class SwitchTests(unittest.TestCase):

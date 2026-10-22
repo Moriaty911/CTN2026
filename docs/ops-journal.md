@@ -2,6 +2,29 @@
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
 
+## 2026-10-22 15:45 举报名额按证据族分配（26 个池子、90 秒一条、先验证后提交）
+- 现象：从官方事件日志（`docs/intel/chattpg-activity.csv`，10-19 至 10-22）统计蓝分：32 条计分的举报
+  （26 条首次帖举报、3 条再次、3 条账号举报）合计 **267 分**，**没有一条按 25 分结算**：20 条 ×0.5（≈12.5），
+  12 条 ×0.1（≈2.5，账号举报 1.5）。也就是说我们几乎总是在“已经报了 5 次以上的那个队”上继续报。
+  昨天 24h 报了 ring 106 + ring_anchor 45 = 151 条、copy_paste 10、shared_text 1——队列被单一证据族占满。
+- 判断：平台按“每个目标队每天前 5 次满分”计价，而目标队对我们不可见。10 连报同一个队，后 5 条只值 2.5 分，
+  还各自带着“判真人 → 6 小时全队禁报”的风险。名额是稀缺资源，必须按证据族（近似目标队）分摊。
+- 处理（`ctn/blacklist.py` + `policies/blacklist-v1.json`）：
+  - `price_group()` 改为按证据族归并（`ring`/`leak`/`copy_paste`/`shared_text`/`operator`），可用
+    `ranking.price_group_mode` 切回 `thread`。
+  - `rank_candidates()`：某族 24h 内已满 5 条时直接跳过候选（`report.price.allow_diminished` 默认 false），
+    不再按 0.1 倍白送名额；账号举报同样受此约束（返回 `price_wait:<族>`）。
+  - 池子上限 `report.pool_size`=26（帖 + 账号未决总数），提交间隔 `submit_interval_seconds`=90，
+    提交前 `get_post` 复核（已 404 的记 `gone`，不花名额）。
+  - `_price_counts()` 把账号举报也计入族配额；`stats()` 输出 `pending`、`pool_size`、各族 `price_groups`
+    （`filed` / `full_price_left`）。
+- 池子只数窗口内的未决（`pool_window_seconds`=7200）：库里 `pending` 累计 183 条（0-6h 46 条），
+  其中大部分早就裁决过、只是我们没回读；若按全部未决计数，部署后会被自己的历史记录永久卡死。
+  `stats` 同时给 `pending`（窗口内）和 `pending_total`（全部）。
+- 验证：`./scripts/docker.sh verify` 通过，950 个测试（+2：族配额压住账号举报、窗口外的旧记录不占池子）。
+- 待办：部署后先看 `ops blacklist stats` 的族分布，确认只报 `leak`/`shared_text` 的剩余名额；等用户给蓝分
+  对账（这是唯一能验证“要么 25 要么不报”是否成立的方式）。
+
 ## 2026-10-21 00:11 举报按证据排序（未部署前先写日志）
 - 现象：举报打开后 10 分钟发出 23 条，按“最新”排序——`shared_text` 占 10 条（历史精度 58%），
   而 `ring` 9 条（6/6）。平台上 trending 的 165 条帖里 48 条（29%）来自我们黑名单里的号，我们一条没报。
