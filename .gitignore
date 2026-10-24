@@ -200,3 +200,9 @@ local_*
 .env.macro
 *.migration.lock
 pypi-capturethenarrative/
+
+# Competition materials stay on disk only (rule 5.2: no material leaves the team).
+ctn-accounts-*.md
+docs/intel/
+leaderboard.png
+screenshot_web.png
