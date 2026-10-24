@@ -76,17 +76,33 @@ def _hidden(raw):
     return {**flags, **states}
 
 
+_SELECT = ("SELECT p.post_id,p.account_id,COALESCE(c.last_checked,0) AS last_checked,COALESCE(c.misses,0) AS misses,"
+           "COALESCE(c.state,'visible') AS state FROM publications p LEFT JOIN own_post_checks c ON c.post_id=p.post_id "
+           "WHERE p.post_id IS NOT NULL AND p.published_at>=? AND COALESCE(c.state,'visible')<>'hidden' ")
+
+
 async def own_post_check(actuator, store, *, now=None):
     import asyncio
     ts = time.time() if now is None else now
     rule = launch_rule(store, 'own_posts')
     await asyncio.to_thread(_ensure, store)
+    limit = int(rule['checks_per_step'])
+    fresh = float(rule.get('fresh_seconds') or 0)
     with store._lock:
-        rows = [dict(r) for r in store._conn.execute(
-            "SELECT p.post_id,p.account_id,COALESCE(c.last_checked,0) AS last_checked,COALESCE(c.misses,0) AS misses,COALESCE(c.state,'visible') AS state "
-            "FROM publications p LEFT JOIN own_post_checks c ON c.post_id=p.post_id WHERE p.post_id IS NOT NULL AND p.published_at>=? "
-            "AND COALESCE(c.state,'visible')<>'hidden' AND COALESCE(c.last_checked,0)<=? ORDER BY COALESCE(c.last_checked,0) LIMIT ?",
-            (ts - rule['lookback_seconds'], ts - rule['recheck_seconds'], int(rule['checks_per_step'])))]
+        # A post published minutes ago that a moderator hides is the one that suspends the account, so it is
+        # read before the backlog; everything else is rechecked oldest-first behind it. Both phases only
+        # ever look inside `lookback_seconds`, so a post leaves the queue once it is older than that.
+        rows = []
+        if fresh > 0:
+            rows = [dict(r) for r in store._conn.execute(
+                _SELECT + "AND COALESCE(c.last_checked,0)=0 AND p.published_at>=? ORDER BY p.published_at DESC LIMIT ?",
+                (ts - rule['lookback_seconds'], ts - fresh, limit))]
+        seen = {row['post_id'] for row in rows}
+        if len(rows) < limit:
+            rows += [dict(r) for r in store._conn.execute(
+                _SELECT + "AND COALESCE(c.last_checked,0)<=? ORDER BY COALESCE(c.last_checked,0) LIMIT ?",
+                (ts - rule['lookback_seconds'], ts - rule['recheck_seconds'], limit))
+                if r['post_id'] not in seen]
     changed = []
     for row in rows:
         raw = await actuator.get_post(row['post_id'])

@@ -174,6 +174,13 @@ class LifecycleStoreMixin:
             result['reply_reasons_24h']={r[0] or 'none':r[1] for r in self._conn.execute(
                 "SELECT reason,COUNT(*) FROM post_tasks WHERE queued_at>=? GROUP BY reason ORDER BY COUNT(*) DESC LIMIT 15",(time.time()-86400,))}
         result['self_check']={'scan':self.policy('self_check:scan',{}),'slowed_accounts':self.policy('slowed_accounts',{})}
+        try:
+            with self._lock:
+                hidden=[dict(r) for r in self._conn.execute("SELECT post_id,account_id,misses,last_checked FROM own_post_checks WHERE state='hidden' ORDER BY last_checked DESC LIMIT 10")]
+                checked=self._conn.execute('SELECT COUNT(*) FROM own_post_checks WHERE last_checked>=?',(time.time()-3600,)).fetchone()[0]
+                published=self._conn.execute('SELECT COUNT(*) FROM publications WHERE published_at>=?',(time.time()-3600,)).fetchone()[0]
+            result['self_check'].update({'hidden':hidden,'hidden_total':len(hidden),'checked_last_hour':checked,'published_last_hour':published})
+        except Exception as exc:result['self_check']['hidden_error']=type(exc).__name__
         try:result['news']=self.news_summary()
         except Exception as exc:result['news']={'error':type(exc).__name__}
         try:result['originals']=self.originals_status()

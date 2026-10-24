@@ -479,6 +479,62 @@ class LlmConfigTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 LLMConfig.load("/nonexistent-llm-test-env")
 
+    def test_pacing_and_output_cap_settings(self):
+        config = LLMConfig(api_key=LLM_KEY, min_interval_s=21.0, output_token_cap=1024)
+        self.assertEqual((config.min_interval_s, config.output_token_cap), (21.0, 1024))
+        for changes in ({"min_interval_s": -1.0}, {"min_interval_s": float("inf")}, {"output_token_cap": -1}):
+            with self.assertRaises(ValueError):
+                LLMConfig(api_key=LLM_KEY, **changes)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".env"
+            path.write_text("CTN_LLM_API_KEY=synthetic-file-key\nCTN_LLM_MIN_INTERVAL_S=21\nCTN_LLM_OUTPUT_CAP=1024\n")
+            with patch.dict(os.environ, {}, clear=True):
+                loaded = LLMConfig.load(path)
+                self.assertEqual((loaded.min_interval_s, loaded.output_token_cap), (21.0, 1024))
+
+    def test_a_rejected_request_reports_the_status_and_provider_code(self):
+        def send(request):
+            return httpx.Response(400, json={"error": {"code": "context_length_exceeded", "message": "too long"}})
+        client = DeepSeekClient(LLMConfig(api_key="synthetic-rejection-credential", max_retries=0),
+                                transport=httpx.MockTransport(send))
+        self.addCleanup(client.close)
+        result = client.call([{"role": "user", "content": "hi"}])
+        self.assertEqual(result.reason, "request_rejected:400:context_length_exceeded")
+
+
+class ProviderPacingTests(unittest.TestCase):
+    def client(self, **changes):
+        seen = []
+        def send(request):
+            seen.append(json.loads(request.content))
+            return response()
+        config = {"api_key": "synthetic-pacing-credential", "model": "qwen2.5-3b-instruct", "max_retries": 0}
+        config.update(changes)
+        client = DeepSeekClient(LLMConfig(**config), transport=httpx.MockTransport(send))
+        self.addCleanup(client.close)
+        return client, seen
+
+    def test_output_cap_limits_the_requested_tokens(self):
+        client, seen = self.client(max_tokens=4096, output_token_cap=1024)
+        self.assertEqual(client.call([{"role": "user", "content": "hi"}]).reason, "ok")
+        self.assertEqual(seen[0]["max_tokens"], 1024)
+
+    def test_pacing_spaces_consecutive_calls(self):
+        client, seen = self.client(min_interval_s=0.05, api_key="synthetic-pacing-credential-b")
+        started = time.monotonic()
+        for _ in range(3):
+            self.assertEqual(client.call([{"role": "user", "content": "hi"}]).reason, "ok")
+        self.assertGreaterEqual(time.monotonic() - started, 0.1)
+        self.assertEqual(len(seen), 3)
+
+    def test_a_wait_longer_than_the_budget_fails_fast(self):
+        client, _ = self.client(min_interval_s=60.0, total_wait_budget_s=1.0,
+                                api_key="synthetic-pacing-credential-c")
+        self.assertEqual(client.call([{"role": "user", "content": "hi"}]).reason, "ok")
+        started = time.monotonic()
+        self.assertEqual(client.call([{"role": "user", "content": "hi"}]).reason, "queue_budget_exceeded")
+        self.assertLess(time.monotonic() - started, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

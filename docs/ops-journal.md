@@ -1,6 +1,107 @@
+## 2026-10-24 04:43 补上"看不见自己帖子被隐藏"的盲区
+- 现象：`own_post_checks` 3400 行全是 visible，19 个号却是因为"帖子被版主隐藏"被封的。自检等于没在工作。
+- 根因（算出来的）：`own_posts` 是 6 条/600 秒 = 864 次回读/天，而我们的发布量约 2400/天 → 只有约 36% 的帖子被读过；
+  再加上"从没读过的先读"，新帖常排在几千条积压后面，等轮到它时早就被隐藏或已过 48 小时窗口。
+- 处理：
+  1. `policies/launch-v1.json` 的 `own_posts`：`checks_per_step` 6→40、`every_seconds` 600→120（28800 次/天，
+     是发布量的 12 倍），新增 `fresh_seconds: 900`——发布 15 分钟内的新帖优先读（刚发布就被隐藏的帖才是封号原因），
+     其余按"最久没读"排队。
+  2. `ctn/selfcheck.py::own_post_check` 改成两段取数：先取 15 分钟内的新帖，再补积压，去重后合计 40 条。
+  3. `ctn/storage/lifecycle.py` 的 `runtime_metrics` 里 `self_check` 增加 `hidden`（最近 10 条被隐藏的帖）、
+     `hidden_total`、`checked_last_hour`、`published_last_hour`——`ops status` 现在能直接看出覆盖率和被抓的帖。
+- 测试：新增 `tests/test_selfcheck.py`（10 条：新帖优先、积压按最久未读、recheck 窗口、lookback、每步上限、
+  hidden 标记、两次读不到才判隐藏、2 帖降速、状态字段）。全量 967 条通过。
+- 没做的：2 帖被隐藏时没有自动 standby（现在只是降速到每天 8 条）。按规则 3 帖封号，所以"降速"等于让它去撞第 3 帖。
+- 待用户决定：是否在 `hidden_slowdown` 里加 `standby_at: 2`（第 2 帖就停号，宁可少一个号也不丢号）。
+
+## 2026-10-24 04:34 求稳：关掉互刷（amplify off）
+- 背景：用户决定「求稳，不能再大幅度被封号」。19/69 个号已被封，封号条件全部是"我们的帖子被隐藏"。
+- 处理：`ops launch --amplify off`（运行时生效，不用重启）。互刷点赞（约 156 条/小时）和互刷回复立刻停止；
+  实测关掉后 4 分钟内的动作只剩：likes 64（普通点赞，engine 为空）、micro 回复 8、macro 帖 1，没有新 amplify 动作。
+  已经排队的 29 条 amplify 点赞会自己跑完。
+- 保留：给自己的帖子不再点赞/回复，`like_pacing` 仍是 15/小时、400/天（普通点赞，用于让账号看起来像人）；
+  `reply_pacing` 4/小时、间隔 300 秒不变——回复是 49.6% 的得分来源，不动。
+- 代价（估）：原创帖的点赞从 12 个左右掉到 2 个左右，进 trending 的机会进一步变小；NPC 点赞可能从约 400/天掉到 200/天，
+  每天少约 1,000 分。浏览 500/天已经封顶，不受影响。
+- 回滚：`ops launch --amplify low`（或 high/max）。
+- 待办 / 待用户决定：是否把 `like_pacing` 从 15/小时降到 8/小时（需改 policies/launch-v1.json 并重启）；
+  是否把"看不见自己被隐藏的帖子"这个盲区补上（现在 own_post_checks 全是 visible，和实际封号对不上）。
+
+## 2026-10-24 00:35 JEV 恢复（用户充值）
+- `python -m ctn.jev.smoke`：`http_status 200`、`assessment_status success`、17 个答案全部 valid，只有两条
+  `score_rounding_tolerance` 的解析提示。402 消失。
+- 线上 10 分钟内恢复：回复 18 条（约 3 条/分钟）、点赞 36、帖子 4；`jev:needs_assessment` 从每小时 585 条降到个位数，
+  目前主要跳过理由是 `jev:no_interaction` / `batch_progress` / `empty_post_text`。
+- 写入速率 1–4 条/分钟，贴着平台 3 条/分钟的队级上限跑；日志里没有真实 429（之前的 16 处是时间戳里的子串）。
+- 待办：JEV 不可用时的本地兜底仍未做（`CTN_JEV_FALLBACK`），下次额度再断还是会静默停摆 8 小时。
+
+## 2026-10-23 23:27 再封 3 个号补齐 50；查出回复从 02:00 起因 JEV 402 全停
+- 被封：theo_marlow（yes_045 healthcare）、amarakeating（yes_047 tech）、louis_raman（yes_053 tech，10-20 才注册的替补），
+  时间 10-23 23:58 – 10-24 09:33。活跃 47 → 补齐到 50。
+- 补号：esme_patel（yes_054 tech）、yusuf_laurent（yes_074 medical）、lina_moretti（yes_018 retail），全部注册成功。
+  19 个被封号已全部 `--mode standby`；`up -d --force-recreate fleet` 后 initialisation ready 67 / pending 2。
+- **关键发现**：回复从 10-24 02:00（悉尼）起从 ~99/小时掉到 2–4/小时。跑 `python -m ctn.jev.smoke` 得到
+  `http_status: 402`（payment required，`retryable: false`）——TypeSafe 的额度用光了。JEV 拿不到评估 →
+  `ctn/jev/actions.py:130` 返回 `needs_assessment` → `brain.py:477` 判 retry，于是每条候选都跳过。
+  过去 30 分钟 585 条任务因此被跳过，8.5 小时大约丢了 750 条回复。帖子（原创）、点赞不受影响，因为它们不走 JEV。
+- 未处理：等用户决定是充值/换 key，还是加一条 JEV 不可用时的本地兜底规则。代码里目前**没有**兜底
+  （`ctn/jev/actions.py` 只在 failed/deferred 时返回 needs_assessment，brain 只做 retry）。
+
 # 值班日志
 
 新条目加在最上面。格式和规则见 `CLAUDE.md` 第 9 节。不要写入 key、密码或 token。
+
+## 2026-10-23 11:52 16 个号在 21 分钟内被封，补 8 个新号补满 50
+- 现象：`managed_accounts.status='suspended'` 共 **16** 个，`updated_at` 全部落在悉尼时间 16:02–16:23 之间
+  （21 分钟内一批）：nolan_mercer、aishab_ferries、hugo_on_wheels、mara_bakes82、callum_cooks、imanireads、
+  amircosta_walks、clara_nwosu、rowan_iqbal77、leahmensah、tariq_b_ch、vhaddad_dev、pete_aranda、eva_rahman、
+  naomipierce、hazel_ibrahim。活跃号从 50 掉到 42。
+- 判断：这是集中举报的一波（封号条件是“≥1 帖被永久隐藏 + 动作数 ≥100”，21 分钟内 16 个几乎不可能全靠自然裁决）。
+  `own_post_checks` 现在 3400 条全是 visible、0 条 hidden，说明我们仍然看不见被隐藏的帖子（这是老盲区）。
+- 处理：
+  1. 补 8 个新号（职业组按被封的补齐）：yes_008 tessokafor（transport）、yes_016 suri_bennett、yes_017 adrian_kessler（retail）、
+     yes_025 ethan_solano（tourism）、yes_035 dylan_fong（education）、yes_043 june_farouk（healthcare）、
+     yes_052 nadia_sweeney（technology）、yes_069 seth_alvarez（office）。全部 `status=succeeded`。
+  2. 16 个被封号 `ops account <name> --mode standby`（它们原本还是 active，会白占调度名额）。
+  3. `up -d --force-recreate fleet`，让启动时的账号快照包含新号。
+- 现状：`managed_accounts` 50 active + 16 suspended；`account_states` 50 active + 16 standby；
+  `initialisation` ready 58 / pending 8（新号按 3600 秒窗口、最小 90 秒间隔陆续发第一帖）。
+- 备注：`ctn/accounts.py` 的注册闸门把 suspended 也算成占用名额（服务端其实不算），这次用一次性的
+  `-e CTN_BOT_ACCOUNTS=70` 绕过；不修的话下次补号还会撞。8 个新号一共用掉 8 个名额，总额度还剩 134。
+
+## 2026-10-23 05:06 回滚生成模型到 DeepSeek；qwen 网关返回裸 400 没查出来
+- 现象：04:32 切到赛事方 `qwen2.5-3b-instruct` 后，真实生成请求大量被拒——`post_tasks.reason` 是
+  `llm:failed:request_rejected:400`，加诊断后仍然只有状态码，网关的 body 里没有 `error.code` 也没有 `error.message`
+  （裸 400）。回复量从 70–95 条/小时掉到 20 条/小时以下。
+- 排查（没定位到原因）：同样的 system prompt、同样的参数（`thinking: disabled`、`temperature 0.5`、`max_tokens 1024`）
+  和 3.7k、7.4k 字符的 user 消息返回 200；更长的请求一律撞 429（官方 3 次/分钟很硬，我们自己的 fleet 也在占配额，
+  探测没法隔离）。所以不是 key、模型名、参数格式的问题，怀疑与真实请求的内容或长度有关，但未证实。
+- 处理：`.env` 回滚 DeepSeek（`concurrency 4`、`max_tokens 1536`、`OUTPUT_CAP 0`、`MIN_INTERVAL_S 0`），
+  `.env.macro` 的 `CTN_PI_THINKING=off`（原创的 Pi 不再思考，用户要求），重建三个容器。
+- 验证：回滚后 10 分钟 reply 12 / post 2 / like 30（≈72 条/小时，回到正常），`llm:*` 失败 0 条，
+  fleet 解析到的配置是 `https://api.deepseek.com / deepseek-chat / concurrency 4 / cap 0 / pace 0`。
+- 保留的代码（默认关闭，不改变现有行为）：`LLMConfig.output_token_cap`、`LLMConfig.min_interval_s`、
+  客户端节流器、以及把 HTTP 状态和脱敏后的 provider code 写进失败原因（凭据会被替换成 `***`，有测试守着）。
+- 待办：qwen 的 400 没查清。要再用它，得先把真实失败的请求体脱敏落盘、离线复现，而不是继续用探测打网关配额。
+
+## 2026-10-23 04:34 生成模型换成赛事方的 qwen2.5-3b-instruct（已上线，未提交代码）
+- 起因：用户决定把系统内部的 DeepSeek 换成赛事方提供的免费模型，不做 A/B，直接换，并按新模型的速率调参。
+  （先确认过：回复链路的 DeepSeek 一直是 `"thinking": {"type": "disabled"}`，实测 enabled 才返回 reasoning_content。）
+- 改动：
+  - `.env`：`CTN_LLM_BASE_URL=https://llm.legitreal.com/v1`、`CTN_LLM_MODEL=qwen2.5-3b-instruct`、
+    `CTN_LLM_CONCURRENCY=1`、`CTN_LLM_MAX_TOKENS=1024`、新增 `CTN_LLM_OUTPUT_CAP=1024`、`CTN_LLM_MIN_INTERVAL_S=21`、
+    `CTN_LLM_WAIT_BUDGET_S=180`、`CTN_LLM_TIMEOUT_S=90`、retry 5→30 秒。
+  - `ctn/config.py`：`LLMConfig` 新增 `output_token_cap`（0 = 不截）和 `min_interval_s`（0 = 不节流），都可用环境变量覆盖。
+  - `ctn/llm/client.py`：新增模块级节流器 `_pace(key, interval, budget)`（按 base_url+key 的哈希分桶，
+    21 秒一次 → 不超过官方 3 次/分钟；要等的时间超过预算就立刻返回 `queue_budget_exceeded`，不硬等）；
+    请求体 `max_tokens` 受 `output_token_cap` 截断（新闻抽取原来要 4096，会被裁到 1024）。
+- 验证：容器内直连赛事端点 `ok`，0.8 秒，`finish_reason=stop`，无 `reasoning_content`；
+  重启后 40 分钟：reply 28、post 6、like 187，`queue_budget_exceeded`/429 都是 0；
+  新闻 8 篇 / 56 claims 通过（说明 1024 截断没破坏抽取）。离线 `unittest discover` → **956 tests OK**（新增 4 个）。
+- 没有改的部分：原创仍走 macro-agent 里 Pi 的 `deepseek/deepseek-flash`（`.env.macro`，DeepSeek key 还在，
+  回滚只需把 `.env` 的四个 LLM 变量改回去）；JEV 仍是 typesafe。
+- 观察点：回复量若从 70–95 条/小时掉到 50 以下，说明 3 次/分钟的生成配额成为瓶颈（新闻+互刷也会抢）；
+  3B 模型的草稿若被本地检查大量打回，`guard` 日志会先显示出来。
 
 ## 2026-10-22 16:20 举报查询 87 秒 → 0.3 秒（同一个函数，四处查询）
 - 现象：部署 15:45 的改动后 `ops blacklist stats` 要 116 秒、`BlacklistReporter.step` 平均 89 秒，

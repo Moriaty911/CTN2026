@@ -11,6 +11,61 @@ import httpx
 from ctn.config import LLMConfig
 from .models import LlmValidationError
 
+_PACE_LOCK = threading.Lock()
+_PACE_NEXT: dict[str, float] = {}
+
+
+def _pace_key(config):
+    """Identify the paced endpoint without keeping the credential in a key."""
+    return hashlib.sha256((config.base_url + "\x00" + config.api_key).encode()).hexdigest()[:16]
+
+
+def _pace(key, interval, budget):
+    """Space outbound requests; a gateway that allows three per minute needs ~21 seconds.
+
+    Returns the delay it imposed. A wait longer than the caller's budget is reported
+    without sleeping, so a saturated queue fails fast instead of hanging.
+    """
+    if interval <= 0:
+        return 0.0
+    with _PACE_LOCK:
+        now = time.monotonic()
+        start_at = max(now, _PACE_NEXT.get(key, 0.0))
+        _PACE_NEXT[key] = start_at + interval
+    delay = start_at - time.monotonic()
+    if delay <= 0:
+        return 0.0
+    if delay >= budget:
+        return delay
+    time.sleep(delay)
+    return delay
+
+
+def _provider_code(response, secret=""):
+    """Return the provider's error code or a sanitised message, never a credential."""
+
+    def clean(value):
+        text = value.replace(secret, "***") if secret else value
+        text = "".join(char if char.isalnum() or char in " ._,:;-" else "_" for char in text)
+        return text.strip()[:60].replace(" ", "_")
+
+    try:
+        raw = response.read()[:2048]
+    except (httpx.HTTPError, OSError):
+        return ""
+    try:
+        data = json.loads(raw.decode("utf-8", "replace"))
+    except (ValueError, UnicodeError):
+        text = raw.decode("utf-8", "replace").strip()
+        return ":" + clean(text) if text else ""
+    error = data.get("error") if isinstance(data, dict) else None
+    if isinstance(error, dict):
+        for key in ("code", "message", "type"):
+            value = error.get(key)
+            if isinstance(value, str) and value:
+                return ":" + clean(value)
+    return ""
+
 
 @dataclass(frozen=True)
 class LlmCallResult:
@@ -43,9 +98,10 @@ class DeepSeekClient:
 
     def call(self, messages):
         cfg = self.config
+        tokens = min(cfg.max_tokens, cfg.output_token_cap) if cfg.output_token_cap else cfg.max_tokens
         try:
             body = json.dumps({"model": cfg.model, "messages": messages, "stream": False,
-                               "thinking": {"type": "disabled"}, "max_tokens": cfg.max_tokens,
+                               "thinking": {"type": "disabled"}, "max_tokens": tokens,
                                "temperature": cfg.temperature},
                               ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode()
         except (TypeError, ValueError, UnicodeError):
@@ -58,7 +114,10 @@ class DeepSeekClient:
         if not cfg.api_key:
             return result("credentials_missing")
         started = time.monotonic()
-        if not self._slots.acquire(timeout=cfg.total_wait_budget_s):
+        paced = _pace(_pace_key(cfg), cfg.min_interval_s, cfg.total_wait_budget_s)
+        if paced >= cfg.total_wait_budget_s:
+            return result("queue_budget_exceeded")
+        if not self._slots.acquire(timeout=cfg.total_wait_budget_s - paced):
             return result("queue_budget_exceeded")
         wait_used = time.monotonic() - started
         attempts = 0
@@ -81,7 +140,9 @@ class DeepSeekClient:
                                 chunks.append(chunk)
                             return result("ok", attempts, b"".join(chunks))
                         if status not in {408, 429, 500, 502, 503, 504}:
-                            return result("authentication_failed" if status in {401, 403} else "request_rejected", attempts)
+                            if status in {401, 403}:
+                                return result("authentication_failed", attempts)
+                            return result(f"request_rejected:{status}{_provider_code(response, cfg.api_key)}", attempts)
                         reason = "rate_limited" if status == 429 else "service_unavailable"
                         try:
                             retry_after = float(response.headers.get("Retry-After", ""))

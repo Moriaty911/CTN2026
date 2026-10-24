@@ -271,6 +271,8 @@ class LLMConfig:
     retry_initial_s: float = 1.0
     retry_max_s: float = 8.0
     max_tokens: int = 1536
+    output_token_cap: int = 0  # 0 keeps max_tokens; set it when the provider caps output
+    min_interval_s: float = 0.0  # 0 disables pacing; a paced gateway needs ~60/limit_s
     max_reply_chars: int = 280  # length the prompts aim for; hard checks use PLATFORM_MAX_CHARS
     max_request_bytes: int = 262_144
     max_response_bytes: int = 1_048_576
@@ -296,9 +298,10 @@ class LLMConfig:
             raise ValueError("LLMConfig.model: invalid model")
         if self.api_key and (self.api_key in self.base_url or self.api_key in self.model):
             raise ValueError("LLMConfig: credential outside authentication")
-        for name in ("max_concurrency", "max_retries", "max_tokens", "max_reply_chars", "max_request_bytes", "max_response_bytes"):
+        for name in ("max_concurrency", "max_retries", "max_tokens", "output_token_cap", "max_reply_chars",
+                     "max_request_bytes", "max_response_bytes"):
             value = getattr(self, name)
-            if type(value) is not int or value < (0 if name == "max_retries" else 1):
+            if type(value) is not int or value < (0 if name in {"max_retries", "output_token_cap"} else 1):
                 raise ValueError(f"LLMConfig.{name}: invalid integer limit")
         if self.max_tokens > 393216:
             raise ValueError("LLMConfig.max_tokens: exceeds provider limit")
@@ -308,6 +311,9 @@ class LLMConfig:
                 raise ValueError(f"LLMConfig.{name}: invalid duration")
         if self.retry_initial_s > self.retry_max_s:
             raise ValueError("LLMConfig: invalid retry bounds")
+        if (type(self.min_interval_s) not in (int, float) or not math.isfinite(self.min_interval_s)
+                or self.min_interval_s < 0):
+            raise ValueError("LLMConfig.min_interval_s: invalid duration")
         if type(self.temperature) not in (int, float) or not math.isfinite(self.temperature) or not 0 <= self.temperature <= 2:
             raise ValueError("LLMConfig.temperature: invalid temperature")
 
@@ -322,6 +328,7 @@ class LLMConfig:
                  "max_retries": "MAX_RETRIES", "temperature": "TEMPERATURE",
                  "total_wait_budget_s": "WAIT_BUDGET_S", "retry_initial_s": "RETRY_INITIAL_S",
                  "retry_max_s": "RETRY_MAX_S", "max_tokens": "MAX_TOKENS",
+                 "output_token_cap": "OUTPUT_CAP", "min_interval_s": "MIN_INTERVAL_S",
                  "max_reply_chars": "MAX_REPLY_CHARS", "max_request_bytes": "MAX_REQUEST_BYTES",
                  "max_response_bytes": "MAX_RESPONSE_BYTES"}
         for field_name, suffix in names.items():

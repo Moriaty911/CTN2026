@@ -5,7 +5,8 @@
   "reply_batches_enabled": false,
   "frequency_bot": {"window_seconds": 3600, "min_posts": 4, "p_bot": 0.6},
   "self_check": {"every_seconds": 1800, "lookback_seconds": 86400, "thread_window_seconds": 900, "alert_score": 3},
-  "own_posts": {"every_seconds": 600, "lookback_seconds": 172800, "checks_per_step": 6, "recheck_seconds": 3600, "missing_confirmations": 2},
+  "own_posts": {"every_seconds": 120, "lookback_seconds": 172800, "checks_per_step": 40, "fresh_seconds": 900, "recheck_seconds": 3600, "missing_confirmations": 2,
+    "notes": "2026-10-24: 6 checks per 600 s is 864 reads a day against ~2,400 publications a day, so most of our posts were never read back (own_post_checks held 3,400 rows, none hidden, while 19 accounts were suspended for hidden posts). 40 per 120 s is 28,800 reads a day: every post is read within minutes of publishing. Posts younger than fresh_seconds come before the backlog, because a post hidden shortly after publishing is the one that suspends the account (three hidden posts and it is gone)."},
   "hidden_slowdown": {"hidden_posts": 2, "daily_cap": 8},
   "like_pacing": {"per_hour": 15, "per_day": 400, "require_initialised": true, "notes": "per_day 150 -> 400 (operator 2026-10-20): every account hit 150 by mid-afternoon, leaving pushed posts without likes. The hourly cap keeps likes spread out."},
   "reply_pacing": {"per_hour": 4, "min_gap_seconds": 300}
