@@ -274,6 +274,12 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
                                     (start, root_post_id)).fetchone()[0]
             if n >= caps['per_thread_per_day']:
                 return 'thread_daily_cap'
+            # Several of our accounts landing in one thread within minutes is what a coordination detector sees.
+            last_thread = store._conn.execute(f"SELECT MAX(created_at) FROM action_intents WHERE kind='reply' AND {live} "
+                                              f"AND COALESCE(json_extract(metadata_json,'$.root_post_id'),target_id)=? AND {NOT_AMPLIFY}",
+                                              (root_post_id,)).fetchone()[0]
+            if last_thread and ts - float(last_thread) < float(caps.get('per_thread_min_gap_seconds', 0)):
+                return 'thread_min_gap'
         if account and include_account:
             n = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE account_id=? AND kind IN ('post','reply') AND {live} "
                                     "AND created_at>=? AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('initialise','warmup')",

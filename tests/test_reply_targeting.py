@@ -123,8 +123,9 @@ class AudienceTests(unittest.TestCase):
 class CapTests(unittest.TestCase):
     def setUp(self):
         self.store = StateStore(); self.addCleanup(self.store.close)
-        # Daily caps only; the 30-minute per-author gap has its own test.
-        gap = patch.dict(targeting.POLICY['caps'], {'per_author_min_gap_seconds': 0}); gap.start(); self.addCleanup(gap.stop)
+        # Daily caps only; the 30-minute per-author and per-thread gaps have their own tests.
+        gap = patch.dict(targeting.POLICY['caps'], {'per_author_min_gap_seconds': 0, 'per_thread_min_gap_seconds': 0})
+        gap.start(); self.addCleanup(gap.stop)
 
     def test_author_thread_and_account_caps(self):
         self.store.set_policy('reply_pacing', {'per_hour': 1000, 'min_gap_seconds': 0})  # daily caps only; pacing has its own test
@@ -160,6 +161,39 @@ class CapTests(unittest.TestCase):
             intent(self.store, persona.account_id, f'p{i}', author=f'u{i}', root=f'r{i}')
         chosen = router.route({}, 'any post')
         self.assertEqual(chosen.account_id, router.registry.get('yes_002').account_id)
+
+
+class ThreadGapTests(unittest.TestCase):
+    """Several of our accounts in one thread within minutes is the signal a coordination detector looks for."""
+
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+
+    def test_a_second_reply_in_one_thread_waits_thirty_minutes(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='enemy', root='root1', at=now - 60)
+        self.assertEqual(targeting.cap_reason(self.store, root_post_id='root1', now=now), 'thread_min_gap')
+        self.assertEqual(targeting.cap_reason(self.store, root_post_id='root1', now=now + 1900), '')
+
+    def test_another_thread_is_not_held_back(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='enemy', root='root1', at=now - 60)
+        self.assertEqual(targeting.cap_reason(self.store, root_post_id='root2', now=now), '')
+
+    def test_an_amplified_reply_does_not_hold_the_thread(self):
+        now = time.time()
+        with self.store.batch_transaction():
+            self.store._conn.execute("INSERT INTO action_intents(id,action_key,kind,account_id,target_id,text,status,owner,lease_until,"
+                                     "created_at,updated_at,metadata_json) VALUES(?,?,?,?,?,'','succeeded','x',0,?,?,?)",
+                                     (uuid.uuid4().hex, uuid.uuid4().hex, 'reply', 'a1', 't1', now - 60, now - 60,
+                                      json.dumps({'root_post_id': 'root1', 'engine': 'amplify'})))
+        self.assertEqual(targeting.cap_reason(self.store, root_post_id='root1', now=now), '')
+
+    def test_the_third_reply_in_a_thread_is_blocked_all_day(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='e1', root='root1', at=now - 7200)
+        intent(self.store, 'a2', 't2', author='e2', root='root1', at=now - 3600)
+        self.assertEqual(targeting.cap_reason(self.store, root_post_id='root1', now=now), 'thread_daily_cap')
 
 
 class QueueOrderTests(unittest.TestCase):

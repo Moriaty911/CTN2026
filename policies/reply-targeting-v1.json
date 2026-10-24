@@ -31,7 +31,9 @@
     "per_author_per_day": 2,
     "second_reply_requires_response": true,
     "second_reply_notes": "A second reply to the same author is only sent when that author has replied to one of our posts since our previous reply: an author who ignored us is not a conversation, and a citizen who just moved is harder to move again in the same session (organiser note 2026-10-19).",
-    "per_thread_per_day": 3,
+    "per_thread_per_day": 2,
+    "per_thread_min_gap_seconds": 1800,
+    "per_thread_notes": "2026-10-24: our own detector flagged 8-13 accounts for appearing in one thread within 15 minutes of another of our accounts (self_scan crowded_threads), the one bot signal we still emit after the phrasing gate and the AI-leak filter went to zero. 24 h of traffic: 1182 threads got one reply, 116 got two, 25 got three, and 150 pairs sat closer than 30 minutes. Cap 3->2 costs at most 25 replies a day; the 30-minute gap delays about 150 rather than dropping them.",
     "per_account_per_day": 80,
     "per_author_min_gap_seconds": 1800
   },
