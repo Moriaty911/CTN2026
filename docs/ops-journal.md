@@ -1,3 +1,17 @@
+## 2026-10-25 13:35 补满 50 个号（+2）
+- 现象：10/24 之后又封了 2 个——rinabeaumont（yes_070 office，10-24 18:20）、selene_designs（yes_050 tech，10-25 12:54）；
+  活跃号 48、被封 21（累计）。两个的 `account_states.mode` 还是 active，已改 standby。
+- 补充：camila_ford（yes_072 office_community）、nabil_avery（yes_076 law_policy，tech 组已无人设可补）。
+  两个都先 standby，确认注册成功后再改 active；现有 50 个 active 号。
+- 踩到的坑：`ctn/accounts.py` 的名额检查用 `undeleted = active + suspended`，按"被封号在 DELETE 之前仍占活跃名额"的假设写的；
+  我们 49 active + 21 suspended = 70，所以 `CTN_BOT_ACCOUNTS=70` 时报 `platform registration capacity exhausted`。
+  实际平台侧在 undeleted=70 的情况下仍然注册成功（camila_ford），说明**被封号在服务端并不占活跃名额**，这个假设偏保守，
+  用一次性 `CTN_BOT_ACCOUNTS=72` 绕开，`.env` 仍是 50，没改。
+- 验证：`--force-recreate fleet` 后容器 healthy，worker 无 error；camila_ford 的第一帖已发出（initialise succeeded），
+  nabil_avery 在 initialise 队列里（`initialisation.pending=1`，窗口内随机排期）。`account_states` active 50 / standby 21。
+- 待办：nabil_avery 首帖发出后确认；若之后还要补号，先决定要不要把 21 个被封号 DELETE 掉（释放服务端口径的名额，
+  但计入 200 总额度且不可逆）。
+
 ## 2026-10-24 16:05 自查回读从 40 条/120 秒降回 8 条/120 秒
 - 原因：今天用三条实测推翻了"隐藏会 404"的假设——48 小时内 4,751 条自己的帖回读 0 条读不到；最近被封的 3 个号各 8 条帖 24/24 正常返回；
   3 个活跃号的 API 主页列表和 `publications` 逐条一致。所以自查只能发现"被删除"，看不到"被隐藏"，28,800 次/天 在换一个不会响的警报。
