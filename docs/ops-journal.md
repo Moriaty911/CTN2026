@@ -1,3 +1,15 @@
+## 2026-10-26 10:20 人设库扩到 100（+20 备用）
+- 原因：累计被封 25 / 75，剩余未用人设只剩 5 个，按每天 3–4 个封号的速度两天内会耗尽。
+- 内容：`config/personas/yes.v1.json` 增加 `yes_081`–`yes_100`（transport 2、retail 3、tourism 2、education 2、
+  healthcare 2、technology 3、agriculture 1、office 3、medical 1、law 1），每个人设都带 `story`、4 条示例帖；
+  `config/personas/daily-posts.v1.json` 为这 20 个各加 4 条日常帖（初始化用），并保证其中至少一条是问句。
+- 代码：`ctn/persona/catalog.py` 的人数检查从"必须正好 80"改成"80–200"，occupation 分配从"必须完全相等"改成
+  "不得低于约定名额"（`MAX_PERSONAS=200`，对应平台每队 200 个账号上限）；预览标题改成实际数量。
+- 测试：`tests/test_persona80.py` 改成检查"覆盖约定名额 + 预览一致 + 示例帖 4×人数"，并给非法目录测试补了
+  "少一个人设后某组低于名额"的用例；`tests/test_persona.py`、`tests/test_persona_voices.py` 的 80 改成 ≥80。
+  全量 971 条通过。
+- 文档：`docs/personas-80/preview.md`、`profiles.md` 重新生成，README 增加 spares 一节。
+- 待办：要用新号注册需要先构建 + 重启（镜像里的 catalog 是构建时打进去的）。
 ## 2026-10-26 09:40 再补 4 个号（被封 4：adrian_kessler 等）
 - 现象：上次补满后又封 4 个——adrian_kessler（yes_003 transport，10-26 04:51）、yusuf_laurent（yes_074 medical，10-25 20:01，
   10-25 才补的号）、pippa_writes（yes_077 independent，10-25 15:53）、owenp_driving（yes_017 retail，10-25 14:22）。

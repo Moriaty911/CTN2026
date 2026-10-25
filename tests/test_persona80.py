@@ -77,29 +77,44 @@ class CatalogAndRoutingTests(unittest.TestCase):
         broken=deepcopy(catalog['personas'][0]['story']);broken['vote_2025']='Somebody'
         with self.assertRaises(ValueError):validate_story(broken)
 
-    def test_exact_roster_and_preview(self):
+    def test_roster_covers_the_agreed_allocation_and_preview(self):
         catalog=load_catalog()
-        self.assertEqual(Counter(p['occupation_group'] for p in catalog['personas']),Counter(GROUP_ALLOCATION))
-        self.assertEqual(len({p['name'] for p in catalog['personas']}),80)
-        self.assertEqual(len({p['candidate_username'] for p in catalog['personas']}),80)
+        counts=Counter(p['occupation_group'] for p in catalog['personas'])
+        # Spares are allowed above the agreed roster (bans force replacements), never below it.
+        self.assertTrue(all(counts[g]>=n for g,n in GROUP_ALLOCATION.items()))
+        self.assertGreaterEqual(len(catalog['personas']),80)
+        self.assertEqual(len({p['name'] for p in catalog['personas']}),len(catalog['personas']))
+        self.assertEqual(len({p['candidate_username'] for p in catalog['personas']}),len(catalog['personas']))
         self.assertTrue(all(p['side']=='yes' for p in catalog['personas']))
         self.assertEqual(Path('docs/personas-80/preview.md').read_text(),render_preview(catalog))
-        self.assertEqual(len({e['text'] for p in catalog['personas'] for e in p['example_posts']}),320)
+        self.assertEqual(len({e['text'] for p in catalog['personas'] for e in p['example_posts']}),4*len(catalog['personas']))
         registry=PersonaRegistry().attach(self.store)
         self.assertIsNone(registry.get('bot_worker_yes'))
         self.assertFalse(any(p.account_id for p in registry.list_all()))
         self.assertEqual(self.store.load_all_account_states(),{})
 
+    @staticmethod
+    def _drop_below_allocation(data):
+        kept, medical = [], 0
+        for row in data['personas']:
+            if row['occupation_group'] == 'medical_public_health':
+                medical += 1
+                if medical > 1:
+                    continue
+            kept.append(row)
+        return kept
+
     def test_invalid_catalog_rejected(self):
         catalog=load_catalog()
         for mutation in (
-            lambda d:d['personas'].pop(),
+            lambda d:[d['personas'].pop() for _ in range(21)],
             lambda d:d['personas'][1].update(persona_id='yes_001'),
             lambda d:d['personas'][0].update(side='no'),
             lambda d:d['personas'][0]['identity'].update(household=''),
             lambda d:d['personas'][0]['example_posts'][0].update(kind='invented'),
             lambda d:d['personas'][0]['example_posts'][0].update(text=d['personas'][1]['example_posts'][0]['text']),
-            lambda d:d['personas'][0].update(occupation_group='law_policy'),
+            lambda d:d['personas'][0].update(occupation_group='invented_group'),
+            lambda d:d.__setitem__('personas',self._drop_below_allocation(d)),
         ):
             data=deepcopy(catalog);mutation(data)
             with tempfile.TemporaryDirectory() as td:

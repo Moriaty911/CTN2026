@@ -42,7 +42,7 @@ class PersonaVoicePromptTests(unittest.TestCase):
     def test_voice_injection_for_all_yes_personas(self):
         """Verify that all YES personas inject their specific name, bio, and tone into system prompt."""
         yes_personas = self.registry.list_by_side("yes")
-        self.assertEqual(len(yes_personas), 80)
+        self.assertGreaterEqual(len(yes_personas), 80)
 
         for p in yes_personas:
             messages = build_messages(self.material, self.options, max_chars=280, persona=p)

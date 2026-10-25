@@ -15,6 +15,8 @@ GROUP_ALLOCATION = {
     "law_policy":2, "independent_commentary":4,
 }
 DEFAULT_CATALOG = Path(__file__).resolve().parents[2] / "config/personas/yes.v1.json"
+# The competition allows 200 accounts per team, so the catalog may carry spares up to that ceiling.
+MAX_PERSONAS = 200
 
 
 def canonical_json(value):
@@ -65,8 +67,10 @@ def load_catalog(path=None):
     if not isinstance(data["catalog_version"],str) or not data["catalog_version"].strip():
         raise ValueError("missing catalog version")
     rows = data["personas"]
-    if not isinstance(rows,list) or len(rows) != 80:
-        raise ValueError("persona catalog must contain exactly 80 profiles")
+    # The shipped roster is 80; spares beyond it exist because the platform suspends accounts (25 of 75
+    # registered by 2026-10-26) and a replacement needs a persona nobody has used yet.
+    if not isinstance(rows,list) or not 80 <= len(rows) <= MAX_PERSONAS:
+        raise ValueError(f"persona catalog must contain 80 to {MAX_PERSONAS} profiles")
     fields = {"persona_id","version","side","occupation_group","candidate_username","name",
               "identity","stance","voice","topic_tags","knowledge_boundaries","example_posts"}
     ids, names, handles, examples = set(), set(), set(), set()
@@ -112,8 +116,9 @@ def load_catalog(path=None):
             if not text.isascii():
                 raise ValueError("persona samples must use plain English text")
             examples.add(text.casefold())
-    if Counter(r["occupation_group"] for r in rows) != Counter(GROUP_ALLOCATION):
-        raise ValueError("persona occupation allocation differs from agreed 80-person roster")
+    counts = Counter(r["occupation_group"] for r in rows)
+    if any(counts[group] < agreed for group, agreed in GROUP_ALLOCATION.items()):
+        raise ValueError("persona occupation allocation is below the agreed 80-person roster")
     return data
 
 
@@ -126,7 +131,7 @@ def persona_from_record(row):
 
 
 def render_preview(data):
-    lines=["# 80 YES personas", "", "Generated from the JSON catalog; edit the JSON, not this preview.", ""]
+    lines=[f"# {len(data['personas'])} YES personas", "", "Generated from the JSON catalog; edit the JSON, not this preview.", ""]
     for row in data["personas"]:
         lines += [f"## {row['persona_id']} — {row['name']}", "",
             f"Group: {row['occupation_group']} · Voice: {row['voice']['style']}", "",
@@ -153,7 +158,7 @@ def render_profiles(data, daily_posts=None):
     daily_posts=daily_posts or {}
     groups={}
     for row in data["personas"]:groups.setdefault(row["occupation_group"],[]).append(row)
-    lines=["# 80 YES personas: profiles", "",
+    lines=[f"# {len(data['personas'])} YES personas: profiles", "",
            f"Catalog `{data['catalog_version']}`. Generated from `config/personas/yes.v1.json` and "
            "`config/personas/daily-posts.v1.json`; edit the JSON, not this file. Backstories are fictional voice "
            "and consistency data, never evidence.", "", "## Overview", "",

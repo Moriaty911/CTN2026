@@ -36,7 +36,7 @@ python -m ctn.ops phase shaping
 python -m ctn.ops account actual_handle --tier high
 ```
 
-Both Pi and Python load the catalog hash. Writes check it again immediately before the HTTP request. For a deliberate configuration revision, increment each changed profile's version and the catalog version, validate the complete 80-person roster, and apply it explicitly:
+Both Pi and Python load the catalog hash. Writes check it again immediately before the HTTP request. For a deliberate configuration revision, increment each changed profile's version and the catalog version, validate the complete roster (the agreed 80 plus any spares, up to the platform's 200-account ceiling), and apply it explicitly:
 
 ```bash
 python -m ctn.ops persona validate --file config/personas/yes.v2.json
@@ -118,3 +118,10 @@ python -m ctn.ops restore /path/to/new-backup.sqlite3 /path/to/new-restored.sqli
 Upgrade with one process first, with Pi writers stopped until the migration completes. SQLite v4 takes a consistent `.before-v4.bak` before upgrading an older database. A v3 upgrade adds this batch's structures without reinitializing identities, locks, bans or old migration history. Never overwrite the only backup. After a failed migration, verify and retain the existing `.before-v4.bak` under a separate recovery filename before retrying; an existing migration backup is deliberately not overwritten. Stop the service and all Pi writers before switching a restored path; restart all callers on that same restored database. SIGTERM gives in-flight workers time to stop; interrupted sends remain unknown rather than being replayed.
 
 For unknown actions, use the existing history reconciler or `ctn.ops resolve-action ACTION_ID evidence.json`. Positive success evidence must contain a real platform post ID. Failure requires explicit confirmation that the action was not sent; absence from a limited feed is insufficient. After resolution, an unexpired paused batch resumes its remaining fixed slots. Expired/edited batches remain cancelled. Inspect `reply_batches`, `reply_slots` and `action_intents` or `ctn.ops status` for reasons. Do not delete those rows to retry an uncertain publication.
+
+## Spares (2026-10-26)
+
+`yes_081`–`yes_100` are spares added because the platform suspended 25 of our first 75 accounts. They live in the
+same catalog and the same `daily-posts` file, and the loader requires the agreed 80-person allocation as a
+**floor**: extra personas are allowed, missing ones are not. Recycle a suspended persona only as a last resort —
+the same name and occupation reappearing is a recognisable signature.
