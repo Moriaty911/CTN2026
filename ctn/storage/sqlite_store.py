@@ -341,7 +341,7 @@ class StateStore(NewsStoreMixin, LifecycleStoreMixin, OperationsStoreMixin, Camp
                     if sql.startswith('CREATE INDEX'):
                         self._conn.execute(sql)
 
-    def backup(self, destination):
+    def backup(self, destination, *, exclude=()):
         target = Path(destination)
         target.parent.mkdir(parents=True,exist_ok=True)
         if target.exists():
@@ -351,6 +351,15 @@ class StateStore(NewsStoreMixin, LifecycleStoreMixin, OperationsStoreMixin, Camp
         try:
             with self._lock, contextlib.closing(sqlite3.connect(target)) as connection:
                 self._conn.backup(connection)
+                if exclude:
+                    audit = {row[0] for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'")}
+                    for name in exclude:
+                        if name not in audit:
+                            continue
+                        connection.execute(f'DELETE FROM "{name}"')
+                    connection.commit()
+                    connection.execute('VACUUM')
         except BaseException:
             target.unlink(missing_ok=True)
             raise
@@ -1965,3 +1974,27 @@ class StateStore(NewsStoreMixin, LifecycleStoreMixin, OperationsStoreMixin, Camp
         self.apply_moderation_event({'event_id':'legacy:'+post_id, 'subject_kind':'post','subject_id':post_id,
             'outcome':outcome,'ruled_at':ts,'source':'explicit-caller'})
         return self.get_bot_profile(row[0])
+
+
+BACKUP_AUDIT_TABLES=('rag_snapshots','reply_batches')
+
+
+def gzip_backup(path, *, level=6):
+    """Compress a finished backup and verify the compressed copy before deleting the original."""
+    import gzip
+    import shutil
+    source = Path(path)
+    target = source.with_name(source.name + '.gz')
+    if target.exists():
+        raise FileExistsError(str(target))
+    try:
+        with source.open('rb') as src, gzip.open(target, 'wb', compresslevel=level) as dst:
+            shutil.copyfileobj(src, dst, 1 << 20)
+        with gzip.open(target, 'rb') as check:
+            while check.read(1 << 20):
+                pass
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
+    source.unlink()
+    return target

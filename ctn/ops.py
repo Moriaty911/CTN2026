@@ -11,12 +11,15 @@ import time
 from .config import Settings
 from .persona import AccountState
 from .storage import StateStore
+from .storage.sqlite_store import BACKUP_AUDIT_TABLES, gzip_backup
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-file')
     subs=parser.add_subparsers(dest='command',required=True)
     p=subs.add_parser('backup');p.add_argument('destination')
+    p.add_argument('--slim',action='store_true',help='leave the audit tables (rag snapshots, comment batches) out')
+    p.add_argument('--gzip',action='store_true',help='compress the copy and delete the uncompressed file')
     p=subs.add_parser('metrics');p.add_argument('--limit',type=int,default=10)
     p=subs.add_parser('restore');p.add_argument('source');p.add_argument('destination')
     subs.add_parser('status')
@@ -221,7 +224,11 @@ def main(argv=None):
                 if not args.snapshot_id:parser.error('snapshot ID or --reference required')
                 store.revoke_rag_snapshot(args.snapshot_id);result={'withdrawn':args.snapshot_id}
         elif args.command=='backup':
-            store.backup(args.destination);result={'backup':str(Path(args.destination).resolve())}
+            store.backup(args.destination,exclude=BACKUP_AUDIT_TABLES if args.slim else ())
+            target=Path(args.destination)
+            if args.gzip:
+                target=gzip_backup(target)
+            result={'backup':str(target.resolve()),'bytes':target.stat().st_size}
         elif args.command=='account':
             bindings=store.persona_bindings()
             selected=[pid for pid,account in bindings.items() if account==args.account_id]
