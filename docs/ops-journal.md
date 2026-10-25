@@ -1,3 +1,15 @@
+## 2026-10-26 09:40 再补 4 个号（被封 4：adrian_kessler 等）
+- 现象：上次补满后又封 4 个——adrian_kessler（yes_003 transport，10-26 04:51）、yusuf_laurent（yes_074 medical，10-25 20:01，
+  10-25 才补的号）、pippa_writes（yes_077 independent，10-25 15:53）、owenp_driving（yes_017 retail，10-25 14:22）。
+  活跃 46、累计被封 25；4 个被封号当时还标着 active，已改 standby。
+- 补充：cora_linden（yes_079 independent）、noah_perera（yes_061 agriculture）、ellis_qureshi（yes_071 office）、
+  noor_whitfield（yes_026 tourism）。transport/retail/medical 三组已无人设可补，用了最接近的组。
+- 操作：`CTN_BOT_ACCOUNTS=80`（内部 undeleted 口径 71→75）逐个注册；cora_linden 第一次调用没落行、重试成功，其余一次过。
+  新号先 standby → 确认注册成功 → 改 active；`--force-recreate fleet` 后容器 healthy，worker 无 error。
+- 状态：`managed_accounts` active 50 / suspended 25；`account_states` active 50 / standby 25；`initialisation.pending=4`（4 个新号在排队发首帖）。
+- 待办 / 待用户决定：人设池只剩 5 个（yes_027、yes_060、yes_062、yes_063、yes_080），再补就得复用或扩人设库；
+  25 个被封号要不要 DELETE 仍未定（会释放内部名额，但计入 200 总额度且不可逆）。
+
 ## 2026-10-25 13:35 补满 50 个号（+2）
 - 现象：10/24 之后又封了 2 个——rinabeaumont（yes_070 office，10-24 18:20）、selene_designs（yes_050 tech，10-25 12:54）；
   活跃号 48、被封 21（累计）。两个的 `account_states.mode` 还是 active，已改 standby。
