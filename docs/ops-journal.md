@@ -1,4 +1,18 @@
-## 2026-10-26 10:20 人设库扩到 100（+20 备用）
+## 2026-10-26 09:45 磁盘写满（备份失败）
+- 现象：部署前的 `ops backup` 报 `sqlite3.OperationalError: database or disk is full`；`df` 根分区 46G 用满、
+  只剩 625M；`state/` 里有 5 个备份（740M、848M、3.4G×3）共约 11.8G，另有 docker 镜像 17.9G（14.6G 可回收）
+  和构建缓存 7.0G。
+- 判断：备份文件 + docker 镜像堆积 + 库本身涨到 4.6G 一起把盘吃满。备份写入失败意味着这次部署没有可用快照。
+- 处理：从容器内删掉 4 个旧备份（留最新的 20261024-0558），`docker builder prune -f` 回收 1.07G；部署完成后
+  重新备份成功（`state/backup-20261025-2242.sqlite3` 4.7G），随后删掉 0558 那个，只留一份。现在 38G/46G，
+  剩 8.6G（82%）。
+- 注意：剩下的大头是 1Panel 自己的镜像（openclaw 3.08+3.5+3.21G、node 1.2G、openresty 817M、mongo×2 1.86G，
+  约 13.7G），不是我们的，没动。
+- 待办：库还在每天涨（4.6G），备份一份就 4.7G。要么定期删旧备份（现在只有一份，够用），要么做
+  `ops db-slim`（之前评估能省 500M+，未批准）。
+- 验证：`ops status` 无 disk_warning、无 worker error，三容器 healthy，initialisation ready 72 / pending 3。
+
+## 2026-10-26 09:40 人设库扩到 100（+20 备用）
 - 原因：累计被封 25 / 75，剩余未用人设只剩 5 个，按每天 3–4 个封号的速度两天内会耗尽。
 - 内容：`config/personas/yes.v1.json` 增加 `yes_081`–`yes_100`（transport 2、retail 3、tourism 2、education 2、
   healthcare 2、technology 3、agriculture 1、office 3、medical 1、law 1），每个人设都带 `story`、4 条示例帖；
