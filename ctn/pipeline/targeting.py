@@ -361,9 +361,26 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
     return ''
 
 
+def pacing_rule(store, account, now):
+    """This account's cadence right now: tighter for its first hours, because a brand-new account at adult
+    volume is what gets it looked at. 2026-10-27: no account had ever been suspended within 37 h of its first
+    post, so this is precaution, not a measured effect."""
+    rule = launch_rule(store, 'reply_pacing')
+    warm = launch_rule(store, 'warmup') or {}
+    hours = float(warm.get('hours') or 0)
+    if hours > 0:
+        with store._lock:
+            row = store._conn.execute('SELECT initialised_at FROM account_lifecycle WHERE account_id=?', (account,)).fetchone()
+        started = float(row[0]) if row and row[0] else 0.0
+        if started and now - started < hours * 3600:
+            return {'per_hour': int(warm.get('per_hour') or rule['per_hour']),
+                    'min_gap_seconds': int(warm.get('min_gap_seconds') or rule['min_gap_seconds'])}
+    return rule
+
+
 def account_pacing_reason(store, account, now):
     """Spread an account's daily volume: a fresh account replying every two minutes reads as a bot."""
-    rule = launch_rule(store, 'reply_pacing')
+    rule = pacing_rule(store, account, now)
     stamps = [r[0] for r in store._conn.execute(
         "SELECT created_at FROM action_intents WHERE account_id=? AND kind IN ('post','reply') "
         "AND status IN ('claimed','sending','unknown','succeeded') AND created_at>=? "

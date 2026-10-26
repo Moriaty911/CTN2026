@@ -186,7 +186,7 @@ def main(argv=None):
                 try:pushed=request_push(store,args.push,reposts=args.push_reposts,replies=args.push_replies)
                 except ValueError as exc:parser.error(str(exc))
             from ctn.amplify import summary as amplify_summary
-            result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown','like_pacing','reply_pacing')}
+            result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown','like_pacing','reply_pacing','warmup')}
             result['amplify']=amplify_summary(store,since=time.time()-86400)
             if args.push:result['push']=pushed
             from ctn.phrasing import stats as phrasing_stats

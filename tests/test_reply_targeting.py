@@ -336,6 +336,40 @@ class EarlySkipTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('cold', brain.assessed); self.assertNotIn('capped', brain.assessed)
 
 
+class WarmupTests(unittest.TestCase):
+    """A new account is throttled for its first 36 h (policies/launch-v1.json warmup)."""
+
+    def store_with_age(self, hours):
+        store = StateStore(); self.addCleanup(store.close)
+        now = time.time()
+        with store.batch_transaction():
+            store._conn.execute("INSERT INTO account_lifecycle(account_id,initialise_status,initialised_at) VALUES('a','succeeded',?)",
+                                (now - hours * 3600,))
+        return store, now
+
+    def test_fresh_account_is_held_to_two_an_hour(self):
+        store, now = self.store_with_age(2)
+        intent(store, 'a', 't1', at=now - 1000)
+        intent(store, 'a', 't2', at=now - 2000)
+        self.assertEqual(targeting.account_pacing_reason(store, 'a', now), 'account_hourly_cap')
+
+    def test_older_account_keeps_the_normal_cadence(self):
+        store, now = self.store_with_age(40)
+        intent(store, 'a', 't1', at=now - 400)
+        intent(store, 'a', 't2', at=now - 800)
+        self.assertEqual(targeting.account_pacing_reason(store, 'a', now), '')
+
+    def test_fresh_account_waits_fifteen_minutes(self):
+        store, now = self.store_with_age(1)
+        intent(store, 'a', 't1', at=now - 400)
+        self.assertEqual(targeting.account_pacing_reason(store, 'a', now), 'account_min_gap')
+
+    def test_account_without_a_first_post_keeps_the_normal_rule(self):
+        store = StateStore(); self.addCleanup(store.close)
+        intent(store, 'a', 't1', at=time.time() - 400)
+        self.assertEqual(targeting.account_pacing_reason(store, 'a', time.time()), '')
+
+
 if __name__ == '__main__':
     unittest.main()
 
