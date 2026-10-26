@@ -1,4 +1,24 @@
-## 2026-10-26 11:50 回复优先给开服前市民，别队机器人回我们不再加分（未提交、未部署）
+## 2026-10-26 13:10 人设目录失配，写流量停了 3 小时（已修）
+- 现象：
+  - 部署用户 11:50 的改动时发现线上**从 09:34:45（悉尼）起零发布**：`publications` 最后一条 09:34:45，
+    `action_intents` 最后一条 09:38:28，到 12:26 空转 2 小时 52 分。容器 healthy，worker 无 error，日志无 429/403。
+  - 最近 2 小时 `post_tasks.status='skipped'` 里 `all_accounts_disabled` **1,049 条**。
+- 判断：
+  - `ctn/persona/router.py:_eligible()` 第一句 `if registry.catalog_hash != store.policy('active_persona_catalog'): raise ValueError('persona_catalog_mismatch')`；
+    `ctn/pipeline/brain.py:367` 接住这个 ValueError，把任务记成 `all_accounts_disabled`（名字误导：不是号被禁，是路由拒绝）。
+  - 实测两个值：镜像里（100 个人设）`2e2f5634…`；库里 `active_persona_catalog` 是 10/19 16:45 的 `1e1de81b…`（80 个人设）。
+    `persona_catalogs` 里 `2e2f5634` 是 09:40:45 补 4 个号时注册的（`INSERT OR IGNORE`），但没有 activate。
+  - 损失按 ~170 条写/小时估：约 480 条回复/原创/点赞没发出去，其中约 250 条本该给市民。
+- 处理：
+  - `docker compose exec fleet python -m ctn.ops persona apply`（= `register_persona_catalog(activate=True)`）把 policy 指向 `2e2f5634`。
+    不动人设内容、不动绑定（`persona_revisions` 版本校验通过，幂等）。
+  - 验证：12:39:50 第一条 post 成功；之后 10 分钟 8 帖 + 11 回复 + 64 赞 + 1 举报，`all_accounts_disabled` 归零。
+- 教训 / 待办：
+  - 这类失败**完全静默**：容器 healthy、heartbeat 正常、异常被吞进任务原因，`ops status` 不显示“零发布”。
+    建议加两道护栏（未做，需改代码）：①`ops status` 输出 `catalog_match`，失配标红；②心跳里“最近 30 分钟零发布”直接 Discord 告警。
+  - 以后 `register_fleet.sh` / 补号之后，必须确认 `active_persona_catalog == registry.catalog_hash`，否则等于把整个系统停掉。
+
+## 2026-10-26 11:50 回复优先给开服前市民，别队机器人回我们不再加分（已部署 12:21）
 - 依据（用户在线上跑的只读查询，过去 48 小时 `publications.kind='reply'`，市民 = `author_id <= 2343`）：
   回复市民 887 条，引来市民回应 94 条（10.6%）；回复其他人 3,245 条（79% 的回复），引来市民回应只有 35 条（1.1%），
   但其中 16.6% 被目标本人回了、23.2% 被别队机器人回了。只有市民的互动计分，所以 79% 的回复只换来 27% 的市民回应。
