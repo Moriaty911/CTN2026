@@ -188,8 +188,17 @@ git log --oneline -5
 # 2. 离线测试（独立的 verify 镜像，不影响运行中的服务）。不通过就停在这里
 ./scripts/docker.sh verify
 
-# 3. 备份数据库（服务运行中也可以备份），备份留在 state/ 下
-docker compose exec fleet python -m ctn.ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3
+# 3. 备份数据库（服务运行中也可以备份），备份留在 state/ 下，约 369M。
+#    --slim 不复制审计表（rag_snapshots、reply_batches，占全库 2/3）；--gzip 压缩并完整解压校验后才删原文件。
+#    耗时约 18 分钟（整库复制 + VACUUM），所以挂后台：第 4 步构建镜像不依赖它。
+nohup docker compose exec -T fleet python -m ctn.ops backup \
+  "/state/backup-$(date -u +%Y%m%d-%H%M)-slim.sqlite3" --slim --gzip > /tmp/backup.log 2>&1 &
+
+# 3b. 出结果后确认（日志里出现 {"backup": ...} 即成功）：
+tail -3 /tmp/backup.log; ls -sh state/backup-*.gz
+
+# 需要审计历史（rag_snapshots）时才做整库备份：盘上要留 4.7G，2026-10-26 就是因为这个把盘写满过。
+# docker compose exec fleet python -m ctn.ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3
 
 # 4. 构建新镜像，旧容器继续运行
 ./scripts/docker.sh build all        # 未启用 Discord：./scripts/docker.sh build
@@ -234,6 +243,16 @@ mv state/restored.sqlite3 state/ctn.sqlite3
 ```
 
 恢复旧备份不会撤回平台上已经执行的动作；备份之后发出的内容在恢复后的库里没有记录，重开写入前要对照平台上我方账号的近期发帖，见下一段。
+
+恢复前先把 `--slim` 备份解开，并把扩展名去掉（`.gz` 不是 SQLite 文件）：
+
+```sh
+gunzip -c /state/backup-<时间>-slim.sqlite3.gz > /state/backup-<时间>.sqlite3
+```
+
+`slim` 备份里没有 `rag_snapshots` 和 `reply_batches`：前者是"模型当时看到哪些证据"的审计记录，恢复后
+丢失只影响复盘；后者是评论批次缓存，过期会自动重建。两者都不影响对局行为。restore 完成后跑一次
+`PRAGMA integrity_check`（`ops restore` 自己会做）。
 
 恢复数据库前停掉全部写进程，使用 `ctn.ops backup/restore`。restore写入新路径，不覆盖现有库。恢复旧备份不会撤回平台已执行动作；重开写入前必须对账备份之后的发送记录，防止历史意图丢失导致重发。
 

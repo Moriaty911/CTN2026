@@ -18,6 +18,19 @@
   `post_tasks` 里市民任务的 `expired` 是否减少；若市民候选不够，空出来的写配额会回到其他人身上，不会闲置。
 - 回滚：`weights.known_citizen` 设 0、`citizens.responder_max_bot_probability` 设 1.0 即恢复旧排序。
 
+## 2026-10-26 10:45 备份改成"核心表 + gzip"
+- 背景：`ops backup` 每次整库复制，审计表（`rag_snapshots` 1.98G、`reply_batches` 1.14G）占 67%，
+  备份 4.7G。10/26 09:45 就是因为备份写不下而失败（盘满）。
+- 改动：`ctn/storage/sqlite_store.py` 的 `backup(destination, exclude=())` 支持复制后删除指定表并 `VACUUM`；
+  新增 `gzip_backup()`（压缩后完整解压校验一次，通过才删原文件）；`ops backup --slim --gzip`，
+  `BACKUP_AUDIT_TABLES=('rag_snapshots','reply_batches')`。测试 `tests/test_backup.py`（5 条），全量 976 条通过。
+- 实测：`ops backup ... --slim --gzip` → **369MB**（原来是 4.7G 未压缩 / 1.1G 全量 gzip），
+  耗时 **18 分钟**（瓶颈是复制 4.7G 再 `VACUUM` 到 1.5G）。恢复校验：`integrity_check=ok`，
+  `publications` 14779、`observed_posts` 428891、`managed_accounts` 75 都在，两张审计表为 0。
+- 磁盘：10/26 09:45 的 8.6G 可用 → 现在 **12G 可用（76%）**。现有备份两份：
+  `backup-20261025-2242.sqlite3.gz`（1.1G，全量含审计历史）和 `backup-20261025-2340-slim.sqlite3.gz`（369M）。
+- 待办：备份要跑 18 分钟，部署前不要串行等它，用后台跑（`nohup`）。比赛结束后再做 `VACUUM` 和历史清理。
+
 ## 2026-10-26 09:45 磁盘写满（备份失败）
 - 现象：部署前的 `ops backup` 报 `sqlite3.OperationalError: database or disk is full`；`df` 根分区 46G 用满、
   只剩 625M；`state/` 里有 5 个备份（740M、848M、3.4G×3）共约 11.8G，另有 docker 镜像 17.9G（14.6G 可回收）
