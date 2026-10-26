@@ -151,7 +151,8 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
 2. 改动要小、只解决眼前的问题；同时补一个测试。新功能目前冻结，除非用户明确要求。
 3. `./scripts/docker.sh verify`（离线测试，不影响运行中的服务）。不通过不要继续。
 4. `git commit`（说明为什么改），`git push`。遵守 `.gitignore` 的注释：`state/`、`logs/`、比赛材料不能提交。
-5. 重启按 runbook“代码更新与重启”：先备份（`ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3`），
+5. 重启按 runbook“代码更新与重启”：先备份，**用 `ops backup DEST --slim --gzip`**（369M，约 18 分钟，挂后台跑；
+   不带 `--slim` 会整库复制 4.7G，2026-10-26 因此把磁盘写满过一次），
    `./scripts/docker.sh build all`，`./scripts/docker.sh up all`，再看 `ops status`。
    实测更稳的写法：`docker compose --profile discord up -d fleet macro-agent discord-review`（`up all` 在 fleet 未 healthy 时会把 discord-review 留在 Created）。
    `scripts/register_fleet.sh` 通过 fleet 容器执行，注册进行中不要重启 fleet。
