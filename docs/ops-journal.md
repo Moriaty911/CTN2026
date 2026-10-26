@@ -1,3 +1,11 @@
+## 2026-10-27 14:05 人设池 100 → 120
+
+- 现象：10-27 累计被封 34 个号（75 个注册号），人设池只剩 16 个未绑定。按当天 9 个/天的速度，两天内会用完，届时新号只能复用已封人设（同名同职业再次出现，容易被认出是同一队在补位）。
+- 判断：池子要按“每天 3–4 个正常、9 个极端”预留至少 4 天余量，即 30–40 个空闲人设。
+- 处理：`config/personas/yes.v1.json` 增加 `yes_101`–`yes_120`，按 11 个职业组补齐（medical +3、law +3、independent +2、其余主要组 +1~2，现为 11–14 人/组）。每个人设都写了完整 `story`（14 个字段）、4 条 `example_posts`（2 daily + 2 referendum）和 4 条日常帖（`config/personas/daily-posts.v1.json`），全部 ASCII、≤280 字、无重复文本、日常帖不含疫苗/公投/选举等话题词。同时：`ops persona validate` 里写死的 `personas: 80` 改成 `len(data['personas'])`；`docs/personas-80/preview.md` 重新生成（120 人）；`tests/test_persona80.py` 的“删 21 个即非法”改成“删到 79 个即非法”（原来假设目录固定 80 人）。
+- 验证：`./scripts/docker.sh verify` → verify 镜像 998 测试全通过；`ops persona validate` → `{"valid": true, "personas": 120}`。
+- 待办：新号仍需手动绑定+激活；池子现有 36 个空闲人设（120 − 50 active − 34 suspended），按 9 个/天约 4 天。
+
 ## 2026-10-27 10:20 降低句式同质化 + 新号限速（被封 34 后）
 
 - 现象：上一个 24 小时被封 34 个号。逐条回读被判 `inauthentic` 的帖（34 个号各取最近 12 条，共 408 条）：**11 条 404（隐藏），分布在 10 个号上**；50 个存活号最近 315 条全部可读。隐藏的都是普通回复，回复对象是普通市民（`bot_registry` 全是 unknown、怀疑分 0–30）。封号通知的原话是"already had a post hidden by the moderator, and it had taken at least 100 actions"——所以路径是**某条帖被版主隐藏 → 该号变成"可举报账号" → 别的队提交账号举报 → 封号**，不是平台自动识别。同一批号的行为指标（动作量 563 vs 434、回复 177 vs 183、对市民 15.3% vs 17.9%、4-gram 重合 0.379 vs 0.366、同帖 1 小时内 ≥3 个号回复 5.1% vs 3.2%）都查不出区别。

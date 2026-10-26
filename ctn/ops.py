@@ -81,7 +81,7 @@ def main(argv=None):
             preview=render_preview(data)
             if args.output:Path(args.output).write_text(preview)
             else:print(preview)
-        else:print(json.dumps({'valid':True,'personas':80,'version':data['catalog_version'],'hash':digest(data)}))
+        else:print(json.dumps({'valid':True,'personas':len(data['personas']),'version':data['catalog_version'],'hash':digest(data)}))
         return 0
     path=settings.database_path(args.state_file)
     store=StateStore(path)

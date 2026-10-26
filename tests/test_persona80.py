@@ -107,7 +107,8 @@ class CatalogAndRoutingTests(unittest.TestCase):
     def test_invalid_catalog_rejected(self):
         catalog=load_catalog()
         for mutation in (
-            lambda d:[d['personas'].pop() for _ in range(21)],
+            # Spares are allowed above the agreed 80, so the floor is what the loader enforces.
+            lambda d:[d['personas'].pop() for _ in range(len(d['personas'])-79)],
             lambda d:d['personas'][1].update(persona_id='yes_001'),
             lambda d:d['personas'][0].update(side='no'),
             lambda d:d['personas'][0]['identity'].update(household=''),

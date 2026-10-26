@@ -5,7 +5,7 @@
 > 服务器值班：`CLAUDE.md`（服务器上的 Claude Code 自动读取的值班说明和巡检流程）、`docs/ops-journal.md`（值班日志）、`scripts/dbq.py`（只读查库）、`docs/system-map.html`（模块地图）。
 > 2026-10-20 的四处改动（数据库锁、自有帖子测量、push 规格与带 tag 转发、回复削减）汇总在 [changes-2026-10-20](docs/changes-2026-10-20.md)：为什么改、改了什么、上线后看什么、怎么退。
 
-80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[80 人预览](docs/personas-80/preview.md)。新人设默认未绑定，绑定后待命。
+80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[人设预览](docs/personas-80/preview.md)（目录现有 120 人，其中 50 个已绑定）。新人设默认未绑定，绑定后待命。
 
 YES RAG 静态基础语料：见 [四类材料、来源与整理说明](docs/rag-yes-v1/README.md)及[审阅预览](docs/rag-yes-v1/preview.md)。当前版本为 `config/rag/yes.v1.1.json`，原 v1 保留供回放；已接入 Pi/JEV 与发布链路；新闻/VIP 为有范围的采样，未经整理不会自动成为已验证事实。
 
@@ -29,7 +29,7 @@ The scenario is the fictional Kingstonia referendum on vaccination proof for acc
 | Response parsing | Validates Choice, Score, and Noul answers against the exact request; preserves per-answer failures and applies information-sufficiency gates. |
 | Evaluation routing | Runs triage and, when appropriate, deep evaluation. Supports ordered batches, duplicate-request sharing, optional caching, and explicit post-pair comparisons. |
 | Interaction decisions | Applies confirmed aligned/opposing rules; asks JEV to select the action and primary response purpose for neutral/mixed posts. Ambiguous or unavailable decisions remain pending. |
-| Multi-account personas | 80 versioned YES profiles in 11 occupation groups; explicit SQLite binding/activation, capability checks, scene routing, cooldown and fixed optional reply batches. |
+| Multi-account personas | 120 versioned YES profiles in 11 occupation groups (spares for suspensions); explicit SQLite binding/activation, capability checks, scene routing, cooldown and fixed optional reply batches. |
 | Reply drafting | Calls DeepSeek from a locally bound, checked reply task using internal P01–P09 templates; injects persona background and voice instructions. |
 | Pre-send gatekeeper | One JEV `postflight.v3` call per draft (side alignment, purpose, persona/style, toxicity/injection, send authorization, substantive addition, evidence support) plus local length/duplicate/style-copy checks, with one targeted retry. |
 | Macro sensing | Collects platform trending hashtags, headlines from dual newspapers (*Daily Kingstonia* & *Kingstonia Herald*), VIP NPC posts, and account availability. |
