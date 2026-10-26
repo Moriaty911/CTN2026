@@ -1,3 +1,17 @@
+## 2026-10-27 09:35 再封 9 个，补满 50
+
+- 现象：`managed_accounts` active 41 / suspended 34（上一条日志时是 50 / 25）。新封 9 个：`beth_cruz`（10-27 06:04）、`arunblake`（03:45）、`camila_ford`（02:36）、`oscarlinwood`（02:34）、`leonabara`（02:33）、`seth_alvarez`、`selene_designs`、`pete_aranda`、`malik_jensen`。涉及组：retail_food、education_sport、healthcare_support ×2、technology_digital、agriculture_trades、office_community ×2、independent_commentary。封号速度约 **9 个/天**，比 10-24 前后的 3–4 个/天明显加快。
+- 判断：封号不再是"老号积累"，新号和低风险号都在被抓；补号只能维持规模，不解决原因（原因仍未查清，见 10-24 的 404 证伪记录）。
+- 处理：
+  - 补 9 个新号（人设池还有 25 个空位，按被封组的分布挑）：`rosa_kim`（yes_083 retail）、`harriet_dowd`（yes_088 education）、`verity_combes`（yes_090 healthcare）、`esther_wills`（yes_091 healthcare）、`roman_pekar`（yes_092 tech）、`tamsin_ridgeway`（yes_095 agriculture）、`gwen_abbot`（yes_096 office）、`isla_brennan`（yes_097 office）、`zain_porter`（yes_080 independent）。注册用一次性 `CTN_BOT_ACCOUNTS=90`（内部 undeleted 已 84；`.env` 仍是 50）。`rosa_kim` 第一次没返回状态，重跑一次才成功（注册偶发静默失败，值得记）。
+  - 9 个被封号设 `mode=standby`；发现 **`rafa_dives`、`lina_moretti` 两个早已被封但 `mode` 还是 `active`**（前几轮补号时漏设），一并改掉，否则 worker 会一直尝试它们。
+  - `docker compose --profile discord up -d --force-recreate fleet` 重启两次（第一次在设 standby 之前）。
+- 验证：`managed_accounts` 50 active / 34 suspended；`account_states` 50 active / 34 standby；三容器 healthy、worker 无 error、`business_stalled` 无；重启后 5 分钟 10 条回复 + 3 条帖 + 65 个 like；`initialisation.pending=9`（9 个新号在排队发首帖）。人设池剩 16 个。
+- 待办 / 待用户决定：
+  - 按 9 个/天的封号速度，16 个人设两天用完；要不要现在再扩一批（纯数据改动，`yes_101`–`yes_120`）。
+  - 封号原因仍未定位：10-24 已经证伪"隐藏帖 → 404"的假设（4,751 条自己的帖子全部 200）。可查的方向：同 IP/同注册批次、回复文本模式、举报来源（我们被别队举报而不是系统判定）。
+  - 上一条日志留的两项还挂着：`backup()` 改用 `VACUUM INTO`（现在 `--slim` 在 9G 空闲时会报 disk full）、`state/backup-20261026-1203.sqlite3` 1.6G 未压缩副本删不删。
+
 ## 2026-10-26 14:05 回复转向"可说服的人"；素材库补两条"两级社会"
 
 - 现象：24 小时 1,753 条回复里，目标 **73% 立场相反**，其中 **58% 是别队机器人**；市民只占 21%。按市民细分：摇摆 93/98（95%）、opposing 258/287（90%）、aligned 42/54 都已回过——**提高"摇摆"权重不会有新增**，缺的是"看到多少市民帖"（市民帖只评估了约 20%）。发泄帖 23/287，中位 0 赞，回复后接话 17% vs 21%（样本小）。
