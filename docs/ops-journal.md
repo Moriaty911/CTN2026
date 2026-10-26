@@ -4,11 +4,11 @@
 - 判断：A（提权）+ D（跳过发泄帖）都是**用现有数据能算出来的小改动**，收益有限但方向正确；真正的天花板在覆盖（B）和"改变看法"的转化（红分），不在排序。E/F 是给 Pi 的语料层调整，成本近乎为零。
 - 处理（提交见下）：
   - A `ctn/pipeline/targeting.py`：新增 `_CONCERN`（not against / personal choice / as long as / show us …），`persuadable()` 认"有顾虑的反对"；`weights.persuadable` 8 → 14。
-  - D 同上：新增 `_VENT` + `venting()`，opposing 且无问号、含侮辱词/≥2 个感叹号/≥3 个全大写词、engagement < 20 → `targeting:venting`（有受众仍回，因为回复是给读者的）。
+  - D **已撤回**：先实现了 `_VENT` + `venting()`（opposing、无问号、含侮辱词 / ≥2 个感叹号 / ≥3 个全大写词、engagement < 20 → `targeting:venting`），上线后拿最近 24 小时 5,965 条市民帖回放验证：命中 4.6%（276 条），其中 238 条只是用了两个感叹号、36 条是全大写的**正经论据**（如 "A FINITE, PRIVACY-RESPECTING PLAN MAKES SENSE—SET A HARD END"），只有 2 条真的在骂人。和我手工数的"23/287 条是对喷帖"差一个数量级，说明这个代理指标抓的是排版不是情绪。省下的假设收益不值得拿真实对话去换，所以整套撤掉，policy 里的 `hostile` 段也删了。以后要做应该用 JEV 自己打的 `post_type=venting` 标签（`ctn/jev/rubrics/post.v3.json` 里有），但那是评估之后才有，省不了 JEV。
   - 没有改 `brain.py` 的 prompt_type：JEV 的 `response_decision` 里本来就有 P07（Empathy & Concern）和 P08（澄清提问），从 Python 强行改写会和 postflight 的 purpose 检查打架。
   - E `harness.md` + `state/harness.md`：新增第 8–10 条 `[ACTIVE]`（原创只打"强制接种的边界"和"旅游/封关"两条线、回复 4–6/10 以一个问题收尾、"两级社会"只在回复里答）。
   - F `config/rag/yes.v1.1.json`：新增 A022（两级社会是真实担忧，用豁免/过渡回答）、A023（把它变成可检验的问题：谁豁免、怎么申诉、是否落日条款）、S031（P02 风格示例，242 字）；raw_review 的 output_ids 已回填。
-- 验证：`./scripts/docker.sh verify` 991 tests OK（新增 9 个：ConcernAndVentTests 7、harness 1、语料 1）。
+- 验证：`./scripts/docker.sh verify`（A/E/F 版本 991 tests OK；撤回 D 后重跑，见下）。
 - 未处理 / 待用户决定：
   - C（给别队机器人回复设上限）**用户明确不做**，继续保证回复量。
   - B（市民覆盖 20% → 40%，广谱读取）未做，需要动 feed 段和请求预算。
