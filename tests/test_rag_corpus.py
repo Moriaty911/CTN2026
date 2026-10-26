@@ -33,6 +33,23 @@ class RagCorpusTests(unittest.TestCase):
         self.assertIn('F016', result['coverage']['facts_without_argument'])
         self.assertIn('U007', result['coverage']['unknowns_without_argument'])
 
+    def test_two_tier_cards_answer_the_charge_with_mechanisms(self):
+        """2026-10-26: the two-tier charge gets its own cards, and the reply style cites a basis."""
+        cards = {c["id"]: c for c in self.corpus["argument_cards"]}
+        styles = {s["id"]: s for s in self.corpus["style_examples"]}
+        for cid in ("A022", "A023"):
+            self.assertIn(cid, cards)
+            self.assertIn("two_tier", cards[cid]["topics"])
+            self.assertTrue(cards[cid]["fair_objection"])
+            self.assertTrue(cards[cid]["response_boundary"])
+        style = styles["S031"]
+        self.assertEqual(style["argument_id"], "A022")
+        self.assertLessEqual(set(style["purposes"]), set(cards["A022"]["purposes"]))
+        self.assertTrue(style["unknown_ids"] or style["fact_ids"])
+        # Mechanisms, not a claim that nobody is excluded.
+        self.assertIn("exempt", cards["A023"]["claim"].lower())
+        self.check()
+
     def test_direct_answer_examples_cover_factual_and_unknown_answers(self):
         examples = [s for s in self.corpus['style_examples'] if 'P02' in s['purposes']]
         self.assertGreaterEqual(len(examples), 5)

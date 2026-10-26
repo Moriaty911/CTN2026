@@ -1462,6 +1462,82 @@
       "response_boundary": "No invented foreign-certificate recognition, visitor exemption, border closure or assured tourism recovery.",
       "origin": "new",
       "raw_passage_ids": []
+    },
+    {
+      "id": "A022",
+      "kind": "argument",
+      "title_zh": "两级社会是真实担忧，要用具体安排回答",
+      "position": "yes",
+      "claim": "The two-tier worry is fair: a proof rule can sort people into those who move freely and those who cannot, so the answer has to be the exemptions and the transition, not a denial.",
+      "reasoning": "State the objection in its strongest form before answering it. Do not claim access is unaffected; point at the concrete design choices (medical exemptions, temporary proof, who checks whom) and name which ones the campaign cannot answer.",
+      "topics": [
+        "two_tier",
+        "fairness",
+        "exemptions",
+        "access"
+      ],
+      "purposes": [
+        "P02",
+        "P03",
+        "P07"
+      ],
+      "fact_ids": [
+        "F001",
+        "F011",
+        "F029"
+      ],
+      "unknown_ids": [
+        "U001",
+        "U004",
+        "U011",
+        "U012"
+      ],
+      "fair_objection": "A rule that ties ordinary places to a certificate does create a class of people who cannot enter them.",
+      "response_boundary": "We cannot claim the rule has no unequal effects. What can be claimed is that exemptions and review decide whether the difference is tolerable.",
+      "origin": "raw_adapted",
+      "raw_passage_ids": [
+        "R011",
+        "R029",
+        "R006",
+        "R017"
+      ]
+    },
+    {
+      "id": "A023",
+      "kind": "argument",
+      "title_zh": "把两级社会变成可以检验的问题",
+      "position": "yes",
+      "claim": "The two-tier charge should be judged by what can be checked: who is exempt, how an appeal works, and whether the rule sunsets.",
+      "reasoning": "Turn a rhetorical charge into testable design questions. Answer with mechanisms (review, sunset, appeal route) instead of asserting that nobody will be left out, and say plainly which answers we do not have.",
+      "topics": [
+        "two_tier",
+        "governance",
+        "review",
+        "appeals"
+      ],
+      "purposes": [
+        "P03",
+        "P07"
+      ],
+      "fact_ids": [
+        "F013",
+        "F025",
+        "F026"
+      ],
+      "unknown_ids": [
+        "U008",
+        "U014",
+        "U015"
+      ],
+      "fair_objection": "Without published exemptions and an appeal route, a certificate requirement is a permanent second class in practice.",
+      "response_boundary": "Mechanisms reduce the risk; they are not evidence that no one will be excluded, and the campaign has not published every detail.",
+      "origin": "raw_adapted",
+      "raw_passage_ids": [
+        "R013",
+        "R034",
+        "R037",
+        "R039"
+      ]
     }
   ],
   "style_examples": [
@@ -2150,6 +2226,31 @@
       "unknown_ids": [
         "U004"
       ]
+    },
+    {
+      "id": "S031",
+      "kind": "style",
+      "title_zh": "P02：承认两级担忧，再用机制回答",
+      "text": "The two-tier worry is fair: a certificate deciding who boards a tram does create a difference between people. What should settle it is who is exempt, how appeals work, and whether the rule is reviewed. I would rather name what we do not know.",
+      "argument_id": "A022",
+      "voice": "answer_first",
+      "topics": [
+        "two_tier",
+        "fairness",
+        "exemptions"
+      ],
+      "purposes": [
+        "P02",
+        "P07"
+      ],
+      "usage": "style_reference_only",
+      "persona_scope": "no_personal_history_or_professional_claim",
+      "raw_passage_ids": [],
+      "fact_ids": [],
+      "unknown_ids": [
+        "U001",
+        "U011"
+      ]
     }
   ],
   "unknowns": [
@@ -2802,7 +2903,8 @@
       "output_ids": [
         "A007",
         "A015",
-        "U001"
+        "U001",
+        "A022"
       ],
       "reason_zh": "把 12 岁门槛识别为作者提案而非官方规则；保留学校主题，不导入该门槛。"
     },
@@ -2875,7 +2977,8 @@
       "disposition": "adapted_and_merged",
       "output_ids": [
         "A009",
-        "S009"
+        "S009",
+        "A022"
       ],
       "reason_zh": "保留身体强制与准入条件的区别，同时承认工作和通勤受限会形成实际压力。"
     },
@@ -2906,7 +3009,8 @@
         "A004",
         "A017",
         "U008",
-        "U015"
+        "U015",
+        "A023"
       ],
       "reason_zh": "保留保护他人主题；不承诺疫情不会长期化或政策必然短期结束。"
     },
@@ -2966,7 +3070,8 @@
       "output_ids": [
         "A006",
         "A015",
-        "U002"
+        "U002",
+        "A022"
       ],
       "reason_zh": "保留共同责任讨论；删除免费疫苗假设和拒绝者应被排除的动机判断。"
     },
@@ -3146,7 +3251,8 @@
       "disposition": "adapted_and_merged",
       "output_ids": [
         "A009",
-        "U015"
+        "U015",
+        "A022"
       ],
       "reason_zh": "保留准入政策立场；去掉必然避免封控和以迫使他人为唯一理由的表达。"
     },
@@ -3220,7 +3326,8 @@
       "output_ids": [
         "A017",
         "U005",
-        "U015"
+        "U015",
+        "A023"
       ],
       "reason_zh": "保留实施成本与疫情成本的取舍；30 秒核验与一定避免停摆均未确认。"
     },
@@ -3266,7 +3373,8 @@
         "A006",
         "A017",
         "U008",
-        "U015"
+        "U015",
+        "A023"
       ],
       "reason_zh": "保留负担比较；临时、有效和最小干扰均不能作为已确认属性。"
     },
@@ -3297,7 +3405,8 @@
         "A017",
         "U003",
         "U014",
-        "U015"
+        "U015",
+        "A023"
       ],
       "reason_zh": "保留减少干扰的目标；移除多数人已接种与实施后即可恢复的无依据结论。"
     },

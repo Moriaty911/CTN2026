@@ -503,3 +503,44 @@ class CitizenTargetingTests(unittest.TestCase):
         intent(self.store, 'a1', 't2', author='resident2', at=now - 60)
         responded(self.store, 'resident2', at=now - 30)
         self.assertEqual(targeting.cap_reason(self.store, target_author='resident2', now=now), '')
+
+
+class ConcernAndVentTests(unittest.TestCase):
+    """A/D (2026-10-26): objections that leave room rank higher; rants without an audience are not answered."""
+
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+
+    def post(self, pid, text, **kw):
+        self.store.upsert_observed_post({'post_id': pid, 'author': kw.pop('author', 'resident'), 'text': text,
+                                         'created_at': kw.pop('created_at', time.time()), **kw})
+        return self.store.get_observed_post(pid)
+
+    def test_an_objection_with_room_counts_as_persuadable(self):
+        self.assertTrue(targeting.persuadable({'text': "I'm not against vaccines, but the fine print matters."}))
+        self.assertTrue(targeting.persuadable({'text': 'Show us how the exemption works for a night shift.'}))
+
+    def test_a_closed_refusal_is_not_persuadable(self):
+        self.assertFalse(targeting.persuadable({'text': 'Vaccines do not work. The whole thing is a scam.'}))
+
+    def test_concern_carries_a_heavier_weight_than_a_plain_post(self):
+        # 2026-10-26: swing and opposing citizens were already answered at 95% and 90%, so the knob that
+        # matters is which of the remaining posts is picked first.
+        self.assertGreaterEqual(float(targeting.POLICY['weights']['persuadable']), 14.0)
+
+    def test_a_rant_without_an_audience_is_skipped(self):
+        rant = self.post('r1', 'Vaccine passports are bullshit and the council are clowns')
+        self.assertEqual(targeting.skip_reason(self.store, rant, relative_stance='opposing'), 'targeting:venting')
+
+    def test_a_rant_with_an_audience_is_answered(self):
+        # With readers on the post the reply is for them, not for the rant.
+        seen = self.post('r2', 'Vaccine passports are bullshit and the council are clowns', likes=40)
+        self.assertEqual(targeting.skip_reason(self.store, seen, relative_stance='opposing'), '')
+
+    def test_a_post_that_asks_something_is_not_a_rant(self):
+        seen = self.post('r3', 'Honestly this is a disgrace. How is a market stall meant to check this?')
+        self.assertEqual(targeting.skip_reason(self.store, seen, relative_stance='opposing'), '')
+
+    def test_our_side_is_not_filtered_for_tone(self):
+        seen = self.post('r4', 'The NO campaign is corrupt and full of liars')
+        self.assertEqual(targeting.skip_reason(self.store, seen, relative_stance='aligned'), '')

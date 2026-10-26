@@ -207,10 +207,32 @@ _PERSUADABLE = re.compile(r"\b(not sure|unsure|undecided|on the fence|can'?t dec
                           r"leaning|still deciding|mixed feelings|don'?t know (how|what|whether))\b", re.I)
 
 
+_CONCERN = re.compile(r"\b(not against|not anti|not opposed|personal choice|my body|bodily autonomy|"
+                      r"exempt\w*|fine print|the details|as long as|if the (rule|plan|policy|law)|"
+                      r"show us|show me|spell (it|this) out|works? out how)\b", re.I)
+
+# Insults, not mere disagreement: 'ridiculous' or 'no thanks' alone does not make a post a rant.
+_VENT = re.compile(r"\b(bullshit|shit|fuck\w*|screw|damn|idiots?|clowns?|corrupt|liars?|scam|disgrace|pathetic|morons?)\b", re.I)
+
+
 def persuadable(post):
-    """A question or open hesitation: the undecided readers the client brief asks us to find."""
+    """A question, open hesitation or an objection that leaves room: the undecided readers the brief asks us to find."""
     text = str(post.get('text', ''))
-    return bool(_PERSUADABLE.search(text)) or text.rstrip().endswith('?')
+    return bool(_PERSUADABLE.search(text)) or bool(_CONCERN.search(text)) or text.rstrip().endswith('?')
+
+
+def concerned(post):
+    """Objecting but not closed off: 'I'm not against vaccines, I'm against how this rule works'."""
+    return bool(_CONCERN.search(str(post.get('text') or '')))
+
+
+def venting(post):
+    """A protest with no question in it. 2026-10-26, 24 h: 23 of 287 opposing citizen posts, median 0 likes."""
+    text = str(post.get('text') or '')
+    if '?' in text:
+        return False
+    caps = len(re.findall(r'\b[A-Z]{3,}\b', text))
+    return bool(_VENT.search(text)) or text.count('!') >= 2 or caps >= 3
 
 
 def audience(store, post, now=None):
@@ -293,6 +315,11 @@ def skip_reason(store, post, relative_stance=None, now=None):
         prof = store.get_bot_profile(post.get('author', '')) if post.get('author') else {}
         if prof.get('status') != 'own_bot' and float(prof.get('suspicion_score') or 0.0) >= floor:
             return 'targeting:bot_author'
+    # A rant with no question in it is a statement, not a conversation; answering only lifts its reach.
+    hostile = POLICY.get('hostile') or {}
+    if hostile.get('skip_opposing') and relative_stance == 'opposing' and venting(post):
+        if engagement(post) < int(hostile.get('min_engagement_to_still_reply', 20)):
+            return 'targeting:venting'
     p_bot = bot_probability(store, post.get('author', ''), post.get('author_id', 0))
     if p_bot is None or p_bot < POLICY['cold']['min_bot_probability']:
         return ''

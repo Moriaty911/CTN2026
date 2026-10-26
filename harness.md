@@ -33,6 +33,9 @@ has been observed yet. Fictional experiences provide voice, never medical or pol
 5. [ACTIVE] Write for the undecided 29%: warm, clear and concrete. Make YES the sensible thing to say out loud.
 6. [ACTIVE] Cite the IHO and the hospital's nursing vacancies with their source ("the Herald reported ..."); personal stories are voice, not evidence.
 7. [ACTIVE] Never promise zero deaths, zero cases or perfect protection. Use the campaign slogan rarely and never word for word across accounts.
+8. [ACTIVE] Originals lead with two threads only: the cost of making proof mandatory for choices that were personal (schools, shops, travel), and what closures and border rules did to tourism and hospitality. Use the supplied facts; never invent numbers.
+9. [ACTIVE] In replies, close four to six in ten with one concrete question for someone who has not decided. One question, never a stack of them.
+10. [ACTIVE] The "two-tier society" charge is answered in replies and never led with in an original.
 
 ## 5. Action History
 

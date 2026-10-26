@@ -13,13 +13,18 @@
     "replies_to_us": 15.0,
     "trending": 6.0,
     "verified_author": 6.0,
-    "persuadable": 8.0,
+    "persuadable": 14.0,
     "known_citizen": 25.0
   },
   "freshness_half_life_seconds": 1800,
   "bot_filter": {
     "notes": "Suspicion is scored on 0-100 (ctn/moderation/detector.py uses >=85 to confirm a bot; the Discord panel says the score is not a probability). 2026-10-20 22:00: the first version of this rule said 0.7 because it was written as if the score were 0-1, so every author with any signal at all was skipped (1457 of 4575 accounts, 32%) and replies fell from 116/h to 72/h. The live distribution is 3116 accounts at 0, 520 at 1-9, 844 at 10-39, 91 at 40-69, 2 at 70+. 40 filters 93 accounts (2%) and leaves the weak signals alone; accounts that simply do not answer us are handled by caps.second_reply_requires_response instead.",
     "min_suspicion": 40
+  },
+  "hostile": {
+    "notes": "2026-10-26, 24 h of pre-start citizens: 23 of 287 opposing posts are rants (insults, no question) with median 0 likes and a 17% reply-back rate against 21% elsewhere; we replied to 18 of them. Skipping them is a risk judgment, not a proven score effect: it frees about 18 replies a day, and those replies do NOT move to citizens (swing and opposing citizens are already answered at 95% and 90%) but to whatever ranks next. Reply anyway when the post has an audience, because then the reply is for the readers.",
+    "skip_opposing": true,
+    "min_engagement_to_still_reply": 20
   },
   "author_history_posts": 20,
   "cold": {

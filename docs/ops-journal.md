@@ -1,3 +1,20 @@
+## 2026-10-26 14:05 回复转向"可说服的人"；素材库补两条"两级社会"
+
+- 现象：24 小时 1,753 条回复里，目标 **73% 立场相反**，其中 **58% 是别队机器人**；市民只占 21%。按市民细分：摇摆 93/98（95%）、opposing 258/287（90%）、aligned 42/54 都已回过——**提高"摇摆"权重不会有新增**，缺的是"看到多少市民帖"（市民帖只评估了约 20%）。发泄帖 23/287，中位 0 赞，回复后接话 17% vs 21%（样本小）。
+- 判断：A（提权）+ D（跳过发泄帖）都是**用现有数据能算出来的小改动**，收益有限但方向正确；真正的天花板在覆盖（B）和"改变看法"的转化（红分），不在排序。E/F 是给 Pi 的语料层调整，成本近乎为零。
+- 处理（提交见下）：
+  - A `ctn/pipeline/targeting.py`：新增 `_CONCERN`（not against / personal choice / as long as / show us …），`persuadable()` 认"有顾虑的反对"；`weights.persuadable` 8 → 14。
+  - D 同上：新增 `_VENT` + `venting()`，opposing 且无问号、含侮辱词/≥2 个感叹号/≥3 个全大写词、engagement < 20 → `targeting:venting`（有受众仍回，因为回复是给读者的）。
+  - 没有改 `brain.py` 的 prompt_type：JEV 的 `response_decision` 里本来就有 P07（Empathy & Concern）和 P08（澄清提问），从 Python 强行改写会和 postflight 的 purpose 检查打架。
+  - E `harness.md` + `state/harness.md`：新增第 8–10 条 `[ACTIVE]`（原创只打"强制接种的边界"和"旅游/封关"两条线、回复 4–6/10 以一个问题收尾、"两级社会"只在回复里答）。
+  - F `config/rag/yes.v1.1.json`：新增 A022（两级社会是真实担忧，用豁免/过渡回答）、A023（把它变成可检验的问题：谁豁免、怎么申诉、是否落日条款）、S031（P02 风格示例，242 字）；raw_review 的 output_ids 已回填。
+- 验证：`./scripts/docker.sh verify` 991 tests OK（新增 9 个：ConcernAndVentTests 7、harness 1、语料 1）。
+- 未处理 / 待用户决定：
+  - C（给别队机器人回复设上限）**用户明确不做**，继续保证回复量。
+  - B（市民覆盖 20% → 40%，广谱读取）未做，需要动 feed 段和请求预算。
+  - `ops status` 的 `catalog_match`、心跳"30 分钟零发布"告警仍挂着（用户说"等一下"）。
+  - `state/backup-20261026-1203.sqlite3`（未压缩的 1.6G 副本，同目录已有 .gz）还在，删不删要用户点头。
+
 ## 2026-10-26 13:10 人设目录失配，写流量停了 3 小时（已修）
 - 现象：
   - 部署用户 11:50 的改动时发现线上**从 09:34:45（悉尼）起零发布**：`publications` 最后一条 09:34:45，
