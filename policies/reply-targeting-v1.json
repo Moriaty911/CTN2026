@@ -13,7 +13,8 @@
     "replies_to_us": 15.0,
     "trending": 6.0,
     "verified_author": 6.0,
-    "persuadable": 8.0
+    "persuadable": 8.0,
+    "known_citizen": 25.0
   },
   "freshness_half_life_seconds": 1800,
   "bot_filter": {
@@ -70,5 +71,11 @@
     ],
     "max_target_depth": 2,
     "followups_when_replying_to_us": 2
+  },
+  "citizens": {
+    "notes": "2026-10-26, 48 h of our replies: 887 to accounts registered before the open (id <= 2343) drew a citizen answer 10.6% of the time; 3,245 to everyone else drew one 1.1% of the time, while competitor bots answered 16-23% of them. Only citizens score, so citizens get a large ordering bonus (weights.known_citizen, comparable to the 20-40 spread of the JEV score), are never removed by the detector floor, and only answers from rewarded responders raise priority, unlock deep-thread follow-ups or a second reply. Newcomers still count while their bot prior is below responder_max_bot_probability (unknown 0.3 counts; suspected, confirmed or posting >= frequency_bot.min_posts an hour does not); set count_newcomers false to reward citizens only.",
+    "max_account_id": 2343,
+    "count_newcomers": true,
+    "responder_max_bot_probability": 0.5
   }
 }

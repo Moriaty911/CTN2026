@@ -46,7 +46,31 @@ def posting_frequency(store, author, now=None):
         return store._conn.execute('SELECT COUNT(*) FROM observed_posts WHERE author=? AND created_at>=?', (author, ts - window)).fetchone()[0]
 
 
-def bot_probability(store, author):
+def citizen_max_id():
+    return int((POLICY.get('citizens') or {}).get('max_account_id') or 0)
+
+
+def is_known_citizen(store, author, author_id=0):
+    """True for an account registered before the platform opened (id <= citizens.max_account_id).
+
+    Competitor accounts can only be created after the open, so these are simulated citizens: the only
+    authors whose replies, likes and changes of mind score. Our own accounts are never citizens.
+    """
+    limit = citizen_max_id()
+    if not limit or not author:
+        return False
+    try:
+        aid = int(author_id or 0)
+    except (TypeError, ValueError):
+        aid = 0
+    if aid <= 0:
+        aid = int(store.resolve_platform_account_id(author) or 0)
+    if not 0 < aid <= limit:
+        return False
+    return store.get_bot_profile(author)['status'] != 'own_bot'
+
+
+def bot_probability(store, author, author_id=0):
     """Ordering prior that the author is a competitor bot. None for our own accounts."""
     if not author:
         return POLICY['bot_prior']['unknown']
@@ -54,6 +78,8 @@ def bot_probability(store, author):
     if prof['status'] == 'own_bot':
         return None
     if prof['status'] == 'verified_npc' or prof.get('verified'):
+        return 0.0
+    if is_known_citizen(store, author, author_id):
         return 0.0
     p = POLICY['bot_prior'].get(prof['status'], POLICY['bot_prior']['unknown'])
     if int(prof.get('upheld_strikes') or 0) >= 1:
@@ -100,11 +126,36 @@ def mark_trending(store, post_ids, now=None):
 
 
 def replies_to_us(store, post):
+    """The post answers one of our posts, whoever wrote it."""
     parent = str(post.get('parent_id') or '')
     if not parent:
         return False
     row = store.get_observed_post(parent)
     return bool(row and store.get_bot_profile(row['author'])['status'] == 'own_bot')
+
+
+def responder_counts(store, author, author_id=0):
+    """Whether an answer from this author is worth rewarding (ordering bonus, follow-ups, a second reply).
+
+    2026-10-26 (48 h of replies): competitor bots answered 16-23% of our replies and citizens almost never
+    answered our replies to non-citizens (1.1%), yet any answer to us raised priority by 15 and unlocked a
+    second reply, so we kept talking to bots. A known citizen always counts; any other author counts only
+    while its bot prior stays below citizens.responder_max_bot_probability (unless count_newcomers is off).
+    """
+    if not author:
+        return False
+    if is_known_citizen(store, author, author_id):
+        return True
+    rules = POLICY.get('citizens') or {}
+    if not rules.get('count_newcomers', True):
+        return False
+    p_bot = bot_probability(store, author, author_id)
+    return p_bot is not None and p_bot < float(rules.get('responder_max_bot_probability', 1.0))
+
+
+def counted_reply_to_us(store, post):
+    """A reply to us from an author whose answer we reward (see responder_counts)."""
+    return replies_to_us(store, post) and responder_counts(store, post.get('author', ''), post.get('author_id', 0))
 
 
 def thread_depth(store, post, limit=4):
@@ -127,7 +178,7 @@ def deep_thread_reason(store, post, now=None):
     rules = POLICY['thread_depth']
     if thread_depth(store, post) <= int(rules['max_target_depth']):
         return ''
-    if replies_to_us(store, post):
+    if counted_reply_to_us(store, post):
         ts = time.time() if now is None else now
         with store._lock:
             ours = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE kind='reply' AND status IN ('claimed','sending','unknown','succeeded') "
@@ -166,23 +217,27 @@ def audience(store, post, now=None):
     """Components and an ordinal priority for one observed post (dict as stored in observed_posts)."""
     ts = time.time() if now is None else now
     w = POLICY['weights']
-    p_bot = bot_probability(store, post.get('author', ''))
+    author, author_id = post.get('author', ''), post.get('author_id', 0)
+    p_bot = bot_probability(store, author, author_id)
     if p_bot is None:
         return {'own': True, 'priority': -100.0}
     trending = is_trending(store, post['post_id'], ts)
-    reach = author_reach(store, post.get('author', ''), post['post_id'])
+    reach = author_reach(store, author, post['post_id'])
     onlooker = math.log1p(max(engagement(post), reach))
-    to_us = replies_to_us(store, post)
-    verified = p_bot == 0.0
+    citizen = is_known_citizen(store, author, author_id)
+    to_us = replies_to_us(store, post) and responder_counts(store, author, author_id)
+    prof = store.get_bot_profile(author) if author else {}
+    verified = bool(prof.get('status') == 'verified_npc' or prof.get('verified'))
     undecided = persuadable(post)
     raw = (w['author_reader'] * (1 - p_bot) + w['onlooker'] * onlooker + w['replies_to_us'] * to_us
-           + w['trending'] * trending + w['verified_author'] * verified + w.get('persuadable', 0) * undecided * (1 - p_bot))
+           + w['trending'] * trending + w['verified_author'] * verified + w.get('persuadable', 0) * undecided * (1 - p_bot)
+           + w.get('known_citizen', 0) * citizen)
     freshness = 0.5 ** (post_age(post, ts) / POLICY['freshness_half_life_seconds'])
     factors = POLICY['thread_depth']['factors']
     depth = thread_depth(store, post)
     raw *= factors[min(depth, len(factors) - 1)]
     return {'own': False, 'depth': depth, 'p_bot': round(p_bot, 3), 'onlooker': round(onlooker, 3), 'reach': round(reach, 2),
-            'replies_to_us': to_us, 'trending': trending, 'verified': verified, 'persuadable': undecided, 'freshness': round(freshness, 3),
+            'replies_to_us': to_us, 'citizen': citizen, 'trending': trending, 'verified': verified, 'persuadable': undecided, 'freshness': round(freshness, 3),
             'priority': round(raw * freshness, 3)}
 
 
@@ -216,6 +271,8 @@ def author_responded(store, author, since):
     """True when the author replied directly to one of our publications after `since`."""
     if not author or not since:
         return False
+    if not responder_counts(store, author):
+        return False
     with store._lock:
         return store._conn.execute(
             'SELECT 1 FROM observed_posts o JOIN publications p ON p.post_id=o.parent_id '
@@ -230,16 +287,18 @@ def skip_reason(store, post, relative_stance=None, now=None):
         return deep
     # A competitor bot never changes its mind, and our reply only raises its reply count (hot score).
     floor = float((POLICY.get('bot_filter') or {}).get('min_suspicion') or 0.0)
-    if floor and not replies_to_us(store, post):
+    citizen = is_known_citizen(store, post.get('author', ''), post.get('author_id', 0))
+    # A detector score never filters a citizen; a bot answering us no longer buys its way past the filter.
+    if floor and not citizen and not counted_reply_to_us(store, post):
         prof = store.get_bot_profile(post.get('author', '')) if post.get('author') else {}
         if prof.get('status') != 'own_bot' and float(prof.get('suspicion_score') or 0.0) >= floor:
             return 'targeting:bot_author'
-    p_bot = bot_probability(store, post.get('author', ''))
+    p_bot = bot_probability(store, post.get('author', ''), post.get('author_id', 0))
     if p_bot is None or p_bot < POLICY['cold']['min_bot_probability']:
         return ''
     if relative_stance not in (None, 'opposing'):
         return ''
-    if is_cold(store, post, ts) and not replies_to_us(store, post):
+    if is_cold(store, post, ts) and not counted_reply_to_us(store, post):
         return 'targeting:cold_likely_bot'
     return ''
 

@@ -1,3 +1,23 @@
+## 2026-10-26 11:50 回复优先给开服前市民，别队机器人回我们不再加分（未提交、未部署）
+- 依据（用户在线上跑的只读查询，过去 48 小时 `publications.kind='reply'`，市民 = `author_id <= 2343`）：
+  回复市民 887 条，引来市民回应 94 条（10.6%）；回复其他人 3,245 条（79% 的回复），引来市民回应只有 35 条（1.1%），
+  但其中 16.6% 被目标本人回了、23.2% 被别队机器人回了。只有市民的互动计分，所以 79% 的回复只换来 27% 的市民回应。
+  同时"对方回了我们"在代码里有三个奖励（排序 +15、深串跟进、解锁第二条回复），别队机器人回我们也能拿到，形成只耗写配额的循环。
+- 改动：
+  1. `ctn/pipeline/targeting.py`：新增 `is_known_citizen()`（id <= `citizens.max_account_id`，永不包括自己的号）、
+     `responder_counts()`、`counted_reply_to_us()`。市民的 `bot_probability` = 0；`audience()` 加 `weights.known_citizen`
+     （25，和 JEV 分 20–40 的浮动同一量级，否则排不动）；`verified` 改为看档案，不再用 `p_bot == 0` 推断。
+  2. 排序加分、深串跟进、`bot_filter` 的豁免、冷帖豁免、第二条回复的解锁，都只认"值得奖励的回应者"：市民一定算；
+     其他人只有 bot 先验 < `citizens.responder_max_bot_probability`（0.5）才算——未知新号（0.3）照算，
+     suspected/confirmed/一小时 ≥4 帖的不算。`count_newcomers: false` 可切成只认市民。
+  3. 检测器分数（`bot_filter.min_suspicion`）不再过滤市民。
+  4. `policies/reply-targeting-v1.json`：`weights.known_citizen` 25、新增 `citizens` 段（带依据说明）。
+- 测试：`tests/test_reply_targeting.py` 新增 `CitizenTargetingTests` 6 条；离线环境（无 PyPI，httpx/openai/pydantic 用导入空壳）
+  改动前后全量各 98 条环境性失败、集合完全相同，定向测试 38 条全过。部署前请照常 `./scripts/docker.sh verify`。
+- 观察点（部署后 24 小时）：重跑同一条查询，看回复里市民的占比是否明显上升、"任何市民回"的总数是否上升；
+  `post_tasks` 里市民任务的 `expired` 是否减少；若市民候选不够，空出来的写配额会回到其他人身上，不会闲置。
+- 回滚：`weights.known_citizen` 设 0、`citizens.responder_max_bot_probability` 设 1.0 即恢复旧排序。
+
 ## 2026-10-26 09:45 磁盘写满（备份失败）
 - 现象：部署前的 `ops backup` 报 `sqlite3.OperationalError: database or disk is full`；`df` 根分区 46G 用满、
   只剩 625M；`state/` 里有 5 个备份（740M、848M、3.4G×3）共约 11.8G，另有 docker 镜像 17.9G（14.6G 可回收）

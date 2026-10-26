@@ -437,3 +437,69 @@ class AuthorResponseTests(unittest.TestCase):
         intent(self.store, 'a1', 't1', author='npc8', at=now - 60)
         responded(self.store, 'someone_else', at=now - 20)
         self.assertEqual(targeting.cap_reason(self.store, target_author='npc8', now=now), 'author_not_responding')
+
+
+class CitizenTargetingTests(unittest.TestCase):
+    """2026-10-26: replies to accounts registered before the open drew a citizen answer 10.6% of the time,
+    replies to everyone else 1.1%, and competitor bots answered 16-23% of them; only citizens score."""
+
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+        self.store.register_verified_accounts(['ours'], status='own_bot')
+        self.store.upsert_observed_post({'post_id': 'mine', 'author': 'ours', 'author_id': 3000, 'text': 'Our post',
+                                         'created_at': time.time() - 600})
+        gap = patch.dict(targeting.POLICY['caps'], {'per_author_min_gap_seconds': 0}); gap.start(); self.addCleanup(gap.stop)
+        self.store.set_policy('reply_pacing', {'per_hour': 1000, 'min_gap_seconds': 0})
+
+    def post(self, pid, author, author_id, **kw):
+        self.store.upsert_observed_post({'post_id': pid, 'author': author, 'author_id': author_id, 'text': 'A question about venues?',
+                                         'created_at': kw.pop('created_at', time.time()), **kw})
+        return self.store.get_observed_post(pid)
+
+    def test_a_citizen_outranks_a_newcomer_and_is_not_verified(self):
+        citizen = targeting.audience(self.store, self.post('c1', 'old_resident', 120))
+        newcomer = targeting.audience(self.store, self.post('n1', 'new_account', 5200, likes=6, replies=3))
+        self.assertTrue(citizen['citizen']); self.assertFalse(newcomer['citizen'])
+        self.assertEqual(citizen['p_bot'], 0.0)
+        self.assertFalse(citizen['verified'])
+        self.assertGreater(citizen['priority'], newcomer['priority'])
+
+    def test_the_id_line_is_inclusive_and_never_covers_our_accounts(self):
+        line = targeting.citizen_max_id()
+        self.assertTrue(targeting.is_known_citizen(self.store, 'edge', line))
+        self.assertFalse(targeting.is_known_citizen(self.store, 'after', line + 1))
+        self.store.register_verified_accounts(['early_ours'], status='own_bot')
+        self.assertFalse(targeting.is_known_citizen(self.store, 'early_ours', 50))
+        self.assertTrue(targeting.is_known_citizen(self.store, '77'))  # a numeric handle resolves to its id
+
+    def test_a_bot_answering_us_earns_no_bonus_and_does_not_pass_the_filter(self):
+        registry(self.store, 'replybot', 60, status='suspected_bot')
+        bot = self.post('b1', 'replybot', 6100, parent_id='mine')
+        self.assertTrue(targeting.replies_to_us(self.store, bot))
+        self.assertFalse(targeting.audience(self.store, bot)['replies_to_us'])
+        self.assertEqual(targeting.skip_reason(self.store, bot), 'targeting:bot_author')
+        citizen = self.post('c2', 'resident', 300, parent_id='mine')
+        self.assertTrue(targeting.audience(self.store, citizen)['replies_to_us'])
+
+    def test_an_unknown_newcomer_answering_us_still_counts_unless_switched_off(self):
+        reply = self.post('n2', 'quiet_newcomer', 7000, parent_id='mine')
+        self.assertTrue(targeting.audience(self.store, reply)['replies_to_us'])
+        with patch.dict(targeting.POLICY['citizens'], {'count_newcomers': False}):
+            self.assertFalse(targeting.audience(self.store, reply)['replies_to_us'])
+
+    def test_the_detector_floor_never_removes_a_citizen(self):
+        registry(self.store, 'loud_resident', 70)
+        self.assertEqual(targeting.skip_reason(self.store, self.post('c3', 'loud_resident', 900)), '')
+        registry(self.store, 'loud_newcomer', 70)
+        self.assertEqual(targeting.skip_reason(self.store, self.post('n3', 'loud_newcomer', 9000)), 'targeting:bot_author')
+
+    def test_only_a_rewarded_responder_unlocks_a_second_reply(self):
+        now = time.time()
+        registry(self.store, 'chattybot', 0, status='suspected_bot')
+        intent(self.store, 'a1', 't1', author='chattybot', at=now - 60)
+        responded(self.store, 'chattybot', at=now - 30)
+        self.assertEqual(targeting.cap_reason(self.store, target_author='chattybot', now=now), 'author_not_responding')
+        self.post('seed', 'resident2', 400, created_at=now - 5000)
+        intent(self.store, 'a1', 't2', author='resident2', at=now - 60)
+        responded(self.store, 'resident2', at=now - 30)
+        self.assertEqual(targeting.cap_reason(self.store, target_author='resident2', now=now), '')
