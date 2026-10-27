@@ -26,7 +26,7 @@ from ctn.llm import DeepSeekClient,ReplyGenerator
 from ctn.models import Post,Side
 from ctn.persona import PersonaRegistry,PersonaRouter
 from ctn.persona.catalog import GROUP_ALLOCATION,load_catalog,digest,render_preview
-from ctn.persona.router import preferred_group
+from ctn.persona.router import catalog_match, preferred_group
 from ctn.pipeline.brain import JevLlmBrain
 from ctn.pipeline.loop import BotLoop,CycleReport
 from ctn.storage import StateStore
@@ -170,6 +170,21 @@ class CatalogAndRoutingTests(unittest.TestCase):
         self.assertEqual(len({p.account_id for p in extra}),3)
         self.assertNotIn('fresh_yes_001',{p.account_id for p in extra})
         self.assertEqual(router.additional_candidates({},'unrelated wording','fresh_yes_001',3),[])
+
+    def test_catalog_match_makes_the_silent_stall_visible(self):
+        """A stale active catalog refuses every write without raising; the heartbeat check must show it."""
+        router=bound_router(self.store,('yes_001',))
+        status=catalog_match(self.store,router.registry)
+        self.assertTrue(status['match'])
+        self.assertEqual(status['loaded'],router.registry.catalog_hash)
+        self.assertEqual(status['active'],router.registry.catalog_hash)
+        self.store.set_policy('active_persona_catalog','a-stale-hash')
+        stale=catalog_match(self.store,router.registry)
+        self.assertFalse(stale['match'])
+        self.assertEqual(stale['active'],'a-stale-hash')
+        class _NotLoaded:
+            catalog_hash=''
+        self.assertTrue(catalog_match(self.store,_NotLoaded())['match'])
 
     def test_catalog_version_mismatch_blocks_new_writes_and_keeps_state(self):
         router=bound_router(self.store,('yes_001',))

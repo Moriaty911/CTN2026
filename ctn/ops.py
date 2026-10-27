@@ -355,6 +355,7 @@ def main(argv=None):
             try:fleet=json.loads((settings.state_dir/'heartbeat').read_text())
             except (OSError,ValueError):fleet={}
             result['fleet']={'heartbeat_at':fleet.get('timestamp'),'db_lock':fleet.get('db_lock'),
+                             'persona_catalog':fleet.get('persona_catalog'),
                              'workers':{k:{f:v.get(f) for f in ('last_duration_s','max_duration_s','error')} for k,v in (fleet.get('workers') or {}).items()}}
         print(json.dumps(result,ensure_ascii=False,indent=2));return 0
     except ValueError as exc:

@@ -18,6 +18,7 @@ from .jev import JevClient,JevWorkflow,JevPostflightChecker,JevEvaluator,JevPack
 from .llm import DeepSeekClient,ReplyGenerator
 from .models import Side
 from .persona import PersonaRouter,PersonaRegistry
+from .persona.router import catalog_match
 from .pipeline.brain import JevLlmBrain
 from .pipeline.loop import BotLoop
 from .moderation.events import UnavailableModerationSource,consume_events,probe_report_targets
@@ -110,6 +111,7 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         now=time.time()
         import shutil
         disk=shutil.disk_usage(settings.state_dir)
+        catalog=catalog_match(store,registry)
         payload={**runtime,'alive':running,'timestamp':now,'mode':mode,'workers':progress,'error':error,
             'tasks':counts,
             'side':settings.side.value,'report_mode':settings.report_mode,'active_accounts':sum(not s.is_disabled() for s in store.account_states_for(store.persona_bindings().values()).values()),
@@ -121,7 +123,13 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             'business_stalled':bool((counts.get('queued',0) or runtime['reply_slots'].get('pending',0)) and process_replies and
                 now-(store.get_counter('business_progress_ms')/1000 or started_at)>300),
             'last_business_progress_at':store.get_counter('business_progress_ms')/1000 or started_at,
-            'requests':actuator.ledger.snapshot(),'db_lock':store.lock_stats()}
+            'requests':actuator.ledger.snapshot(),'db_lock':store.lock_stats(),
+            'persona_catalog':catalog}
+        if not catalog['match']:
+            # Deduplicated per hour by event_key; the fleet keeps running but every write is refused.
+            store.notify_discord(f"catalog_mismatch:{int(now//3600)}",{'type':'alert','kind':'persona_catalog_mismatch',
+                'loaded':catalog['loaded'][:12],'active':catalog['active'][:12],
+                'detail':'every persona-bound write is being refused; run ops persona apply'})
         heartbeat.parent.mkdir(parents=True,exist_ok=True)
         tmp=heartbeat.with_suffix('.tmp')
         tmp.write_text(json.dumps(payload),encoding='utf-8');tmp.chmod(0o600);tmp.replace(heartbeat)
