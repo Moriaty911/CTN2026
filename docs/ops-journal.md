@@ -1,3 +1,13 @@
+## 2026-10-28 09:15 再补 1 个号（owen_farrow）
+
+- 现象：`nabil_avery`（law_policy）在 10-28 01:00 被封，active 49 / suspended 36；它的 `account_states.mode` 还是 active（同一个残留问题）。
+- 处理：
+  1. `ops account nabil_avery --mode standby` 对齐状态。
+  2. 注册 `owen_farrow`（人设 yes_105，law_policy 组，平台 id 14468），`CTN_BOT_ACCOUNTS=95`（未删除 85）。
+  3. 为免首帖再等 40-60 分钟，先把 `initialise_spread.window_seconds` 临时设 900，重启后新号排在 +4 分钟，随后立即恢复 3600。
+- 验证：`persona_catalog.match=true`、worker 无 error；首帖 09:00:21 发出（post 701323），`initialise_status='ready'`，随后 1 赞 1 回复均成功。现在 active 50 / suspended 36（全部 standby），15 分钟产出 137 赞 / 4 帖 / 31 回复（约 124 回复/小时）。
+- 待办：无。注意 `initialise_spread` 已回到 3600，以后新号仍按哈希偏移散布。
+
 ## 2026-10-27 17:55 补 1 个号到 50
 
 - 现象：`managed_accounts` active 49 / suspended 35，差 1 个。另外 `account_states` 里 `lena_armitage` 虽然已 suspended，mode 还停在 active（封号后没有置 standby 的残留）。
