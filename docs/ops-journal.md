@@ -1,3 +1,10 @@
+## 2026-10-27 17:35 停写 6 小时：人设目录失配
+
+- 现象：`publications` 最后一条是悉尼 10:53，之后 6 小时零发帖、零回复、零点赞；`action_intents` 这 6 小时一条都没有。容器全部 healthy、worker 全无 error、`business_stalled` 也没有触发。`/logs/actions.jsonl` 里有 11,159 条 `"detail":"persona_catalog_mismatch","status":"blocked"`。
+- 判断：14:05 那次把 100 人设扩到 120 并重建镜像，镜像里的人设目录 hash 是 `d6f957…`，而数据库 `active_persona_catalog` 还指向 100 人版 `2e2f56…`。`ctn/persona/router.py:96` 的闸门要求两者相等，否则拒绝一切带人设的写操作（发帖/回复/点赞/举报）。部署时只重启了容器，漏跑 `ops persona apply`。同类问题 10-26 也发生过一次（停了 3 小时）。
+- 处理：`ops persona apply`（active 更新为 `d6f957…`），约 90 秒后写入恢复。随后加了监控：`ctn/persona/router.py` 新增 `catalog_match()`，心跳带 `persona_catalog{loaded,active,match}`，失配时每小时发一次 Discord 告警，`ops status` 的 `fleet` 段也能看到。999 个测试通过，commit `8963a7e`，重建部署后 `match=true`、worker 无 error、5 分钟内 43 赞 12 回复 2 举报。
+- 待办：把“部署后确认 `ops status` 的 `persona_catalog.match`”写进 runbook 的部署检查清单；观察今天剩余时段产量是否回到每小时 ~500 分。
+
 ## 2026-10-27 14:05 人设池 100 → 120
 
 - 现象：10-27 累计被封 34 个号（75 个注册号），人设池只剩 16 个未绑定。按当天 9 个/天的速度，两天内会用完，届时新号只能复用已封人设（同名同职业再次出现，容易被认出是同一队在补位）。
