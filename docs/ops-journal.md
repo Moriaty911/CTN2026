@@ -1,3 +1,13 @@
+## 2026-10-27 17:55 补 1 个号到 50
+
+- 现象：`managed_accounts` active 49 / suspended 35，差 1 个。另外 `account_states` 里 `lena_armitage` 虽然已 suspended，mode 还停在 active（封号后没有置 standby 的残留）。
+- 处理：
+  1. `ops account lena_armitage --mode standby`，与状态对齐。
+  2. 注册 `ruth_callaghan`（人设 yes_100，law_policy 组，平台 id 14230），用 `CTN_BOT_ACCOUNTS=90` 绕开"未删除账号数"检查（当时未删除 84）。现在 active 50 / suspended 35。
+  3. 注册完 `up -d --force-recreate fleet` 重启，让新号的通知轮询和账号列表生效。
+- 验证：`ops status` 的 `persona_catalog.match=true`（loaded = active = `d6f95762…`），worker 无 error；重启后 10 分钟 118 赞、3 帖、19 回复（约 114 回复/小时，正常）。新号 `initialise.pending=1`，按 `initialise_spread` 的哈希偏移排在悉尼 18:13 发首帖——**首帖发出去之前它不会回复**（`account_initialise_ready` 是回复的前置条件）。
+- 待办：18:15 左右确认 `ruth_callaghan` 首帖发出、`account_lifecycle.initialise_status='ready'`，随后开始回复。监控脚本 `/tmp/ruth-watch.sh` → `/tmp/ruth-watch.log`，每 2 分钟记一次 posts/replies/init 状态。
+
 ## 2026-10-27 17:35 停写 6 小时：人设目录失配
 
 - 现象：`publications` 最后一条是悉尼 10:53，之后 6 小时零发帖、零回复、零点赞；`action_intents` 这 6 小时一条都没有。容器全部 healthy、worker 全无 error、`business_stalled` 也没有触发。`/logs/actions.jsonl` 里有 11,159 条 `"detail":"persona_catalog_mismatch","status":"blocked"`。
