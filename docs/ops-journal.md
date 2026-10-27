@@ -1,3 +1,13 @@
+## 2026-10-28 09:50 巡检 + 补 1 个号（grace_ollerenshaw）
+
+- 现象：巡检时发现 `ravi_almeida_nh`（healthcare_support）在 09:24:55 被封，active 掉到 49，且它的 `account_states.mode` 又是 active（第三次同样的残留）。
+- 处理：
+  1. `ops account ravi_almeida_nh --mode standby`。
+  2. 注册 `grace_ollerenshaw`（人设 yes_117，healthcare_support 组，平台 id 14505），`CTN_BOT_ACCOUNTS=95`。
+  3. 同样临时把 `initialise_spread.window_seconds` 设 900，让它插队发首帖，随后恢复 3600。注意：绑定的生效不需要重启（`warmup_step` 每次 `registry.attach(store)`），新号在旧容器里就发了首帖（09:26:25，post 703093）。
+- 验证：active 50 / suspended 37，`account_states` 全部对齐（active 50 / standby 37）；`persona_catalog.match=true`；worker 无 error；**最近 60 分钟 50 个 active 号全都有动作，零静默**；近 4 小时每小时 4-8 帖、73-86 回复、283-437 赞（09 点为止 3 帖 51 回复 362 赞）。失败仅 2 条，都是良性：`client shutting down`（重启残留）、`post not found`（目标被删）。
+- 待办：`account_states.mode` 残留已连续三次出现（nabil_avery、ravi_almeida_nh 等），建议在封号检测时顺手写 standby——目前是人工补；等下次改代码时一起做。
+
 ## 2026-10-28 09:15 再补 1 个号（owen_farrow）
 
 - 现象：`nabil_avery`（law_policy）在 10-28 01:00 被封，active 49 / suspended 36；它的 `account_states.mode` 还是 active（同一个残留问题）。
