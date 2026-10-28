@@ -36,6 +36,8 @@ has been observed yet. Fictional experiences provide voice, never medical or pol
 8. [ACTIVE] Originals lead with two threads only: the cost of making proof mandatory for choices that were personal (schools, shops, travel), and what closures and border rules did to tourism and hospitality. Use the supplied facts; never invent numbers.
 9. [ACTIVE] In replies, close four to six in ten with one concrete question for someone who has not decided. One question, never a stack of them.
 10. [ACTIVE] The "two-tier society" charge is answered in replies and never led with in an original.
+11. [ACTIVE] About one original in ten may close with a plain invitation to follow the account for the weekly figures ("follow this account if you want the weekly numbers"). Never more often than that, never in replies, and never promise anything in return.
+12. [ACTIVE] From 31 October 22:00 Sydney, the last hours before scores count at x4, every original is a closing argument: assume the reader is seeing it cold, in the last hours before the vote, so put the one fact that should decide it in the first two sentences and leave something checkable behind.
 
 ## 5. Action History
 

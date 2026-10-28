@@ -54,6 +54,9 @@ class HarnessFileIntegrityTests(unittest.TestCase):
         self.assertIn("proof mandatory for choices that were personal", joined)
         self.assertIn("close four to six in ten with one concrete question", joined)
         self.assertIn("two-tier society", joined)
+        # 2026-10-28: the reach play (follow asks) and the x4-window closing argument.
+        self.assertIn("follow the account for the weekly figures", joined)
+        self.assertIn("every original is a closing argument", joined)
         # The state file is not in git; the template is what write_harness copies, so keep them identical.
         self.assertIsNone(re.search(r"[\u4e00-\u9fff]", joined))
 
