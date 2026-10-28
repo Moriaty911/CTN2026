@@ -50,8 +50,20 @@ async def verified_step(
         for row in rows or []:
             if not isinstance(row, dict):
                 continue
-            # `/accounts/{id}/posts` returns the text truncated to nothing: hydrate the ones we would queue.
-            if not str(row.get('text') or '').strip() or row.get('text_complete') is False:
+            original = str(row.get('repost_of_post_id') or '')
+            if original and (str(row.get('kind') or '') == 'repost' or not str(row.get('text') or '').strip()):
+                # A repost carries no text of its own: the content, and the author worth answering, is the original.
+                # Recording that a verified account reposted a post is also how we learn it amplified ours.
+                full = await actuator.get_post(original)
+                if isinstance(full, dict) and full.get('post_id'):
+                    row = full
+                    details += 1
+                    try:
+                        store.set_policy('verified_repost:' + original, ts)
+                    except Exception:
+                        pass
+            elif not str(row.get('text') or '').strip() or row.get('text_complete') is False:
+                # `/accounts/{id}/posts` returns the id and timestamps with an empty text field.
                 full = await actuator.get_post(str(row.get('post_id') or ''))
                 if isinstance(full, dict) and full.get('post_id'):
                     row = {**row, **full}

@@ -27,6 +27,9 @@ class FakeActuator:
 
     async def get_post(self, post_id):
         self.details.append(post_id)
+        if post_id.startswith('orig'):
+            return {'post_id': post_id, 'text': f'Original text of {post_id}?', 'author': 'citizen', 'author_id': 77,
+                    'created_at': time.time() - 900}
         return {'post_id': post_id, 'text': f'Text of {post_id}?', 'author': 'mayor', 'author_id': 3,
                 'created_at': time.time() - 60}
 
@@ -47,6 +50,17 @@ class VerifiedStepTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sorted(actuator.details), ['p1', 'p2'], 'the listing has no text: each post is read once')
         self.assertIn('Text of p1', self.store.get_observed_post('p1')['text'])
         self.assertTrue(self.tasks('p1'), 'a fresh verified post must be queued for a reply')
+
+    async def test_a_repost_is_read_through_to_its_original(self):
+        repost = {'post_id': 'r1', 'author': 'mayor', 'kind': 'repost', 'repost_of_post_id': 'orig1', 'text': ''}
+        actuator = FakeActuator({'mayor': [repost]})
+        out = await bluev.verified_step(actuator, self.store, accounts=['mayor'])
+        self.assertEqual(out['hydrated'], 1)
+        stored = self.store.get_observed_post('orig1')
+        self.assertIsNotNone(stored, 'the original must be stored, not the empty repost')
+        self.assertIn('Original text', stored['text'])
+        self.assertEqual(self.store.policy('verified_repost:orig1', 0) > 0, True,
+                         'a verified repost is a signal we want to keep')
 
     async def test_rows_that_already_carry_text_are_not_read_again(self):
         actuator = FakeActuator({'mayor': [row('p3', 'mayor', text='Where exactly does the pass apply?')]})
