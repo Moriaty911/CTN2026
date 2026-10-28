@@ -163,6 +163,40 @@ class CapTests(unittest.TestCase):
         self.assertEqual(chosen.account_id, router.registry.get('yes_002').account_id)
 
 
+class VerifiedCapTests(unittest.TestCase):
+    """Verified accounts answer, and they carry the argument: three replies a day, ten minutes apart (2026-10-28)."""
+
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+        self.store.register_verified_accounts(['mayor'], status='verified_npc')
+
+    def cap(self, author, *, at=None):
+        return targeting.cap_reason(self.store, target_author=author, now=at, include_account=False)
+
+    def test_citizen_keeps_two_a_day_and_thirty_minutes(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='citizen', at=now - 60)
+        self.assertEqual(self.cap('citizen', at=now), 'author_min_gap')
+        intent(self.store, 'a2', 't2', author='citizen', at=now - 3600)
+        self.assertEqual(self.cap('citizen', at=now), 'author_daily_cap')
+
+    def test_verified_author_gets_three_replies(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='mayor', at=now - 7200)
+        intent(self.store, 'a2', 't2', author='mayor', at=now - 7100)
+        responded(self.store, 'mayor', at=now - 7050)
+        self.assertEqual(self.cap('mayor', at=now), '')
+        intent(self.store, 'a3', 't3', author='mayor', at=now - 7000)
+        self.assertEqual(self.cap('mayor', at=now), 'author_daily_cap')
+
+    def test_verified_gap_is_ten_minutes_not_thirty(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='mayor', at=now - 700)
+        responded(self.store, 'mayor', at=now - 690)
+        self.assertEqual(self.cap('mayor', at=now), '')
+        self.assertEqual(self.cap('mayor', at=now - 500), 'author_min_gap')
+
+
 class ThreadGapTests(unittest.TestCase):
     """Several of our accounts in one thread within minutes is the signal a coordination detector looks for."""
 

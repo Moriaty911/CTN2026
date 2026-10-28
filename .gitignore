@@ -206,3 +206,10 @@ ctn-accounts-*.md
 docs/intel/
 leaderboard.png
 screenshot_web.png
+
+# Competition material handed over by the operator: the team log contains a team code, so it stays out of git
+# (rule 5.6 - a key in git history counts as leaked).
+chattpg-*.csv
+rank.txt
+*.png
+!docs/**/*.png

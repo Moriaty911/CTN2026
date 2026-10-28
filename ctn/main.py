@@ -215,6 +215,10 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         tasks.append(asyncio.create_task(worker('performance',performance.step,30)))
         from .pipeline.refresh import refresh_tick
         tasks.append(asyncio.create_task(worker('refresh',lambda:refresh_tick(actuator,store),5)))
+        if mode!='mock':
+            # Eleven verified accounts, read directly: the feed crawl otherwise reaches them too late (58 expired tasks).
+            from .pipeline.bluev import verified_step
+            tasks.append(asyncio.create_task(worker('verified',lambda:verified_step(actuator,store),150)))
         if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),30)))
         if mode!='mock':
             # In-universe news -> attributed, verified claims (policies/news-v1.json). Extraction needs the DeepSeek key.
