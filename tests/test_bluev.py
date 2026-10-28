@@ -7,7 +7,7 @@ from ctn.pipeline import bluev
 from ctn.storage import StateStore
 
 
-def row(post_id, author, *, text='A question about where the pass applies?', created_at=None):
+def row(post_id, author, *, text='', created_at=None):
     return {'post_id': post_id, 'author': author, 'author_id': 3, 'text': text,
             'created_at': time.time() - 60 if created_at is None else created_at}
 
@@ -17,12 +17,18 @@ class FakeActuator:
         self.pages = pages
         self.error = error or {}
         self.calls = []
+        self.details = []
 
     async def get_account_posts(self, target, *, limit=8):
         self.calls.append((target, limit))
         if target in self.error:
             raise self.error[target]
         return self.pages.get(target, [])
+
+    async def get_post(self, post_id):
+        self.details.append(post_id)
+        return {'post_id': post_id, 'text': f'Text of {post_id}?', 'author': 'mayor', 'author_id': 3,
+                'created_at': time.time() - 60}
 
 
 class VerifiedStepTests(unittest.IsolatedAsyncioTestCase):
@@ -37,9 +43,16 @@ class VerifiedStepTests(unittest.IsolatedAsyncioTestCase):
     async def test_new_posts_are_stored_and_queued(self):
         actuator = FakeActuator({'mayor': [row('p1', 'mayor'), row('p2', 'mayor')]})
         out = await bluev.verified_step(actuator, self.store, accounts=['mayor'])
-        self.assertEqual(out, {'accounts': 1, 'seen': 2, 'queued': 2, 'failed': 0})
-        self.assertIsNotNone(self.store.get_observed_post('p1'))
+        self.assertEqual(out, {'accounts': 1, 'seen': 2, 'queued': 2, 'failed': 0, 'hydrated': 2})
+        self.assertEqual(sorted(actuator.details), ['p1', 'p2'], 'the listing has no text: each post is read once')
+        self.assertIn('Text of p1', self.store.get_observed_post('p1')['text'])
         self.assertTrue(self.tasks('p1'), 'a fresh verified post must be queued for a reply')
+
+    async def test_rows_that_already_carry_text_are_not_read_again(self):
+        actuator = FakeActuator({'mayor': [row('p3', 'mayor', text='Where exactly does the pass apply?')]})
+        out = await bluev.verified_step(actuator, self.store, accounts=['mayor'])
+        self.assertEqual(out['hydrated'], 0)
+        self.assertEqual(actuator.details, [])
 
     async def test_second_pass_queues_nothing_new(self):
         actuator = FakeActuator({'mayor': [row('p1', 'mayor')]})

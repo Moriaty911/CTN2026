@@ -39,7 +39,7 @@ async def verified_step(
     """One pass over the verified timelines. Returns counts for the worker log."""
     ts = time.time() if now is None else float(now)
     names = list(accounts) if accounts is not None else verified_accounts(store)
-    seen = queued = failed = 0
+    seen = queued = failed = details = 0
     for name in names:
         try:
             rows = await actuator.get_account_posts(name, limit=limit)
@@ -50,6 +50,12 @@ async def verified_step(
         for row in rows or []:
             if not isinstance(row, dict):
                 continue
+            # `/accounts/{id}/posts` returns the text truncated to nothing: hydrate the ones we would queue.
+            if not str(row.get('text') or '').strip() or row.get('text_complete') is False:
+                full = await actuator.get_post(str(row.get('post_id') or ''))
+                if isinstance(full, dict) and full.get('post_id'):
+                    row = {**row, **full}
+                    details += 1
             post = post_from_dict(row)
             if post is None:
                 continue
@@ -62,4 +68,4 @@ async def verified_step(
             if is_new:
                 queued += 1
         await sleep(0)  # let the reply/comments workers run between accounts
-    return {'accounts': len(names), 'seen': seen, 'queued': queued, 'failed': failed}
+    return {'accounts': len(names), 'seen': seen, 'queued': queued, 'failed': failed, 'hydrated': details}

@@ -1,3 +1,18 @@
+## 2026-10-28 13:45 蓝V watcher 补上正文（列表接口返回空文本）
+
+- 现象：`verified` worker 部署后 /logs/system.jsonl 有 metric（5.2 秒一轮），但 15 分钟内没有一条蓝V 新帖入库。
+  直接在容器里调 `get_account_posts('DrAmaraSingh', limit=3)`：返回 3 行，`text` 全是空字符串。
+- 判断：`/accounts/{id}/posts` 只给 id 和时间，正文要单条读。这正是 `preflight:empty_post_text` 那 220 次跳过的来源——
+  蓝V 的帖子进了库但没有正文，永远选不中。watcher 不补正文等于白跑。
+- 处理：`ctn/pipeline/bluev.py` 对正文为空（或 `text_complete is False`）的行调用 `actuator.get_post` 补全后再入库，
+  返回值加 `hydrated` 计数；两条测试覆盖（列表无正文要补、已有正文不重复读）。1009 测试通过，提交并重新部署。
+- 另外两件事：① 13:10 我做 `ops backup --slim --gzip` 时把 fleet 容器 OOM 杀了（容器 mem_limit 1g，6.2GB 库的
+  VACUUM 吃满内存，`RestartCount=1`，约 1 分钟无写入）。以后备份在独立容器里跑：`docker run --rm --memory 4g
+  --user 10001:10001 -v $PWD/state:/state ctn2026/fleet:local python -m ctn.ops backup ... --gzip`，不要用 `--slim`
+  （VACUUM 是内存杀手）。已完成的那次备份 `/state/backup-20261028-1325.sqlite3.gz` 1.5GB，用的是独立容器。
+  ② 顺带确认：`obs backup` 用 `--slim` 生成的库在 6GB 规模下会 OOM，不再使用。
+- 待办 / 待用户决定：48 小时后看蓝V 回复数/天（目标 5–8）、他们回我们的比例（13.6%）、我们回复的互动。
+
 ## 2026-10-28 13:10 蓝V 优先：权重 6→16、每天 3 条、10 分钟间隔，新增 verified worker
 
 - 现象：平台 verified 号 11 个。我们读过它们 579 条内容（近 7 天 299 条），只回过 22 条（近 7 天 13 条，约 1.9 条/天）。
