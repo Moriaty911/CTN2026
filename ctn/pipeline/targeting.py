@@ -173,10 +173,16 @@ def thread_depth(store, post, limit=4):
     return depth
 
 
+# Accounts registered before the competition opened are citizens; everything above is a player.
+CITIZEN_MAX_ID = 2343
+
+
 def deep_thread_reason(store, post, now=None):
     """Skip targets deep in a thread (NPCs rarely reply there), unless a citizen is answering us directly."""
     rules = POLICY['thread_depth']
-    if thread_depth(store, post) <= int(rules['max_target_depth']):
+    citizen = 1 <= int(post.get('author_id') or 0) <= CITIZEN_MAX_ID
+    limit = int(rules.get('citizen_max_target_depth', rules['max_target_depth'])) if citizen else int(rules['max_target_depth'])
+    if thread_depth(store, post) <= limit:
         return ''
     if counted_reply_to_us(store, post):
         ts = time.time() if now is None else now

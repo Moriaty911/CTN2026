@@ -111,6 +111,31 @@ class OveruseTests(unittest.TestCase):
         self.assertGreaterEqual(stats['overused']["i'd want"], 0.5)
 
 
+class UnansweredDoubtTests(unittest.TestCase):
+    """2026-10-29: towards-neither outran towards-YES 29:25, mostly replies that asked back instead of answering."""
+
+    def test_a_restated_doubt_gets_one_reason_clause(self):
+        target = 'Fine, but what about the family that cannot get the paperwork in time?'
+        self.assertTrue(phrasing.unanswered_doubt(target, 'Would you accept a paper route at the door?'))
+        self.assertEqual(
+            phrasing.unanswered_doubt(target, 'Because the paper route exists on the same day, the queue is the barrier.'),
+            '')
+
+    def test_reason_clause_is_recognised_in_its_common_shapes(self):
+        target = 'Still not convinced.'
+        for reply in ('Which is why the list has to be published first.',
+                      "That's why the paper option matters.",
+                      'It comes down to who checks the code at the door.'):
+            self.assertEqual(phrasing.unanswered_doubt(target, reply), '', reply)
+
+    def test_posts_without_a_doubt_are_left_alone(self):
+        self.assertEqual(phrasing.unanswered_doubt('The hospital numbers were bad last time.', 'What do you think?'), '')
+        self.assertEqual(phrasing.unanswered_doubt('', ''), '')
+
+    def test_a_plain_statement_is_not_treated_as_a_doubt(self):
+        self.assertEqual(phrasing.unanswered_doubt('I voted yes last time too.', 'Same here, that is why I am a yes again.'), '')
+
+
 if __name__ == '__main__':
     unittest.main()
 

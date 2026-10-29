@@ -435,6 +435,19 @@ class ThreadDepthAndAuthorGapTests(unittest.TestCase):
         intent(self.store, 'ours', 'a', root='r0'); intent(self.store, 'ours', 'b', root='r0')
         self.assertEqual(targeting.deep_thread_reason(self.store, self.post('r3')), 'targeting:deep_thread')
 
+    def test_citizens_may_be_answered_one_level_deeper_than_players(self):
+        now = time.time()
+        rows = [('c0', 'npc1', None, None, 1500), ('c1', 'npc2', 'c0', 'c0', 1500), ('c2', 'npc3', 'c1', 'c0', 1500),
+                ('c3', 'npc4', 'c2', 'c0', 1500), ('c4', 'npc5', 'c3', 'c0', 1500), ('p3', 'player', 'c2', 'c0', 9000)]
+        for pid, author, parent, root, author_id in rows:
+            self.store.upsert_observed_post({'post_id': pid, 'author': author, 'author_id': author_id, 'text': 'Text ' + pid,
+                                             'created_at': now, 'parent_id': parent, 'root_post_id': root})
+        # A citizen at depth 3 is still worth answering; depth 4 is not.
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('c3')), '')
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('c4')), 'targeting:deep_thread')
+        # Another team's account at the same depth keeps the original limit.
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('p3')), 'targeting:deep_thread')
+
     def test_deeper_targets_rank_lower(self):
         p = [targeting.audience(self.store, self.post(x))['priority'] for x in ('r0', 'r1')]
         self.assertGreater(p[0], p[1])

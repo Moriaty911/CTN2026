@@ -114,6 +114,23 @@ def repetition_reason(text, recent, policy=POLICY):
     return overuse_reason(text, recent, policy)
 
 
+# A citizen restating an objection and getting another question back is the loop behind 29 changes towards
+# neither against 25 towards YES in the three days to 2026-10-29.
+_DOUBT = re.compile(r"\b(but|still|what about|how would|who checks|who decides|why should|"
+                    r"doesn'?t|don'?t|won'?t|can'?t|cannot|not sure|unsure)\b", re.I)
+_REASON = re.compile(r"\b(because|which is why|that is why|that'?s why|the reason|so that|"
+                     r"means that|comes down to|the trade-?off is)\b", re.I)
+
+
+def unanswered_doubt(target_text, reply_text):
+    """'' when the reply gives a reason, else the feedback to hand back for one redraft."""
+    if not _DOUBT.search(str(target_text or '')):
+        return ''
+    if _REASON.search(str(reply_text or '')):
+        return ''
+    return 'doubt_left_unanswered: they restated a doubt, so answer it in one sentence with a reason (because / which is why)'
+
+
 def stats(store, n=50, policy=POLICY):
     """Share of recent publications using stock openings or a vote declaration, and the most repeated openings."""
     texts = recent_texts(store, {**policy, 'recent_window': n})

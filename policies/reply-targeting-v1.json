@@ -66,13 +66,14 @@
     "trending_bonus": 30
   },
   "thread_depth": {
-    "notes": "Organiser note 2026-10-19: NPCs are less likely to reply in deep threads. Depth 0 = top-level post. Targets deeper than max_target_depth are skipped, except a citizen replying directly to us, where we answer at most followups_when_replying_to_us times per thread per day.",
+    "notes": "Organiser note 2026-10-19: NPCs are less likely to reply in deep threads. Depth 0 = top-level post. Targets deeper than max_target_depth are skipped, except a citizen replying directly to us, where we answer at most followups_when_replying_to_us times per thread per day. 2026-10-29: citizens get depth 3 (citizen_max_target_depth) because 3,021 of 6,834 citizen posts seen in 24 h were dropped for depth alone, and the caps below still bound our presence in any one thread. Other teams' accounts stay at 2: their deep threads are where our crowding is most visible.",
     "factors": [
       1.0,
       0.8,
       0.4
     ],
     "max_target_depth": 2,
+    "citizen_max_target_depth": 3,
     "followups_when_replying_to_us": 2
   },
   "citizens": {

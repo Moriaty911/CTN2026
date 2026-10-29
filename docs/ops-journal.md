@@ -1,3 +1,25 @@
+## 2026-10-29 11:30 收口内容 + 市民回复量（A/D/E/F 之后的第二批）
+
+- 现象：近 3 天改变看法 toward 25 / away 7 / **neither 29**（停在"不站边"的比转向我们的还多）。近 24 小时观察到市民帖
+  6,834 条 / 1,028 个作者，其中 **3,021 条（44%）因 `targeting:deep_thread` 被跳过**；成功市民回复 1,522 条；
+  近 7 天回过我们的 615 个市民里，我们只回过 228 人（37%）；市民回我们 237 条/天（15.6%）。
+  `cold_likely_bot` 跳过的 13,627 条经查**全部**是别队的号，没有误伤市民，所以那条规则不动。
+- 判断：两件事各自有独立原因——(1) 供给被自己的深度规则丢掉近一半，且"回过我们的人"的下一条我们看不到，只能等首页爬虫撞见
+  （`opportunity_expired` 438 条/天）；(2) 内容几乎全是"提问 / 共情"，没有"承认反对理由 → 给机制 → 说个人理由"的收口动作，
+  所以市民停止相信对面，但也没有走到 YES。
+- 处理：
+  1. `policies/reply-targeting-v1.json`：`thread_depth.citizen_max_target_depth=3`（只对 `author_id ≤ 2343`；别队仍 2），
+     防堆叠三道闸不动（每帖每天 2 条、同帖 30 分钟、每作者每天 2 条）。`ctn/pipeline/targeting.py` 加 `CITIZEN_MAX_ID` 与按作者分类的深度上限。
+  2. 新 worker `citizen_sweep`（`ctn/pipeline/sweep.py`，300 秒一轮，每轮 100 人、轮转覆盖）：直接读"近 7 天回过我们的市民"的时间线，
+     新帖立即入队（约 20 请求/分钟，读桶 300/min 的 7%）。`ctn/main.py` 注册；`tests/test_sweep.py` 6 个测试。
+  3. 素材库加 4 张收口卡 `A024`–`A027`（成本 / 豁免 / 谁检查 / 数据）＋ 2 个 style `S032`/`S033`；`scripts/check_rag_corpus.py --write-preview` 重新生成预览。
+  4. `harness.md` 与 `state/harness.md` 指令 13：每 3 篇原创至少 1 篇收口（点名反对理由 → 给机制 → 说个人理由），第一人称、无 CTA
+     （11/1 00:00 起竞选静默期，个人观点可以、动员不行）。
+  5. `ctn/phrasing.py` 新增 `unanswered_doubt()`：市民重述疑虑（but / still / what about / won't …）而我们的稿子没有理由句
+     （because / which is why …）时，第一次退回重写一次，第二次仍不合格就照发（不因为格式丢掉回复）。`ctn/pipeline/brain.py` 接入，只对市民生效。
+- 验证：`docker run --rm -v /tmp/verify-src:/src ctn2026/verify:local python -m unittest discover -s tests -t .` → **1,022 个测试通过**。
+- 待办：24 小时后看 `deep_thread` 跳过数、市民回复/天、`opportunity_expired`、市民回我们的比例，以及你贴的 CSV 里 toward : neither（现 25:29）。
+
 ## 2026-10-28 13:45 蓝V watcher 补上正文（列表接口返回空文本）
 
 - 现象：`verified` worker 部署后 /logs/system.jsonl 有 metric（5.2 秒一轮），但 15 分钟内没有一条蓝V 新帖入库。

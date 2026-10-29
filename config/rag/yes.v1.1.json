@@ -1538,6 +1538,133 @@
         "R037",
         "R039"
       ]
+    },
+    {
+      "id": "A024",
+      "kind": "argument",
+      "title_zh": "回答成本：没人给出数字，所以先把合规路径写窄",
+      "position": "yes",
+      "claim": "The honest answer on cost is that no figure has been published, and the businesses most exposed are the ones on the tourist routes; that argues for a narrow, published compliance route rather than for pretending the cost is zero.",
+      "reasoning": "Name the cost instead of denying it. Point at what can be limited by design (which settings, which hours, who checks), and say plainly that a cost estimate does not exist yet. Do not claim a net benefit for small business.",
+      "topics": [
+        "cost",
+        "business",
+        "tourism",
+        "implementation"
+      ],
+      "purposes": [
+        "P02",
+        "P03"
+      ],
+      "fact_ids": [
+        "F009",
+        "F014",
+        "F019",
+        "F030"
+      ],
+      "unknown_ids": [
+        "U002",
+        "U015"
+      ],
+      "fair_objection": "A new step at the door costs small businesses money and staff time they do not have.",
+      "response_boundary": "No cost estimate for businesses has been published (U002); the claim is about how to limit the burden, not that the burden is small.",
+      "origin": "new",
+      "raw_passage_ids": []
+    },
+    {
+      "id": "A025",
+      "kind": "argument",
+      "title_zh": "回答豁免：细则应该在投票前写下来",
+      "position": "yes",
+      "claim": "The exemption list is the part that has to be written before the vote, not after: who qualifies, how it is shown, and what happens when the paperwork is missing on the day.",
+      "reasoning": "Treat exemptions as the test of the policy rather than a detail. Give the mechanism (a code on the pass, a paper route, a same-day appeal) and concede that the list itself is unpublished.",
+      "topics": [
+        "exemptions",
+        "disability",
+        "access",
+        "implementation"
+      ],
+      "purposes": [
+        "P02",
+        "P03",
+        "P07"
+      ],
+      "fact_ids": [
+        "F001",
+        "F005",
+        "F011"
+      ],
+      "unknown_ids": [
+        "U004",
+        "U009",
+        "U013"
+      ],
+      "fair_objection": "A requirement with unclear exemptions leaves the people who cannot be vaccinated stuck at the door.",
+      "response_boundary": "The exemption list has not been published (U004); this is a demand about how it should be written, not a description of settled policy.",
+      "origin": "new",
+      "raw_passage_ids": []
+    },
+    {
+      "id": "A026",
+      "kind": "argument",
+      "title_zh": "回答执行：谁检查，决定这套规则能不能站住",
+      "position": "yes",
+      "claim": "Who checks is the detail that decides whether this works: a school gate and a bottle shop should not be asking the same question, and a shop assistant should not be reading medical documents.",
+      "reasoning": "Split enforcement by setting instead of defending a blanket rule. Concede that a retail worker is not a health official, and say what the alternative is (tiered settings, a code rather than paperwork).",
+      "topics": [
+        "enforcement",
+        "retail",
+        "schools",
+        "implementation"
+      ],
+      "purposes": [
+        "P02",
+        "P03"
+      ],
+      "fact_ids": [
+        "F001",
+        "F015",
+        "F019"
+      ],
+      "unknown_ids": [
+        "U009",
+        "U010",
+        "U012"
+      ],
+      "fair_objection": "Outsourcing civil enforcement to shop staff turns a policy problem into an argument at the counter.",
+      "response_boundary": "No enforcement plan has been published (U009); the claim is that the plan must be tiered, not that a workable one already exists.",
+      "origin": "new",
+      "raw_passage_ids": []
+    },
+    {
+      "id": "A027",
+      "kind": "argument",
+      "title_zh": "回答数据：通行证只证明状态，不记录行程",
+      "position": "yes",
+      "claim": "The pass should prove a status and nothing else: no itinerary, no purchase history, and a deletion date written into the rule.",
+      "reasoning": "Answer the surveillance fear with a design limit rather than reassurance. Say what the pass must not carry, and admit that retention rules are unpublished.",
+      "topics": [
+        "privacy",
+        "data",
+        "technology",
+        "implementation"
+      ],
+      "purposes": [
+        "P02",
+        "P03"
+      ],
+      "fact_ids": [
+        "F001",
+        "F011"
+      ],
+      "unknown_ids": [
+        "U006",
+        "U008"
+      ],
+      "fair_objection": "A proof system that records where people went is a surveillance system with a health label.",
+      "response_boundary": "No data-retention rule has been published (U006); the claim is a limit the rule should carry, not a description of what it does.",
+      "origin": "new",
+      "raw_passage_ids": []
     }
   ],
   "style_examples": [
@@ -2250,6 +2377,54 @@
       "unknown_ids": [
         "U001",
         "U011"
+      ]
+    },
+    {
+      "id": "S032",
+      "kind": "style",
+      "title_zh": "P03：先承认成本，再给窄一点的合规路径，最后说个人理由",
+      "text": "The cost is real and nobody has published a number for it, which is exactly why the route should be narrow: a published venue list, one check at the door, and paper that works the same day. That is the version of this I can vote for.",
+      "argument_id": "A024",
+      "voice": "plain_direct",
+      "topics": [
+        "cost",
+        "business",
+        "implementation"
+      ],
+      "purposes": [
+        "P03"
+      ],
+      "usage": "style_reference_only",
+      "persona_scope": "no_personal_history_or_professional_claim",
+      "raw_passage_ids": [],
+      "fact_ids": [
+        "F014"
+      ],
+      "unknown_ids": [
+        "U002"
+      ]
+    },
+    {
+      "id": "S033",
+      "kind": "style",
+      "title_zh": "P03：回豁免——承认不知道清单，说清楚应该怎么写",
+      "text": "I do not have the exemption list, and I am not going to pretend I do. What I want written down before we vote is how it is shown at the door and what happens when the paperwork is missing that day. That is why I am still a yes.",
+      "argument_id": "A025",
+      "voice": "considered",
+      "topics": [
+        "exemptions",
+        "access",
+        "implementation"
+      ],
+      "purposes": [
+        "P03"
+      ],
+      "usage": "style_reference_only",
+      "persona_scope": "no_personal_history_or_professional_claim",
+      "raw_passage_ids": [],
+      "fact_ids": [],
+      "unknown_ids": [
+        "U004"
       ]
     }
   ],

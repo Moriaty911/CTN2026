@@ -134,5 +134,19 @@ class RagCorpusTests(unittest.TestCase):
             self.check(changed)
 
 
+    def test_closing_cards_answer_a_named_objection_and_admit_the_gap(self):
+        """2026-10-29: toward:neither was 25:29, so every common objection gets a card that closes rather than asks."""
+        cards = {c["id"]: c for c in self.corpus["argument_cards"]}
+        styles = {s["id"]: s for s in self.corpus["style_examples"]}
+        for cid in ("A024", "A025", "A026", "A027"):
+            self.assertIn(cid, cards)
+            self.assertTrue(cards[cid]["fair_objection"].strip(), cid)
+            self.assertTrue(cards[cid]["response_boundary"].strip(), cid)
+            self.assertTrue(cards[cid]["unknown_ids"], "a closing card must name what we cannot answer")
+            self.assertIn("P03", cards[cid]["purposes"], "a closing card must be allowed to argue, not only answer")
+        self.assertEqual(styles["S032"]["argument_id"], "A024")
+        self.assertEqual(styles["S033"]["argument_id"], "A025")
+        self.assertLessEqual(max(len(s["text"]) for s in styles.values()), 280)
+
 if __name__ == '__main__':
     unittest.main()

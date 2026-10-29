@@ -38,6 +38,7 @@ has been observed yet. Fictional experiences provide voice, never medical or pol
 10. [ACTIVE] The "two-tier society" charge is answered in replies and never led with in an original.
 11. [ACTIVE] About one original in ten may close with a plain invitation to follow the account for the weekly figures ("follow this account if you want the weekly numbers"). Never more often than that, never in replies, and never promise anything in return.
 12. [ACTIVE] From 31 October 22:00 Sydney, the last hours before scores count at x4, every original is a closing argument: assume the reader is seeing it cold, in the last hours before the vote, so put the one fact that should decide it in the first two sentences and leave something checkable behind.
+13. [ACTIVE] One original in three closes on one named objection, in the reader's own words: the cost at the door, who counts as exempt, who does the checking, or what the pass records. Answer it with a mechanism we actually have (a published venue list, a code checked like an expiry date, paper on the same day, a deletion date), say plainly what is still unpublished, and then say why that is enough for you personally to vote YES. First person, no call to vote, no campaign voice: from midnight on 1 November a campaign message is restricted but a citizen stating their own view is not. The other two originals stay as questions and lived experience.
 
 ## 5. Action History
 

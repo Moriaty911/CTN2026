@@ -219,6 +219,9 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             # Eleven verified accounts, read directly: the feed crawl otherwise reaches them too late (58 expired tasks).
             from .pipeline.bluev import verified_step
             tasks.append(asyncio.create_task(worker('verified',lambda:verified_step(actuator,store),150)))
+            # Citizens who wrote to us: their next post should reach the queue in minutes, not whenever the feed sees it.
+            from .pipeline.sweep import sweep_step
+            tasks.append(asyncio.create_task(worker('citizen_sweep',lambda:sweep_step(actuator,store),300)))
         if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),30)))
         if mode!='mock':
             # In-universe news -> attributed, verified claims (policies/news-v1.json). Extraction needs the DeepSeek key.
