@@ -40,6 +40,8 @@ def main(argv=None):
     p=subs.add_parser('launch');p.add_argument('--batches',choices=['on','off']);p.add_argument('--initialise-window',type=int,help='seconds to spread initialise posts over');p.add_argument('--unslow',help='restore the normal daily cap for an account');p.add_argument('--amplify',choices=['auto','off','low','high','max'],help='team amplification level; auto follows the phase schedule')
     p.add_argument('--push',help="'next' pushes the next original we publish towards trending, a post id pushes that original of ours now, 'cancel' drops a pending 'next'")
     p.add_argument('--push-reposts',type=int);p.add_argument('--push-replies',type=int)
+    p.add_argument('--boost',help='post id: add more of our accounts\' likes to that one original (no level change)')
+    p.add_argument('--boost-likes',type=int,help='how many likes --boost should top the plan up to (default 55)')
     p=subs.add_parser('blacklist',help='accounts whose every post is reported (ctn/blacklist.py)')
     p.add_argument('operation',choices=['list','stats','add','remove','import','scan','on','off'])
     p.add_argument('target',nargs='?',help='account id for add/remove, file for import')
@@ -185,10 +187,15 @@ def main(argv=None):
                 from ctn.amplify import request_push
                 try:pushed=request_push(store,args.push,reposts=args.push_reposts,replies=args.push_replies)
                 except ValueError as exc:parser.error(str(exc))
+            if args.boost:
+                from ctn.amplify import amplifiable_accounts, boost_post
+                try:boosted=boost_post(store,args.boost,amplifiable_accounts(store),extra_likes=args.boost_likes or 55)
+                except ValueError as exc:parser.error(str(exc))
             from ctn.amplify import summary as amplify_summary
             result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown','like_pacing','reply_pacing','warmup')}
             result['amplify']=amplify_summary(store,since=time.time()-86400)
             if args.push:result['push']=pushed
+            if args.boost:result['boost']=boosted
             from ctn.phrasing import stats as phrasing_stats
             result['phrasing']=phrasing_stats(store)
             result['slowed_accounts']=store.policy('slowed_accounts',{})

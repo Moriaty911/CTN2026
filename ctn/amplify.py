@@ -145,6 +145,30 @@ def push_post(store, post_id, author, start, accounts, *, reposts, replies, rng=
     return {'post_id': post_id, 'reposts': len(reposters), 'replies': len(repliers) + have}
 
 
+def boost_post(store, post_id, accounts, *, extra_likes, rng=random, now=None, policy=POLICY):
+    """Operator: add `extra_likes` more of our accounts to ONE post's like plan.
+
+    A level change would amend every post published during the window; the leader-repost experiment
+    needs one post at 60+ likes and the rest untouched, so this tops up a single plan instead.
+    """
+    ts = time.time() if now is None else now
+    extra_likes = max(0, int(extra_likes))
+    with store._lock:
+        row = store._conn.execute("SELECT account_id FROM publications WHERE post_id=? AND kind='post'", (str(post_id),)).fetchone()
+        if row is None:
+            return {'post_id': str(post_id), 'added': 0, 'reason': 'not_one_of_our_originals'}
+        author = row[0]
+        planned = {r[0] for r in store._conn.execute("SELECT account_id FROM amplify_plan WHERE post_id=? AND kind='like'", (str(post_id),))}
+    pool = [a for a in accounts if a != author and a not in planned]
+    take = rng.sample(pool, min(extra_likes, len(pool)))
+    lo, hi = policy['like_window_seconds']
+    rows = [(uuid.uuid4().hex, str(post_id), 'like', account, ts + lo + (hi - lo) * rng.random() ** 2, ts) for account in take]
+    with store.batch_transaction():
+        store._conn.execute('INSERT OR IGNORE INTO amplify_sources VALUES(?,?,?,?,?)', (str(post_id), author, 'post', 'boost', ts))
+        store._conn.executemany('INSERT OR IGNORE INTO amplify_plan(id,post_id,kind,account_id,due_at,updated_at) VALUES(?,?,?,?,?,?)', rows)
+    return {'post_id': str(post_id), 'added': len(rows), 'already_planned': len(planned), 'likes_now': len(planned) + len(rows)}
+
+
 def request_push(store, target, *, reposts=None, replies=None, now=None, policy=POLICY):
     """Operator: 'next' pushes the next original we publish, a post id pushes that original of ours now, 'cancel' drops a pending 'next'."""
     ts = time.time() if now is None else now
