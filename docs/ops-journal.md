@@ -1,3 +1,21 @@
+## 2026-10-29 19:55 市民转发实验：一条"机制问句"原创
+
+- 现象：`DrAmaraSingh` 的转发渠道（A2）24 小时无反应——她这 6 小时没发过任何内容，48 个赞也没有换来转发。反过来查市民转发：
+  过去 5 天共 **15 次市民转发、15 条不同帖子、没有一条被转发两次**，这 15 条**全部是问句**（`802314` "is there an exemption
+  or alternative, and who decides?"、`558688` "what data would actually be collected, retained or shared?" 等）。另：我们原创帖
+  显示的赞平均 11.7，其中来自我们自己 amplify 的只有 1.0，官方记分的市民赞约 1.75/帖——**显示的赞里八成不记分**。
+- 判断：能被转发的是"读者自己也想问的机制问题"，不是结论句；领袖渠道（陈述句）和市民渠道（问句）语域不同，不要混。
+  自己号在自己帖下评论既不计分又是最容易被看成协同的形态，砍掉。
+- 处理：
+  1. 新增 `ops post send --persona --text [--purpose] --execute`（`ctn/ops.py::post_plan`）：走正常 `actuator.post` 通路
+     （claim_action 的人设/目录/冷却/上限闸全部生效），metadata 带 `persona_id`/`persona_version`/`catalog_hash`/`engine=operator`，
+     不是裸脚本；`tests/test_ops_post.py` 4 个测试，全量 **1,030 个测试通过**。
+  2. 实验帖已排期：`yes_051`（Kofi Hale，`kofihale_it`，technology_digital）在悉尼 **20:00** 发一条机制问句，
+     文本按人设改成"我给别人装刷卡机"的视角（原草稿写的是打包棚，与人设不符）。274 字、无标签、第一人称。
+  3. 20:40 用 `ops launch --boost <post_id> --boost-likes 25` 补到 25 个赞（发布时 amplify 已自动铺第一批）。
+     不补评论、不补转发（我们的转发会被平台删）。
+- 验证/判据：24 小时内**市民转发 ≥1** 为成功（基线 0.7%/帖，5 天 15 次）；同时看市民回复、市民赞。失败则停止在"补赞"上花写操作。
+- 待办 / 待用户决定：无（用户已批准 A 草稿 + yes_051 + 20:00）。
 ## 2026-10-29 12:10 领袖转发实验的工具：给单条原创补赞
 
 - 现象：`DrAmaraSingh`（YES 阵营蓝V领袖）近 50 条动态里 37 条是转发，只来自固定 8 个作者，转我们 0 次；她转的帖子点赞分布 2–86，

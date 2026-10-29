@@ -13,6 +13,22 @@ from .persona import AccountState
 from .storage import StateStore
 from .storage.sqlite_store import BACKUP_AUDIT_TABLES, gzip_backup
 
+def post_plan(registry, persona_id, text, purpose='P01', *, decision_id=''):
+    """Resolve one explicit original: which account, under which catalog, with which metadata."""
+    import time as _time
+    import uuid
+    persona=registry.get(persona_id)
+    if persona is None:raise ValueError('unknown persona %s'%persona_id)
+    if not persona.account_id:raise ValueError('persona %s is not bound to an account'%persona_id)
+    body=str(text or '').strip()
+    if not body:raise ValueError('text is empty')
+    return {'account':persona.account_id,'text':body,
+            'decision_id':decision_id or ('ops-'+uuid.uuid4().hex[:10]),
+            'metadata':{'persona_id':persona.persona_id,'persona_version':persona.version,
+                        'catalog_hash':registry.catalog_hash,'purpose':purpose,
+                        'engine':'operator','created_by':'ops','created_at':_time.time()}}
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-file')
@@ -42,6 +58,9 @@ def main(argv=None):
     p.add_argument('--push-reposts',type=int);p.add_argument('--push-replies',type=int)
     p.add_argument('--boost',help='post id: add more of our accounts\' likes to that one original (no level change)')
     p.add_argument('--boost-likes',type=int,help='how many likes --boost should top the plan up to (default 55)')
+    p=subs.add_parser('post',help='publish one explicit original from a bound persona (operator experiment)')
+    p.add_argument('operation',choices=['send']);p.add_argument('--persona',required=True)
+    p.add_argument('--text',required=True);p.add_argument('--purpose',default='P01');p.add_argument('--execute',action='store_true')
     p=subs.add_parser('blacklist',help='accounts whose every post is reported (ctn/blacklist.py)')
     p.add_argument('operation',choices=['list','stats','add','remove','import','scan','on','off'])
     p.add_argument('target',nargs='?',help='account id for add/remove, file for import')
@@ -199,6 +218,23 @@ def main(argv=None):
             from ctn.phrasing import stats as phrasing_stats
             result['phrasing']=phrasing_stats(store)
             result['slowed_accounts']=store.policy('slowed_accounts',{})
+        elif args.command=='post':
+            if not args.execute:parser.error('post send requires --execute')
+            from .persona.registry import PersonaRegistry
+            registry=PersonaRegistry().attach(store)
+            plan=post_plan(registry,args.persona,args.text,args.purpose)
+            import asyncio
+            from .actuator import Actuator
+            from .client.legit_v1 import OfficialLegitClient
+            from .ratelimit import build_gate,build_ledger
+            if not settings.platform.api_key:parser.error('platform credentials required')
+            actuator=Actuator(OfficialLegitClient(url=settings.platform.base_url or None,team_key=settings.platform.api_key,
+                default_password=settings.platform.bot_password,auto_register=False,store=store),
+                build_gate(settings.rate),build_ledger(settings.budget,store=store),dry_run=False,store=store)
+            actuator.catalog_hash=plan['metadata']['catalog_hash']
+            outcome=asyncio.run(actuator.post(plan['account'],plan['text'],decision_id=plan['decision_id'],context=plan['metadata']))
+            result={'account':plan['account'],'persona':args.persona,'ok':outcome.ok,'status':outcome.status,
+                    'detail':outcome.detail,'post_id':(outcome.response or {}).get('post_id')}
         elif args.command=='blacklist':
             from ctn import blacklist
             blacklist.ensure_schema(store)
