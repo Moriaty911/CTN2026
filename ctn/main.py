@@ -233,7 +233,7 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             tasks.append(asyncio.create_task(worker('news',ingestor.step,60)))
             from .selfcheck import selfcheck_step
             tasks.append(asyncio.create_task(worker('selfcheck',lambda:selfcheck_step(actuator,store),60)))
-            if settings.fleet.auto_replace:
+            if mode=='live' and settings.fleet.auto_replace:
                 # A suspended account still holds one of the 50 active-persona slots and used to need a
                 # human plus a restart. The actuator records 'account suspended' on the failed write;
                 # this worker parks the dead persona and registers a same-group replacement

@@ -636,6 +636,10 @@ P(upheld) × R  >  P(genuine) × C      and      p ≥ 0.7 (hard floor, never lo
 - **Replacement** prefers an unbound persona in the same `occupation_group`, falls back to the thinnest
   group, then registers, binds and activates through `ctn.accounts.register_one`. Its first post is still
   the `initialise` worker's job.
+- **Stale slots and top-up.** A suspended account whose `mode` was never flipped (the leftover of the
+  old manual flow) is parked first; then, if the fleet is below the active target for any reason, the
+  worker registers the missing accounts (`top_up: true`). A ban wave plus manual retirements once left
+  48 of 50 active, and only a top-up catches that without waiting for the next suspension.
 - **No restart.** `PersonaRegistry.list_all()` re-reads bindings on every call and
   `BotLoop.refresh_accounts()` runs each cycle, so a bound, active account starts acting immediately.
 - **Caps** (`policies/roster-v1.json`): one per step, six per campaign day, `max_undeleted` 160 - suspended

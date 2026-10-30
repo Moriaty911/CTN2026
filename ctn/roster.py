@@ -63,6 +63,24 @@ def suspended_details(store, *, since_s: float = 21600, now: float | None = None
     return [dict(r) for r in rows if _SUSPENDED_DETAIL.search(str(r["detail"] or ""))]
 
 
+def stale_slots(store) -> list[str]:
+    """Accounts already marked suspended that still hold an active persona slot.
+
+    This is the state the old manual flow left behind: `managed_accounts.status` says suspended but
+    `account_states.mode` still says active, so the account occupies one of the 50 slots and never acts.
+    """
+    out = []
+    for row in store.list_managed_accounts(status="suspended"):
+        account = row["username"]
+        if store.get_account_state(account).mode == "active":
+            out.append(account)
+    return out
+
+
+def active_count(store) -> int:
+    return len(store.list_managed_accounts(status="active"))
+
+
 def still_live(store, account: str) -> bool:
     """True while we still treat the account as an active, unbanned member of the fleet."""
     state = store.get_account_state(account)
@@ -124,6 +142,39 @@ def _count_today(store, *, now: float) -> int:
     return sum(1 for row in log(store) if float(row.get("at") or 0) >= start)
 
 
+async def _register(store, client, candidate, *, password, pol, ts, replace, budget):
+    """Register one persona-account pair and activate it. Returns (ok, entry_or_reason)."""
+    from .accounts import register_one
+
+    handle = handle_of(candidate)
+    outcome = await (replace or register_one)(
+        store,
+        client,
+        candidate.persona_id,
+        handle,
+        password,
+        max_active=int(pol["max_undeleted"]),
+        max_total=int(pol["max_undeleted"]),
+        display_name=candidate.name,
+    )
+    if outcome.get("status") != "succeeded":
+        return False, {"reason": str(outcome.get("status")), "handle": handle}
+    store.mark_managed_account_status(handle, "active", now=ts)
+    try:
+        store.set_persona_modes([candidate.persona_id], "active", max_active=int(pol.get("active_target") or 50))
+    except ValueError:
+        pass  # the cap is full: the account stays standby until a slot frees, which is the correct order
+    entry = {
+        "at": ts,
+        "persona": candidate.persona_id,
+        "to": handle,
+        "group": candidate.occupation_group,
+    }
+    with store.batch_transaction():
+        store.set_policy("roster_log", (log(store) + [entry])[-50:])
+    return True, entry
+
+
 async def replace_suspended(
     store,
     registry,
@@ -133,77 +184,73 @@ async def replace_suspended(
     max_active: int = 50,
     policy: dict | None = None,
     now: float | None = None,
-    replace= None,
+    replace=None,
 ) -> dict:
-    """Register a replacement for every newly suspended account this step allows.
+    """One bounded pass: park stale slots, replace new suspensions, top the fleet back up.
 
-    `replace` is `ctn.accounts.register_one`; it is a parameter so tests can run without a
-    platform client.
+    `replace` is `ctn.accounts.register_one`; it is a parameter so tests run without a platform client.
     """
-    from .accounts import register_one
-
     pol = {**DEFAULT_POLICY, **(policy or {})}
+    pol["active_target"] = max_active
     ts = time.time() if now is None else float(now)
-    out = {"retired": [], "registered": [], "skipped": [], "disabled": not pol["enabled"]}
+    out = {"parked": [], "retired": [], "registered": [], "skipped": [], "disabled": not pol["enabled"]}
     if not pol["enabled"]:
         return out
-    found = pending_replacements(store, since_s=float(pol["detect_window_seconds"]), now=ts)
-    if not found:
-        return out
+
+    # A suspended account that still holds an active slot blocks its replacement (the 50-persona cap
+    # counts every mode='active' row), so park those first; this is idempotent.
+    for account in stale_slots(store):
+        out["parked"].append({"account": account, "persona": retire(store, account, now=ts)})
+
     budget = int(pol["max_per_day"]) - _count_today(store, now=ts)
-    for row in found[: int(pol["max_per_step"])]:
+    for row in pending_replacements(store, since_s=float(pol["detect_window_seconds"]), now=ts)[
+        : int(pol["max_per_step"])
+    ]:
         account = row["account_id"]
         if budget <= 0:
             out["skipped"].append({"account": account, "reason": "daily_cap"})
             continue
         persona_id = retire(store, account, now=ts)
-        group = ""
+        out["retired"].append({"account": account, "persona": persona_id})
         dead = registry.get(persona_id) if persona_id else None
-        if dead is not None:
-            group = dead.occupation_group
+        group = dead.occupation_group if dead is not None else ""
         candidate = pick_persona(store, registry, group=group)
         if candidate is None:
-            out["retired"].append({"account": account, "persona": persona_id})
             out["skipped"].append({"account": account, "reason": "no_free_persona"})
             continue
-        outcome = await (replace or register_one)(
-            store,
-            client,
-            candidate.persona_id,
-            handle_of(candidate),
-            password,
-            max_active=int(pol["max_undeleted"]),
-            max_total=int(pol["max_undeleted"]),
-            display_name=candidate.name,
+        ok, entry = await _register(
+            store, client, candidate, password=password, pol=pol, ts=ts, replace=replace, budget=budget
         )
-        out["retired"].append({"account": account, "persona": persona_id})
-        if outcome.get("status") != "succeeded":
-            out["skipped"].append({"account": account, "reason": str(outcome.get("status")), "handle": handle_of(candidate)})
+        if not ok:
+            out["skipped"].append({"account": account, **entry})
             continue
-        handle = handle_of(candidate)
-        store.mark_managed_account_status(handle, "active", now=ts)
-        try:
-            store.set_persona_modes([candidate.persona_id], "active", max_active=max_active)
-        except ValueError:
-            pass  # already active from registration
-        entry = {
-            "at": ts,
-            "from": account,
-            "persona": candidate.persona_id,
-            "to": handle,
-            "group": candidate.occupation_group,
-            "same_group": candidate.occupation_group == group,
-        }
-        with store.batch_transaction():
-            store.set_policy("roster_log", (log(store) + [entry])[-50:])
-        out["registered"].append(entry)
+        out["registered"].append({**entry, "from": account, "same_group": entry["group"] == group})
         budget -= 1
+
+    # Top up: a ban wave or a manual retirement can leave the fleet below the active target, and the
+    # campaign window does not wait for the next suspension to be noticed.
+    if pol.get("top_up", True):
+        while budget > 0 and active_count(store) < int(max_active):
+            candidate = pick_persona(store, registry)
+            if candidate is None:
+                out["skipped"].append({"reason": "no_free_persona", "where": "top_up"})
+                break
+            ok, entry = await _register(
+                store, client, candidate, password=password, pol=pol, ts=ts, replace=replace, budget=budget
+            )
+            if not ok:
+                out["skipped"].append({"where": "top_up", **entry})
+                break
+            out["registered"].append({**entry, "from": "", "same_group": False})
+            budget -= 1
     return out
 
 
 async def roster_step(store, registry, client, *, password: str, max_active: int = 50, now: float | None = None) -> dict:
-    """Worker body: one bounded replacement pass."""
-    pol = policy(store)
-    return await replace_suspended(
-        store, registry, client, password=password, max_active=max_active, policy=pol, now=now
-    )
+    """Worker body: one bounded pass. Never raises into the service loop."""
+    try:
+        return await replace_suspended(
+            store, registry, client, password=password, max_active=max_active, policy=policy(store), now=now
+        )
+    except Exception as exc:  # registration is a real action; a failure must not stop the fleet
+        return {"error": type(exc).__name__, "detail": str(exc)[:200], "registered": []}

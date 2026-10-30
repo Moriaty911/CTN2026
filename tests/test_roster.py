@@ -123,14 +123,21 @@ class ReplaceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.store, self.router = store_with(('yes_001', 'yes_002'))
         self.addCleanup(self.store.close)
+        # Managed rows are what `active_count` counts; bound_router only writes bindings.
+        for account in self.store.persona_bindings().values():
+            self.store.upsert_managed_account(account, status='active')
+
+    async def run_pass(self, **kwargs):
+        policy = {'max_per_step': 1, 'max_per_day': 3, **kwargs.pop('policy', {})}
+        return await roster.replace_suspended(
+            self.store, self.router.registry, client=None, password='pw',
+            max_active=kwargs.pop('max_active', 2), policy=policy, now=NOW, replace=fake_register,
+        )
 
     async def test_replacement_is_registered_bound_and_live(self):
         dead = self.store.persona_bindings()['yes_001']
         failed(self.store, dead, 'account suspended')
-        out = await roster.replace_suspended(
-            self.store, self.router.registry, client=None, password='pw',
-            max_active=5, policy={'max_per_step': 1, 'max_per_day': 3}, now=NOW, replace=fake_register,
-        )
+        out = await self.run_pass()
         self.assertEqual(len(out['registered']), 1)
         entry = out['registered'][0]
         self.assertEqual(entry['from'], dead)
@@ -144,19 +151,36 @@ class ReplaceTests(unittest.IsolatedAsyncioTestCase):
         # The dead account keeps its binding (history) but is parked, so it cannot act.
         self.assertEqual(self.store.get_account_state(dead).mode, 'standby')
         self.assertTrue(self.store.get_account_state(dead).is_banned)
+        self.assertEqual(roster.active_count(self.store), 2)
 
     async def test_daily_cap_stops_the_second_replacement(self):
         bindings = self.store.persona_bindings()
         failed(self.store, bindings['yes_001'], 'account suspended', at=NOW - 120)
         failed(self.store, bindings['yes_002'], 'account suspended', at=NOW - 60)
-        out = await roster.replace_suspended(
-            self.store, self.router.registry, client=None, password='pw',
-            max_active=5, policy={'max_per_step': 2, 'max_per_day': 1}, now=NOW, replace=fake_register,
-        )
-        self.assertEqual(len(out['registered']), 1)
+        out = await self.run_pass(policy={'max_per_step': 2, 'max_per_day': 1})
         # Newest first: yes_002 gets the only slot, yes_001 waits for the next campaign day.
+        self.assertEqual(len(out['registered']), 1)
         self.assertEqual(out['registered'][0]['from'], bindings['yes_002'])
-        self.assertEqual(out['skipped'], [{'account': bindings['yes_001'], 'reason': 'daily_cap'}])
+        self.assertIn({'account': bindings['yes_001'], 'reason': 'daily_cap'}, out['skipped'])
+
+    async def test_top_up_fills_the_fleet_without_a_suspension(self):
+        self.store.upsert_managed_account('seed0', status='active')  # 3 active of a 5 target
+        out = await self.run_pass(max_active=5, policy={'max_per_day': 5})
+        self.assertEqual(out['retired'], [])
+        self.assertEqual(len(out['registered']), 2)
+        self.assertTrue(all(entry['from'] == '' for entry in out['registered']))
+        self.assertEqual(roster.active_count(self.store), 5)
+
+    async def test_stale_suspended_account_is_parked_and_replaced(self):
+        dead = self.store.persona_bindings()['yes_001']
+        # The old manual flow's leftover: suspended on the platform, still mode='active'.
+        self.store.mark_managed_account_status(dead, 'suspended', now=NOW)
+        self.assertEqual(roster.stale_slots(self.store), [dead])
+        out = await self.run_pass()
+        self.assertEqual([row['account'] for row in out['parked']], [dead])
+        self.assertEqual(self.store.get_account_state(dead).mode, 'standby')
+        self.assertEqual(len(out['registered']), 1)
+        self.assertEqual(roster.active_count(self.store), 2)
 
     async def test_disabled_policy_does_nothing(self):
         failed(self.store, self.store.persona_bindings()['yes_001'], 'account suspended')
@@ -166,17 +190,14 @@ class ReplaceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(out['disabled'])
         self.assertEqual(out['registered'], [])
+        self.assertEqual(out['parked'], [])
 
     async def test_no_free_persona_is_reported_not_crashed(self):
         dead = self.store.persona_bindings()['yes_001']
         failed(self.store, dead, 'account suspended')
         registry = self.router.registry
-        for persona in list(registry.list_all()):
-            if not persona.account_id:
-                registry._personas.pop(persona.persona_id, None)
-        out = await roster.replace_suspended(
-            self.store, registry, client=None, password='pw',
-            policy={'max_per_step': 1, 'max_per_day': 3}, now=NOW, replace=fake_register,
-        )
+        for persona in [p for p in registry.list_all() if not p.account_id]:
+            registry._personas.pop(persona.persona_id, None)
+        out = await self.run_pass()
         self.assertEqual(out['registered'], [])
-        self.assertEqual(out['skipped'][0]['reason'], 'no_free_persona')
+        self.assertIn('no_free_persona', [row.get('reason') for row in out['skipped']])

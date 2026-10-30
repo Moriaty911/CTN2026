@@ -16,8 +16,15 @@
   `policies/roster-v1.json`：每步 1 个、每天最多 6 个、`max_undeleted` 160（悬空号也算 undeleted，留 40 个余量）。
   彻底关：`.env` 设 `CTN_AUTO_REPLACE=false` 后重启；临时关：policy 里 `enabled: false`。
   查状态/手工跑一次：`ops roster status`、`ops roster run`。
-- 验证：`tests/test_roster.py` 12 个用例（真封号/别的失败不误报/窗口外忽略/retire 后名额可再用/选人不碰已绑定/
-  注册后绑定+激活+出现在 `list_all`/每日上限/关停/无空人设不崩）；全量 **1,042 个测试通过**。
+- 补充（同一晚）：只靠"检测封号"补不满 50——平台已经封了但 `mode` 还挂 active 的号（今天手工留下的）不响，
+  而且活跃数会停在 48。所以加了两步：`stale_slots()` 先把"managed 已 suspended、mode 还是 active"的号 park 掉，
+  `top_up` 再把活跃数补到 50（`max_per_day` 仍然管着，每天最多 6 次注册）。
+- 验证：`tests/test_roster.py` 14 个用例（真封号/别的失败不误报/窗口外忽略/retire 后名额可再用/选人不碰已绑定/
+  注册后绑定+激活+出现在 `list_all`/每日上限/关停/无空人设不崩/无封号时 top_up 补齐/stale 号被 park 并替换）；
+  全量 **1,044 个测试通过**。上线后第一轮（120 秒）自动注册了 `helen_osei_physio`(yes_099, medical) 和
+  `joss_iremonger_notes`(yes_107, independent)，活跃号 48 → **50**，两个新号 `initialise_status=pending`，
+  roster worker 无 error（单轮 0.04 s，注册那轮 12.6 s）。
+- 注意：`roster` worker 只在 `CTN_MODE=live` 下启动——dry-run 里注册账号是真实动作，测试发现过这一点。
 - 待办：观察 24 小时，确认活跃号不再长时间掉到 50 以下；若某组人设耗尽会记 `no_free_persona`（现在还有 26 个未绑定）。
 
 ## 2026-10-30 13:20 停掉自助 push（A 包实验判负）
