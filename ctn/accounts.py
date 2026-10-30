@@ -32,6 +32,7 @@ def fleet_plan(size=30, *, phase='warmup', persona_id=None, account_id=None):
 
 async def register_one(store,client,persona_id,account_id,password,*,max_active=50,max_total=200,display_name=None):
     if not password:raise ValueError('registration password is missing')
+    # max_active guards the platform's 50 *active* accounts; suspended rows still count as undeleted.
     with store.batch_transaction():
         if store.get_managed_account(account_id):return {'account':account_id,'status':'exists'}
         old=store._conn.execute('SELECT status FROM registration_intents WHERE account_id=?',(account_id,)).fetchone()

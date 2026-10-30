@@ -1,3 +1,25 @@
+## 2026-10-30 22:15 补号全自动化（封号 → 注册同组人设 → 自己跑起来）
+
+- 现象：10/20 起累计封了 52 个号（已注册 102 个，上限 200），最近稳定在每天 3–4 个。每次补号都要人工：
+  `ops fleet register` → `ops account --mode standby`（死号）→ `--mode active`（新号）→ **重启 fleet**。
+  10/30 那次还撞上 `active persona limit exceeded`：封号只改了 `managed_accounts.status`，
+  `account_states.mode` 还是 `active`，把 50 个"活跃人设"名额占满了，得手工再 park 两个才腾出位置。
+- 判断：这件事在 ×4（11/1–11/2）那两天会要命——白天封 4 个、我可能来不及补，每个号在 ×4 里值约 1,000 分。
+  而且"新号要重启才被加载"是个假的限制：`PersonaRegistry.list_all()` 每次都重新读绑定，
+  `BotLoop.refresh_accounts()` 每轮都刷新，绑定 + 激活就够了。
+- 处理：新增 `ctn/roster.py` + `roster` worker（120 秒）：
+  ① 检测——`action_intents` 里 `status='failed'` 且 detail 含 suspend/banned/disabled 的记录（actuator 在写失败时就写了这条，
+     reconcile 会保留），只认 6 小时内、且我们仍当它活着的号；
+  ② `retire()`——`is_banned=1` + `managed_accounts.status='suspended'` + 人设 `standby`（**这一步腾出活跃名额**）；
+  ③ 选人——优先同一 `occupation_group` 的未绑定人设，该组用完了选绑定最少的组；
+  ④ `register_one()` 注册 + 绑定 + 激活，写 `roster_log`；新号的首帖仍由 `initialise` worker 负责。
+  `policies/roster-v1.json`：每步 1 个、每天最多 6 个、`max_undeleted` 160（悬空号也算 undeleted，留 40 个余量）。
+  彻底关：`.env` 设 `CTN_AUTO_REPLACE=false` 后重启；临时关：policy 里 `enabled: false`。
+  查状态/手工跑一次：`ops roster status`、`ops roster run`。
+- 验证：`tests/test_roster.py` 12 个用例（真封号/别的失败不误报/窗口外忽略/retire 后名额可再用/选人不碰已绑定/
+  注册后绑定+激活+出现在 `list_all`/每日上限/关停/无空人设不崩）；全量 **1,042 个测试通过**。
+- 待办：观察 24 小时，确认活跃号不再长时间掉到 50 以下；若某组人设耗尽会记 `no_free_persona`（现在还有 26 个未绑定）。
+
 ## 2026-10-30 13:20 停掉自助 push（A 包实验判负）
 
 - 现象：`842677`（yes_051，23:26 发，机制问句 + 全套包）9.5 小时后：**42 赞 / 6 评论 / 8 转发 / 45 浏览，市民动作 0**。

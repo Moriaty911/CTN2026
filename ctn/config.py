@@ -124,6 +124,8 @@ class FleetConfig:
 
     bot_accounts: int = 50
     max_total_accounts: int = 200
+    # Replace a suspended account (park persona, register a same-group one) without a human.
+    auto_replace: bool = True
     primary_accounts: int = 1
     # A suspended account is parked for this long before we probe it again.
     suspend_cooldown_s: float = 3600.0
@@ -413,6 +415,7 @@ class Settings:
             fleet=FleetConfig(
                 bot_accounts=_env_int("CTN_BOT_ACCOUNTS", 50),
                 max_total_accounts=_env_int("CTN_MAX_TOTAL_ACCOUNTS", 200),
+                auto_replace=_env_bool("CTN_AUTO_REPLACE", True),
                 primary_accounts=_env_int("CTN_PRIMARY_ACCOUNTS", 1),
             ),
             rate=RateConfig(

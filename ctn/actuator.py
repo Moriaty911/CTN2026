@@ -59,6 +59,11 @@ class Actuator:
         self.throttles = 0
 
     @property
+    def client(self):
+        """The platform client this actuator writes through (needed by the roster worker)."""
+        return self._client
+
+    @property
     def ledger(self) -> BudgetLedger:
         return self._ledger
 

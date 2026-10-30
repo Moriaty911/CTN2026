@@ -130,6 +130,7 @@ actions（发送）、decisions、guard（闸门拦截）、observations。宿�
 | 发出前 JEV 审核 | 默认关；`.env` 设 `CTN_POSTFLIGHT_JEV=true` 后重启才开（选帖的 JEV 评估不受影响） |
 | 看互刷、节奏、句式统计 | `ops launch`（不带参数）：`amplify`、`like_pacing`、`reply_pacing`、`phrasing` |
 | 注册人设号 | `scripts/register_fleet.sh`（读 `docs/personas-80/handles-2026-10-19.tsv`，已注册的跳过，失败即停）；注册完要重启 fleet |
+| 自动补号（封号 → 同组人设 → 注册激活） | `ops roster status`（看待补/名额）、`ops roster run`（手工跑一轮）；策略 `policies/roster-v1.json`（每步 1 个、每天最多 6 个）；彻底关：`.env` 设 `CTN_AUTO_REPLACE=false` 后重启 |
 | 停用/启用账号 | `ops account ACCOUNT --mode standby` / `active`；`ops persona standby --id P0xx` |
 | 撤回一条新闻事实 | `ops news withdraw CLAIM_ID --reason "..."` |
 

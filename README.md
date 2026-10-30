@@ -621,6 +621,27 @@ P(upheld) × R  >  P(genuine) × C      and      p ≥ 0.7 (hard floor, never lo
 - `probe_report_targets` records which status-like fields pending report targets expose (`report_target_observations`).
   It never creates rulings. Rulings are still entered by an administrator until those fields are verified.
 
+## Roster automation (a ban is replaced without a human)
+
+`ctn/roster.py` runs as the `roster` worker (120 s). 52 of 102 accounts were suspended between 20 and
+30 October, 3-4 a day, and each replacement used to need a human plus a fleet restart.
+
+- **Detection is passive.** The actuator already writes `status='failed', detail='account suspended'` when
+  the platform refuses a write, and `reconcile` keeps the row; no notification feed (which we cannot read)
+  is needed. Only failures inside `detect_window_seconds` for accounts we still treat as live count.
+- **`retire()` is the step that used to be missed by hand.** A suspended account keeps
+  `account_states.mode='active'` and therefore one of the 50 active-persona slots, so the replacement was
+  refused with `active persona limit exceeded` until the dead persona was parked. `retire()` sets
+  `is_banned`, marks the managed account `suspended`, and flips the persona to `standby`.
+- **Replacement** prefers an unbound persona in the same `occupation_group`, falls back to the thinnest
+  group, then registers, binds and activates through `ctn.accounts.register_one`. Its first post is still
+  the `initialise` worker's job.
+- **No restart.** `PersonaRegistry.list_all()` re-reads bindings on every call and
+  `BotLoop.refresh_accounts()` runs each cycle, so a bound, active account starts acting immediately.
+- **Caps** (`policies/roster-v1.json`): one per step, six per campaign day, `max_undeleted` 160 - suspended
+  accounts still count as undeleted against the 200-account allowance. `ops roster status` shows pending
+  bans, free personas and the last replacements; `CTN_AUTO_REPLACE=false` disables the worker.
+
 ## Reporting audit (what actually happened to a report)
 
 A ruling cannot be read back: there is no ruling endpoint, and account status is not exposed either (`get_profile`

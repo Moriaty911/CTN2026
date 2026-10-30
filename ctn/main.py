@@ -233,6 +233,14 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             tasks.append(asyncio.create_task(worker('news',ingestor.step,60)))
             from .selfcheck import selfcheck_step
             tasks.append(asyncio.create_task(worker('selfcheck',lambda:selfcheck_step(actuator,store),60)))
+            if settings.fleet.auto_replace:
+                # A suspended account still holds one of the 50 active-persona slots and used to need a
+                # human plus a restart. The actuator records 'account suspended' on the failed write;
+                # this worker parks the dead persona and registers a same-group replacement
+                # (policies/roster-v1.json). `refresh_accounts()` picks it up next cycle, no restart.
+                from .roster import roster_step
+                tasks.append(asyncio.create_task(worker('roster',lambda:roster_step(store,router.registry,actuator.client,
+                    password=settings.platform.bot_password,max_active=settings.fleet.bot_accounts),120)))
         stopper=asyncio.create_task(shutdown_after_signal())
         await asyncio.gather(*tasks)
     except asyncio.CancelledError:
