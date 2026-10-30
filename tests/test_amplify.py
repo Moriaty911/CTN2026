@@ -424,9 +424,12 @@ class PushIntervalTests(unittest.TestCase):
         publish(self.store, 'o1', self.accounts[0])
         publish(self.store, 'o2', self.accounts[1])
 
-    def test_the_push_spec_stays_small_while_our_reposts_are_deleted(self):
+    def test_a_push_is_off_by_default_and_needs_an_explicit_size(self):
+        # 2026-10-30: the full package on post 842677 (42 likes, 8 own reposts, comments) drew ZERO citizen actions in 9.5 h,
+        # and our own reposts and comments earn no points, so the default size is zero and an operator must ask for it.
         push = amplify.POLICY['push']
-        self.assertEqual((push['reposts'], push['replies'], push['max_per_account_per_day']), (3, 4, 3))
+        self.assertEqual((push['reposts'], push['replies']), (0, 0))
+        self.assertEqual(push['max_per_account_per_day'], 3)
 
     def test_a_second_push_inside_the_minimum_interval_is_refused(self):
         gap = float(amplify.POLICY['push']['min_seconds_between_pushes'])
