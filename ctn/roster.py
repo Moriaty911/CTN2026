@@ -77,6 +77,53 @@ def stale_slots(store) -> list[str]:
     return out
 
 
+def orphan_bindings(store) -> list[tuple[str, str]]:
+    """Personas bound to a handle that has no managed account: a failed registration left them stuck."""
+    out = []
+    for persona_id, account in store.persona_bindings().items():
+        if account and store.get_managed_account(account) is None:
+            out.append((persona_id, account))
+    return out
+
+
+def adopt(store, account: str, persona_id: str = "", *, now=None) -> dict:
+    """Bring a live account back into service after a suspension was cleared.
+
+    2026-11-02: a suspended account still answers `get_mentions`, so only a write proves liveness. Calling
+    this on a probe that used reads brought a dead account back for one failed like, so the reserve list
+    must stay empty unless a write has succeeded since the suspension.
+    """
+    ts = time.time() if now is None else float(now)
+    row = store.get_managed_account(account)
+    if row is None:
+        raise ValueError("unknown account " + account)
+    binding = {pid: acct for pid, acct in store.persona_bindings().items() if acct == account}
+    persona = persona_id or next(iter(binding), "")
+    with store.batch_transaction():
+        store._conn.execute("UPDATE managed_accounts SET status='active', updated_at=? WHERE username=?", (ts, account))
+        store._conn.execute(
+            "UPDATE account_states SET is_banned=0, mode='active' WHERE account_id=?", (account,)
+        )
+    if persona:
+        try:
+            store.set_persona_modes([persona], "active", max_active=50)
+        except ValueError:
+            pass
+    entry = {"at": ts, "account": account, "persona": persona, "adopted": True}
+    with store.batch_transaction():
+        store.set_policy("roster_log", (log(store) + [entry])[-50:])
+    return entry
+
+
+def reserve(store) -> list[dict]:
+    return list(store.policy("roster_reserve", []) or [])
+
+
+def set_reserve(store, rows) -> None:
+    with store.batch_transaction():
+        store.set_policy("roster_reserve", list(rows))
+
+
 def active_count(store) -> int:
     return len(store.list_managed_accounts(status="active"))
 
@@ -111,10 +158,35 @@ def retire(store, account: str, *, now: float | None = None) -> str:
     return persona_id
 
 
-def pick_persona(store, registry, *, group: str = "") -> Any:
+def skipped_personas(store, *, now=None):
+    """Personas whose registration failed recently, so a bad handle cannot loop forever."""
+    ts = time.time() if now is None else float(now)
+    out = {}
+    for row in store.policy("roster_skip", []) or []:
+        fails = int(row.get("fails") or 1)
+        pause = min(86400.0, 900.0 * fails)
+        if ts - float(row.get("at") or 0) < pause:
+            out[row["persona"]] = row
+    return out
+
+
+def note_skip(store, persona, handle, status, *, now=None):
+    ts = time.time() if now is None else float(now)
+    rows = list(store.policy("roster_skip", []) or [])
+    previous = next((row for row in rows if row.get("persona") == persona), None)
+    fails = int((previous or {}).get("fails") or 0) + 1
+    rows = [row for row in rows if row.get("persona") != persona]
+    rows.append({"persona": persona, "handle": handle, "status": status, "at": ts, "fails": fails})
+    with store.batch_transaction():
+        store.set_policy("roster_skip", rows[-50:])
+
+
+def pick_persona(store, registry, *, group: str = "", now=None) -> Any:
     """An unbound persona, preferring the dead account's group, else the thinnest group."""
     bound = set(store.persona_bindings().values())
-    free = [p for p in registry.list_all() if p.account_id not in bound or not p.account_id]
+    skip = skipped_personas(store, now=now)
+    free = [p for p in registry.list_all()
+            if (p.account_id not in bound or not p.account_id) and p.persona_id not in skip]
     if not free:
         return None
     same = [p for p in free if p.occupation_group == group]
@@ -197,6 +269,11 @@ async def replace_suspended(
     if not pol["enabled"]:
         return out
 
+    for persona_id, account in orphan_bindings(store):
+        with store.batch_transaction():
+            store._conn.execute("DELETE FROM persona_bindings WHERE persona_id=? AND account_id=?", (persona_id, account))
+        out["parked"].append({"account": account, "persona": persona_id, "orphan": True})
+
     # A suspended account that still holds an active slot blocks its replacement (the 50-persona cap
     # counts every mode='active' row), so park those first; this is idempotent.
     for account in stale_slots(store):
@@ -214,7 +291,7 @@ async def replace_suspended(
         out["retired"].append({"account": account, "persona": persona_id})
         dead = registry.get(persona_id) if persona_id else None
         group = dead.occupation_group if dead is not None else ""
-        candidate = pick_persona(store, registry, group=group)
+        candidate = pick_persona(store, registry, group=group, now=ts)
         if candidate is None:
             out["skipped"].append({"account": account, "reason": "no_free_persona"})
             continue
@@ -222,6 +299,7 @@ async def replace_suspended(
             store, client, candidate, password=password, pol=pol, ts=ts, replace=replace, budget=budget
         )
         if not ok:
+            note_skip(store, candidate.persona_id, handle_of(candidate), str(entry.get("reason")), now=ts)
             out["skipped"].append({"account": account, **entry})
             continue
         out["registered"].append({**entry, "from": account, "same_group": entry["group"] == group})
@@ -230,8 +308,16 @@ async def replace_suspended(
     # Top up: a ban wave or a manual retirement can leave the fleet below the active target, and the
     # campaign window does not wait for the next suspension to be noticed.
     if pol.get("top_up", True):
+        held = reserve(store)
+        while held and active_count(store) < int(max_active):
+            candidate = held.pop(0)
+            account = candidate.get("account", "")
+            if store.get_managed_account(account) is None:
+                continue
+            out["registered"].append(adopt(store, account, candidate.get("persona", ""), now=ts))
+        set_reserve(store, held)
         while budget > 0 and active_count(store) < int(max_active):
-            candidate = pick_persona(store, registry)
+            candidate = pick_persona(store, registry, now=ts)
             if candidate is None:
                 out["skipped"].append({"reason": "no_free_persona", "where": "top_up"})
                 break
@@ -239,6 +325,7 @@ async def replace_suspended(
                 store, client, candidate, password=password, pol=pol, ts=ts, replace=replace, budget=budget
             )
             if not ok:
+                note_skip(store, candidate.persona_id, handle_of(candidate), str(entry.get("reason")), now=ts)
                 out["skipped"].append({"where": "top_up", **entry})
                 break
             out["registered"].append({**entry, "from": "", "same_group": False})

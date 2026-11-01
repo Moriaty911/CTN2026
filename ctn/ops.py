@@ -362,13 +362,14 @@ def main(argv=None):
             result={'resolved':store.finish_action(args.action_id,outcome,
                 response={**proof.get('response',{}),'operator_resolution':proof},detail='operator verified: '+proof['source'])}
         elif args.command=='roster':
-            from .roster import log, pending_replacements, pick_persona, policy, roster_step
+            from .roster import log, pending_replacements, pick_persona, policy, reserve, roster_step
             from .persona.catalog import load_catalog
             pol=policy(store)
             free=[p for p in load_catalog()['personas'] if not (store.persona_bindings().get(p['persona_id']))]
             result={'enabled':pol['enabled'],'auto_replace':settings.fleet.auto_replace,
                 'pending':[(row['account_id'],row['detail']) for row in pending_replacements(store, since_s=float(pol['detect_window_seconds']))],
-                'free_personas':len(free),'log':log(store)[-10:]}
+                'free_personas':len(free),'reserve':[row.get('account') for row in reserve(store)],
+                'log':log(store)[-10:]}
             if args.operation=='run' and not args.dry_run:
                 from .persona.router import get_default_registry
                 registry=get_default_registry().attach(store)

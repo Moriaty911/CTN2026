@@ -1,3 +1,9 @@
+## 2026-11-02 10:30 补号卡在平台的活跃账号上限
+- 现象：`managed_accounts` active 49 / suspended 73，`roster` 每 2 分钟尝试注册一个新号，连续 6 个失败（yes_112/121/122/126/128…），`registration_intents.detail` 只有 `APIError`，看不到原因。平台侧：`POST /api/auth/register -> 403: team has reached its active account limit`。
+- 判断：**平台的 50 个活跃账号是按"未停用"算的**，我们自己在本地把 73 个号标成 suspended 并不会让平台释放名额；所以本地 49 < 50、平台已满。另一条教训：**读接口不能证明账号活着**——被停用的号 `get_mentions` 照样返回 200，只有写操作返回 `account suspended`。我据此列的 37 个"复活号"名单全是假的，采纳 `amara_diallo_cases` 后它一条 like 就失败了，已回退。
+- 处理：`registration_intents.detail` 改为记录平台返回的原文（以前只记异常类名，白烧 6 个人设）；`roster` 增加 orphan binding 清理（注册失败挂在人设上的绑定会被释放）和 `reserve` 采纳路径（现为空）；跑测 1,048 个全过；重新构建并上线。
+- 待办：**要不要删 1–2 个长期停用的号（`DELETE /accounts/{id}`）换名额**——删除不可逆、计入我们自设的 200 额度，需要你点头。不删的话，今天剩下时间就是 49 个活跃号在跑。
+
 ## 2026-10-30 22:15 补号全自动化（封号 → 注册同组人设 → 自己跑起来）
 
 - 现象：10/20 起累计封了 52 个号（已注册 102 个，上限 200），最近稳定在每天 3–4 个。每次补号都要人工：

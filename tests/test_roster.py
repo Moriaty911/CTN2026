@@ -153,6 +153,29 @@ class ReplaceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.store.get_account_state(dead).is_banned)
         self.assertEqual(roster.active_count(self.store), 2)
 
+    async def test_a_live_reserved_account_is_adopted_before_registering(self):
+        # A previously suspended account that answers authenticated reads is alive again: reuse it
+        # instead of burning one of the 200 registrations.
+        self.store.upsert_managed_account('back_from_the_dead', status='suspended')
+        roster.set_reserve(self.store, [{'account': 'back_from_the_dead', 'persona': ''}])
+        out = await self.run_pass(policy={'max_per_day': 5}, max_active=3)
+        self.assertEqual(roster.reserve(self.store), [])
+        self.assertEqual(self.store.get_managed_account('back_from_the_dead')['status'], 'active')
+        self.assertEqual(self.store.get_account_state('back_from_the_dead').mode, 'active')
+        self.assertFalse(self.store.get_account_state('back_from_the_dead').is_banned)
+        self.assertEqual(len(out['registered']), 1)
+
+    async def test_adopt_clears_the_ban_flag_and_the_status(self):
+        self.store.upsert_managed_account('phoenix', status='suspended')
+        with self.store.batch_transaction():
+            self.store._conn.execute("UPDATE account_states SET is_banned=1, mode='standby' WHERE account_id='phoenix'")
+        entry = roster.adopt(self.store, 'phoenix', now=NOW)
+        self.assertTrue(entry['adopted'])
+        self.assertEqual(self.store.get_managed_account('phoenix')['status'], 'active')
+        state = self.store.get_account_state('phoenix')
+        self.assertFalse(state.is_banned)
+        self.assertEqual(state.mode, 'active')
+
     async def test_daily_cap_stops_the_second_replacement(self):
         bindings = self.store.persona_bindings()
         failed(self.store, bindings['yes_001'], 'account suspended', at=NOW - 120)
@@ -181,6 +204,30 @@ class ReplaceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.get_account_state(dead).mode, 'standby')
         self.assertEqual(len(out['registered']), 1)
         self.assertEqual(roster.active_count(self.store), 2)
+
+    async def test_failed_registration_hands_the_persona_back_and_is_skipped(self):
+        async def boom(store, client, persona_id, handle, password, **kwargs):
+            return {'account': handle, 'status': 'failed'}
+
+        out = await roster.replace_suspended(
+            self.store, self.router.registry, client=None, password='pw',
+            max_active=4, policy={'max_per_day': 5}, now=NOW, replace=boom,
+        )
+        self.assertEqual(out['registered'], [])
+        self.assertIn('failed', [row.get('reason') for row in out['skipped']])
+        # The next pass must try a different persona instead of looping on the same one.
+        blocked = {row['persona'] for row in self.store.policy('roster_skip')}
+        self.assertTrue(blocked)
+        self.assertNotIn(roster.pick_persona(self.store, self.router.registry, now=NOW).persona_id, blocked)
+
+    async def test_orphan_binding_is_freed_so_the_persona_is_usable_again(self):
+        # A failed registration used to keep its binding, permanently burning the persona.
+        self.store.bind_persona('yes_003', 'ghost_handle')
+        self.assertEqual(roster.orphan_bindings(self.store), [('yes_003', 'ghost_handle')])
+        out = await self.run_pass()
+        self.assertIn('ghost_handle', [row['account'] for row in out['parked']])
+        self.assertEqual(roster.orphan_bindings(self.store), [])
+        self.assertNotIn('yes_003', self.store.persona_bindings())  # free for a later pass
 
     async def test_disabled_policy_does_nothing(self):
         failed(self.store, self.store.persona_bindings()['yes_001'], 'account suspended')

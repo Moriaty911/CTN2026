@@ -57,7 +57,13 @@ async def register_one(store,client,persona_id,account_id,password,*,max_active=
         status='unknown' if translated.status is None or translated.retryable else 'failed'
         with store.batch_transaction():
             store._conn.execute('UPDATE registration_intents SET status=?,updated_at=?,detail=? WHERE account_id=?',
-                (status,time.time(),type(exc).__name__,account_id))
+                (status,time.time(),f'{type(exc).__name__}: {str(exc)[:200]}',account_id))
+            if status=='failed':
+                # The persona was bound before the call so the client could build its context. A definite
+                # failure (bad handle, rate limit) must hand it back: otherwise every failed attempt burns a
+                # persona permanently and an unattended replacement loop starves. 'unknown' keeps the
+                # binding because the account may exist on the platform.
+                store._conn.execute('DELETE FROM persona_bindings WHERE persona_id=? AND account_id=?',(persona_id,account_id))
         return {'account':account_id,'status':status}
     with store.batch_transaction():
         store._conn.execute("UPDATE registration_intents SET status='succeeded',updated_at=? WHERE account_id=?",(time.time(),account_id))
