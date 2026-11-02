@@ -371,6 +371,7 @@ def main(argv=None):
                 'free_personas':len(free),'reserve':[row.get('account') for row in reserve(store)],
                 'log':log(store)[-10:]}
             if args.operation=='run' and not args.dry_run:
+                import asyncio
                 from .persona.router import get_default_registry
                 registry=get_default_registry().attach(store)
                 async def _run():

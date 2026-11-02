@@ -1,3 +1,13 @@
+## 2026-11-02 10:55 补号彻底被平台挡住：没有可用的注册通道
+- 现象：`active` 48–49、`suspended` 74，`roster` 每 2 分钟注册一次，平台一律 `403: team has reached its active account limit`。已把 `registration_intents.detail` 改成记录平台原文，才看到这句。
+- 试过的三条路都不通：
+  1. 注册新号 → 403 active account limit（本地 49 < 50，平台侧已满）。
+  2. 让被停用的号自删（`DELETE /accounts/{id}`）→ 403 `account suspended`（停用的号无法认证，`actuator.delete_account` 直接失败）。
+  3. 用存储的密码重新登录"疑似误判"的号 → 403 `account suspended`，读接口 `get_mentions` 返回 200 是假象（已核实：读接口不校验停用状态）。
+- 判断：**平台把已停用账号也算进 50 个活跃名额，而我们没有删除它们的权限**。这意味着从现在起每封一个号就少一个，无法补充，直到平台/主办方释放。
+- 处理：`roster` 策略 `max_per_day=0`（停止无意义的注册尝试，避免继续消耗人设），保留自动停车与孤儿绑定清理；修了 `ops roster run` 的 `UnboundLocalError`（`asyncio` 局部导入）；1,048 测试通过。
+- 待办：**向主办方确认**（Discord，规则要求的唯一渠道）：停用账号是否应释放 50 个活跃名额；有没有 team 级删除接口。在此之前 49 个号继续跑，注意每封一个少一个。
+
 ## 2026-11-02 10:30 补号卡在平台的活跃账号上限
 - 现象：`managed_accounts` active 49 / suspended 73，`roster` 每 2 分钟尝试注册一个新号，连续 6 个失败（yes_112/121/122/126/128…），`registration_intents.detail` 只有 `APIError`，看不到原因。平台侧：`POST /api/auth/register -> 403: team has reached its active account limit`。
 - 判断：**平台的 50 个活跃账号是按"未停用"算的**，我们自己在本地把 73 个号标成 suspended 并不会让平台释放名额；所以本地 49 < 50、平台已满。另一条教训：**读接口不能证明账号活着**——被停用的号 `get_mentions` 照样返回 200，只有写操作返回 `account suspended`。我据此列的 37 个"复活号"名单全是假的，采纳 `amara_diallo_cases` 后它一条 like 就失败了，已回退。
