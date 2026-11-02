@@ -60,8 +60,8 @@ class WorkflowTests(unittest.TestCase):
         data = record()
         package = workflow.evaluate(data, brief=clarification(data))
         default = package.to_dict()
-        self.assertEqual(default["flow"]["deep"]["assessment"]["output"]["question_set_version"], "ctn-post.v2")
-        self.assertEqual([len(c["questions"]) for c in transport.calls], [4, 17])
+        self.assertEqual(default["flow"]["deep"]["assessment"]["output"]["question_set_version"], "ctn-post.v3")
+        self.assertEqual([len(c["questions"]) for c in transport.calls], [4, 19])
         self.assertEqual(default["action_decision"]["action"], "reply")
         self.assertEqual(default["generation_task"]["prompt_type"], "P08")
         self.assertNotIn(data["post"]["text"], json.dumps(default))
@@ -92,14 +92,14 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(output["action_decision"]["required_account_level"], "high")
                 self.assertEqual(output["generation_task"]["reply_quality"], "high")
 
-    def test_unknown_level_does_not_dispatch_standard_generation(self):
+    def test_unknown_level_allows_standard_generation_and_preserves_unknown(self):
         workflow, _ = worker(side="no", value=2, action_policy=ActionPolicy())
         data = record()
         output = workflow.evaluate(data, brief=clarification(data)).to_dict()
-        self.assertEqual(output["action_decision"]["status"], "needs_account_metadata")
-        self.assertEqual(output["material_check"]["status"], "ready")
-        self.assertIsNone(output["generation_task"])
-        self.assertIn("platform_level_mapping", output["generation_needs"])
+        self.assertEqual(output['action_decision']['status'],'decided')
+        self.assertEqual(output['action_decision']['target_level_class'],'unknown')
+        self.assertEqual(output['action_decision']['required_account_level'],'standard')
+        self.assertIsNotNone(output['generation_task'])
 
     def test_no_brief_and_missing_material_preserve_reply_without_fabricating_task(self):
         workflow, _ = worker()
@@ -125,6 +125,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(len(transport.calls), 4)
         self.assertEqual(sum(l["new_attempt_count"] for l in logs), 4)
         self.assertEqual(len(logs), 3)
+        # Worker completion order is independent of the ordered batch return.
+        logs.sort(key=lambda entry: entry["batch_index"])
         self.assertEqual(logs[0]["action"]["action"], "reply")
         self.assertEqual(logs[0]["material_check"]["prompt_type"], "P08")
         self.assertNotIn(a["post"]["text"], json.dumps(logs))

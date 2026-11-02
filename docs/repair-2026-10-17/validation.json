@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-17",
+  "source_sha256": "cfac2c50ec922f70cb73644c979202e2e4e8caf5504b457a89cd98129afe71f9",
+  "base_commit": "6d8de72f6e7de12b323df59303d0052ed88b3a1d",
+  "python": "3.14.6",
+  "sqlite": "3.53.3",
+  "tests": 533,
+  "local_test_seconds": 9.326,
+  "docker_test_seconds": 9.68,
+  "sdk": "0.5.0",
+  "sdk_commit": "ffa3a7cceb2a10fa4628ea893b3fb1e41af1260d",
+  "runtime_image": "ctn2026/fleet:repair-20261017",
+  "moderation_read_capability": "unavailable",
+  "automatic_reports_enabled": false,
+  "container_smoke": {
+    "network": "none",
+    "mode": "mock",
+    "health_while_running": "healthy",
+    "shutdown_exit_code": 0,
+    "final_heartbeat_alive": false,
+    "final_error": "",
+    "workers": [
+      "frontline",
+      "comments",
+      "moderation",
+      "state",
+      "heartbeat",
+      "reply"
+    ],
+    "real_http_reads": 0,
+    "real_http_writes": 0,
+    "unknown_actions": 0
+  }
+}

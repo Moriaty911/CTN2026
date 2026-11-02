@@ -1,0 +1,39 @@
+{
+  "version": "hashtags.v1",
+  "notes": "Operator decision 2026-10-19: concentrate originals on our tag #ProofKeepsUsOpen, paired with the NO side's top tag #KeepKingstoniaOpen to answer it in its own feed; #ProofNotLockdown second. Tags only pay off in volume, so originals use a few fixed tags. A tag only we use links our accounts, hence the pairing with shared tags. Replies stay untagged (citizens almost never tag replies). P00 questions are neutral, so they get only shared tags. Pi's own hashtags are removed and these are appended.",
+  "originals": {
+    "P01": {"share": 0.9, "combos": [
+      {"tags": ["#ProofKeepsUsOpen", "#KeepKingstoniaOpen"], "weight": 0.45},
+      {"tags": ["#ProofKeepsUsOpen"], "weight": 0.25},
+      {"tags": ["#ProofNotLockdown"], "weight": 0.15},
+      {"tags": ["#ProofKeepsUsOpen", "#h2d2"], "weight": 0.15}
+    ]},
+    "P00": {"share": 0.6, "combos": [
+      {"tags": ["#KeepKingstoniaOpen"], "weight": 0.5},
+      {"tags": ["#h2d2"], "weight": 0.5}
+    ]}
+  },
+  "reposts": {
+    "notes": "Push reposts carry a short comment, not a bare repost: the original's own tags are kept (so the comment lands in the same tag feed) and one of ours is added to a tag the original lacks. Verified 2026-10-20 on post 56444 that a commented repost still increments the original's reposts counter (0 -> 1) and that the platform parses its hashtags. The lead sentence is picked by account+post hash so each account reads differently; if every candidate trips the local constraints or the duplicate gate the repost goes out without a comment (the repost still counts).",
+    "extra_tag_priority": ["#KeepKingstoniaOpen", "#ProofKeepsUsOpen", "#h2d2"],
+    "max_tags": 4,
+    "phrases": [
+      "This is the bit the headlines keep cutting.",
+      "Worth reading right to the end.",
+      "The practical detail here is the part that matters.",
+      "Everyone quoting this should read the whole thread.",
+      "This answers the question I actually had.",
+      "Small island, long memory: read this properly.",
+      "The people queueing at the clinic will recognise this.",
+      "Numbers first, noise later. Read it twice.",
+      "Haven't seen this framed this clearly before.",
+      "Been trying to explain this to my neighbour for a week.",
+      "The timetable problem, not the flag problem.",
+      "Every shop owner I know is asking exactly this.",
+      "Worth a re-read before the next debate.",
+      "This is what the town meeting sounded like last month.",
+      "Read this, then look at the hospital numbers.",
+      "The rollout schedule is the part nobody mentions."
+    ]
+  }
+}

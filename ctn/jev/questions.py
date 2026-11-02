@@ -58,7 +58,7 @@ class QuestionSpec:
     type: Literal["choice", "score", "noul"]
     title: str
     instructions: str
-    stages: tuple[Literal["triage", "deep"], ...]
+    stages: tuple[Literal["triage", "deep", "response"], ...]
     context_limits: str
     criteria: Mapping[str, str] | tuple[str, ...] | None = None
     unknown_option: str | None = None
@@ -74,7 +74,7 @@ class QuestionSpec:
         if type(self.stages) is not tuple or not self.stages:
             raise QuestionValidationError("stages", "type", "expected a nonempty tuple of stages")
         for stage in self.stages:
-            _option(stage, {"triage", "deep"}, "stages")
+            _option(stage, {"triage", "deep", "response"}, "stages")
         if len(set(self.stages)) != len(self.stages):
             raise QuestionValidationError("stages", "duplicate", "stages must be unique")
         if self.type == "score":
@@ -230,14 +230,14 @@ class QuestionSet:
         encoded = json.dumps(self.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
-    def for_stage(self, stage: Literal["triage", "deep"]) -> Mapping[str, QuestionSpec]:
-        _option(stage, {"triage", "deep"}, "stage")
+    def for_stage(self, stage: Literal["triage", "deep", "response"]) -> Mapping[str, QuestionSpec]:
+        _option(stage, {"triage", "deep", "response"}, "stage")
         selected = {key: spec for key, spec in self.questions.items() if stage in spec.stages}
         if not selected:
             raise QuestionValidationError("stage", "empty", "no questions configured for this stage")
         return MappingProxyType(selected)
 
-    def to_provider_questions(self, stage: Literal["triage", "deep"], *, content_path: str = "content") -> dict:
+    def to_provider_questions(self, stage: Literal["triage", "deep", "response"], *, content_path: str = "content") -> dict:
         """Compile only question fields. Does not send requests or enforce routing.
 
         The caller owns state packing and must supply this path in that state.

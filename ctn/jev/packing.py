@@ -219,6 +219,7 @@ class JevPacker:
         self.model = model
         if type(verified_references) is not tuple or any(type(r) is not BackgroundReference for r in verified_references):
             raise PackingValidationError("verified_references: expected local reference records")
+        self._campaign_registry = {}
         self._registry = {}
         for reference in verified_references:
             key = (reference.reference_id, reference.source_id)
@@ -236,10 +237,21 @@ class JevPacker:
                         "injection_preflight": self.preflight.fingerprint,
                         "registry": [_reference_data(r) for _, r in sorted(self._registry.items())]})
 
+    def register_campaign_snapshot(self, snapshot):
+        from ctn.rag.corpus import RagSnapshot
+        if type(snapshot) is not RagSnapshot:raise PackingValidationError('typed local campaign snapshot required')
+        data=snapshot.to_dict()
+        if len(self._campaign_registry)>=2048:
+            self._campaign_registry.pop(next(iter(self._campaign_registry)),None)
+        self._campaign_registry[snapshot.snapshot_id]={'snapshot_id':snapshot.snapshot_id,
+            'corpus_hash':data['corpus_hash'],'items':snapshot.campaign_items()}
+
     def with_forbidden_values(self, values):
-        return JevPacker(limits=self.limits, verified_references=tuple(self._registry.values()),
+        packer=JevPacker(limits=self.limits, verified_references=tuple(self._registry.values()),
                          forbidden_values=tuple(dict.fromkeys(self._forbidden_values + values)),
                          model=self.model, preflight=self.preflight)
+        packer._campaign_registry=self._campaign_registry
+        return packer
 
     def _secret(self, text: str) -> bool:
         return any(v in text for v in self._forbidden_values) or any(p.search(text) for p in _SECRET_PATTERNS)
@@ -278,6 +290,49 @@ class JevPacker:
                         question_set: QuestionSet | None = None) -> PackingResult:
         return self._pack((current, historical), kind="comparison", stage="deep",
                           question_set=question_set if question_set is not None else load_rubric("comparison"))
+
+    def pack_response(self, source: PackingResult, *, question_set: QuestionSet | None = None) -> PackingResult:
+        """Reuse the exact deep state; never repack omitted original material.
+
+        The source must be a bound, ready single-post deep request. No additional
+        state fields or caller questions can override the internal rubric.
+        """
+        if (type(source) is not PackingResult or source.status != "ready" or
+            source.kind != "post" or source.stage != "deep"):
+            raise PackingValidationError("source: expected a ready post deep snapshot")
+        rubric = question_set if question_set is not None else load_rubric("response")
+        if type(rubric) is not QuestionSet or rubric.status != "confirmed":
+            raise PackingValidationError("question_set: expected confirmed response questions")
+        questions = rubric.to_provider_questions("response")
+        if self._secret_paths(questions) or self._unicode_paths(questions):
+            raise PackingValidationError("question_set: invalid text or sensitive material")
+        body = source.to_provider_body()
+        if (hashlib.sha256(source.to_provider_bytes()).hexdigest() != source.request_id or
+            body.get("model") != self.model or len(source.targets) != 1):
+            raise PackingValidationError("source: invalid snapshot binding")
+        state = body["state"]
+        record = JevInput.from_dict(state["content"])
+        target = source.targets[0]
+        if (target.role != "target" or target.content_path != "content" or
+            record.post.post_id != target.post_id or record.source.kind != target.source_kind):
+            raise PackingValidationError("source: invalid target binding")
+        common = {"kind": "response", "stage": "response", "targets": source.targets,
+                  "question_ids": tuple(questions), "question_set_version": rubric.version,
+                  "question_set_fingerprint": rubric.fingerprint,
+                  "packing_fingerprint": _digest({"packer": self.fingerprint, "parent_request_id": source.request_id}),
+                  "input_fingerprint": source.input_fingerprint, "batch_index": source.batch_index}
+        if self._secret_paths(state) or self._unicode_paths(state):
+            return PackingResult("deferred", issues=(PackingIssue("content", "sensitive_or_invalid_snapshot"),), **common)
+        preflight = self.preflight.check(state, path="state")
+        common["preflight"] = preflight
+        if preflight.requires_review or source.preflight is not None and source.preflight.requires_review:
+            return PackingResult("deferred", issues=(PackingIssue("content", "local_injection_signal"),), **common)
+        encoded = _json({"model": self.model, "state": state, "questions": questions})
+        state_size, request_size = len(_json(state).encode("utf-8")), len(encoded.encode("utf-8"))
+        if state_size > self.limits.max_state_bytes or request_size > self.limits.max_request_bytes:
+            return PackingResult("deferred", issues=(PackingIssue("content", "response_snapshot_over_budget"),), **common)
+        return PackingResult("ready", issues=source.issues, request_id=hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+                             state_bytes=state_size, request_bytes=request_size, _body_json=encoded, **common)
 
     def pack_batch(self, contents: list[JevInput | dict] | tuple[JevInput | dict, ...], *,
                    stage: Literal["triage", "deep"] = "triage",
@@ -345,6 +400,12 @@ class JevPacker:
                                  issues=(PackingIssue("content", "same_post_pair"),),
                                  input_fingerprint=input_fingerprint, **common)
 
+        for record in records:
+            campaign=record.to_dict().get('campaign_materials')
+            if campaign is not None and self._campaign_registry.get(campaign['snapshot_id'])!=campaign:
+                return PackingResult(status='deferred',targets=targets,
+                    issues=(PackingIssue('campaign_materials','unregistered_campaign_snapshot'),),
+                    input_fingerprint=input_fingerprint,**common)
         data = deepcopy(original)
         backgrounds = [[] for _ in records]
         issues: dict[str, PackingIssue] = {}

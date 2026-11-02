@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "panel_url": "https://discord.com/channels/1561240497781997708/1561240498469867633/1561306753403191318",
+  "panel_message_id": "1561306753403191318",
+  "shared_panel_reused": true,
+  "main_panels_in_recent_history": 1,
+  "in_place_private_routing_deployed": true,
+  "report_mode": "off",
+  "action_intents": 0,
+  "candidates": 0,
+  "gateway_connected": true,
+  "panel_error": null,
+  "extra_messages_sent_by_check": 0,
+  "human_clicks_automated": false,
+  "checked_at": "2026-10-18T09:35:42.732252+00:00",
+  "offline_tests": 691,
+  "new_session_tests": 10,
+  "workflow_validation": "Actual Bot callbacks against SQLite with private-message IDs, defer modes and edit/send/delete calls checked; no live human clicks automated.",
+  "other_project_services_running": false
+}

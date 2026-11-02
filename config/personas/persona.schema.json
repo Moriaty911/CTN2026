@@ -1,0 +1,464 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ctn-personas.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "catalog_version",
+    "side",
+    "personas"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "ctn-personas.v1"
+    },
+    "catalog_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "side": {
+      "const": "yes"
+    },
+    "personas": {
+      "type": "array",
+      "minItems": 80,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "persona_id",
+          "version",
+          "side",
+          "occupation_group",
+          "candidate_username",
+          "name",
+          "identity",
+          "stance",
+          "voice",
+          "topic_tags",
+          "knowledge_boundaries",
+          "example_posts"
+        ],
+        "properties": {
+          "persona_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^yes_[0-9]{3}$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "side": {
+            "const": "yes"
+          },
+          "occupation_group": {
+            "enum": [
+              "transport_logistics",
+              "retail_food",
+              "tourism_leisure",
+              "education_sport",
+              "healthcare_support",
+              "technology_digital",
+              "agriculture_trades",
+              "office_community",
+              "medical_public_health",
+              "law_policy",
+              "independent_commentary"
+            ]
+          },
+          "candidate_username": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]{2,63}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "identity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "occupation",
+              "home",
+              "household",
+              "background",
+              "fixed_experiences"
+            ],
+            "properties": {
+              "occupation": {
+                "type": "string",
+                "minLength": 1
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1
+              },
+              "household": {
+                "type": "string",
+                "minLength": 1
+              },
+              "background": {
+                "type": "string",
+                "minLength": 1
+              },
+              "fixed_experiences": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "stance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "position",
+              "main_reasons",
+              "open_questions"
+            ],
+            "properties": {
+              "position": {
+                "const": "support_public_access_vaccination_proof"
+              },
+              "main_reasons": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "open_questions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "voice": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "style",
+              "instructions"
+            ],
+            "properties": {
+              "style": {
+                "type": "string",
+                "minLength": 1
+              },
+              "instructions": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "topic_tags": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "knowledge_boundaries": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "example_posts": {
+            "type": "array",
+            "minItems": 4,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "text"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "daily",
+                    "referendum"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 280
+                }
+              }
+            },
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "kind": {
+                      "const": "daily"
+                    }
+                  }
+                },
+                "minContains": 2
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "kind": {
+                      "const": "referendum"
+                    }
+                  }
+                },
+                "minContains": 2
+              }
+            ]
+          },
+          "story": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "age",
+              "covid",
+              "follows",
+              "gender",
+              "gossip",
+              "grew_up",
+              "interests",
+              "life",
+              "look",
+              "personal_reasons",
+              "posting",
+              "still_unsure",
+              "vaccine",
+              "vote_2025"
+            ],
+            "properties": {
+              "age": {
+                "type": "integer",
+                "minimum": 18,
+                "maximum": 90
+              },
+              "gender": {
+                "type": "string",
+                "minLength": 1
+              },
+              "look": {
+                "type": "string",
+                "minLength": 1
+              },
+              "grew_up": {
+                "type": "string",
+                "minLength": 1
+              },
+              "life": {
+                "type": "string",
+                "minLength": 1
+              },
+              "covid": {
+                "type": "string",
+                "minLength": 1
+              },
+              "vaccine": {
+                "type": "string",
+                "minLength": 1
+              },
+              "vote_2025": {
+                "enum": [
+                  "Hawthorne",
+                  "Castillo",
+                  "did not vote"
+                ]
+              },
+              "interests": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "follows": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "posting": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "habits",
+                  "when"
+                ],
+                "properties": {
+                  "when": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "habits": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "personal_reasons": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "still_unsure": {
+                "type": "string",
+                "minLength": 1
+              },
+              "gossip": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "maxItems": 80,
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "transport_logistics"
+              }
+            }
+          },
+          "minContains": 9,
+          "maxContains": 9
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "retail_food"
+              }
+            }
+          },
+          "minContains": 9,
+          "maxContains": 9
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "tourism_leisure"
+              }
+            }
+          },
+          "minContains": 9,
+          "maxContains": 9
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "education_sport"
+              }
+            }
+          },
+          "minContains": 9,
+          "maxContains": 9
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "healthcare_support"
+              }
+            }
+          },
+          "minContains": 9,
+          "maxContains": 9
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "technology_digital"
+              }
+            }
+          },
+          "minContains": 9,
+          "maxContains": 9
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "agriculture_trades"
+              }
+            }
+          },
+          "minContains": 9,
+          "maxContains": 9
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "office_community"
+              }
+            }
+          },
+          "minContains": 9,
+          "maxContains": 9
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "medical_public_health"
+              }
+            }
+          },
+          "minContains": 2,
+          "maxContains": 2
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "law_policy"
+              }
+            }
+          },
+          "minContains": 2,
+          "maxContains": 2
+        },
+        {
+          "contains": {
+            "properties": {
+              "occupation_group": {
+                "const": "independent_commentary"
+              }
+            }
+          },
+          "minContains": 4,
+          "maxContains": 4
+        }
+      ]
+    }
+  },
+  "$comment": "Runtime additionally enforces unique stable IDs, names, handles and global example texts, ASCII English samples and immutable saved versions."
+}

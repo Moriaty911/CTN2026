@@ -1,0 +1,11 @@
+{
+  "version": "evidence.v1",
+  "score_is_probability": false,
+  "caps": {"leak": 50, "repetition": 35, "coordination": 35, "timing": 20, "weak": 10, "moderator": 10},
+  "observe_below": 50,
+  "report_threshold": 85,
+  "minimum_substantive_groups": 2,
+  "moderation_event_delta": 5,
+  "max_pending_per_author": 1,
+  "max_pending_team": 10
+}

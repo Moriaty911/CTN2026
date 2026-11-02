@@ -1,0 +1,726 @@
+{
+  "version": "daily-posts.v1",
+  "notes": "Extra everyday posts used for initialise posts, in addition to each persona's catalog daily examples. No referendum, vaccine or H2D2 content. Places and institutions come from the official setting; questions avoid asserting invented facts; yes_101-yes_120 added 2026-10-27 (persona pool 100 -> 120)",
+  "posts": {
+    "yes_001": [
+      "Three drivers off at once this morning. The roster board looks like a crossword now.",
+      "Does anyone else's dog know exactly which day is the long walk? Ours waits at the door every Saturday.",
+      "Valve radio update: it hums. Doesn't play anything yet, but it hums.",
+      "Crown Harbour people: where's a good spot for a quiet coffee before a 5am start?"
+    ],
+    "yes_002": [
+      "Morning fog on the harbour today, and every ferry horn sounded twice as loud.",
+      "My sister and I can't agree on a takeaway night. Fish and chips or noodles, Crown Harbour, settle it.",
+      "Filled three pages of the boat sketchbook this week. The little fishing boats are the hardest to get right.",
+      "Has anyone been to Regatta Week as a volunteer? Thinking about signing up this year."
+    ],
+    "yes_003": [
+      "Basil is thriving on the balcony. The coriander has given up. Any tips from people who actually know plants?",
+      "Primary school pickup traffic in Kingstonia City is a sport of its own.",
+      "Which route do other drivers take to avoid the ring road at 8am? Asking for my sanity.",
+      "Small win today: every parcel delivered, nothing left in the van."
+    ],
+    "yes_004": [
+      "Our flat's board game shelf now has more games than chairs. This is fine.",
+      "Warehouse fact: the label you need is always on the side facing the wall.",
+      "Recommend me a board game for three people who get competitive in a bad way.",
+      "Is it just me, or do the late buses home get more crowded every week?"
+    ],
+    "yes_005": [
+      "Headwind both ways today. Not sure how that's physically possible, but here we are.",
+      "Fixed my neighbour's chain and got paid in mangoes. Best trade of the week.",
+      "Which cafe in the city centre is friendliest to couriers who just need a glass of water?",
+      "Quiet roads on Sunday mornings make the whole city feel like a different place."
+    ],
+    "yes_006": [
+      "Played my first full song on the keyboard tonight. Slowly. With mistakes. Still counts.",
+      "When the ferry timetable shifts, my whole afternoon shifts with it.",
+      "Do people prefer the Daily Kingstonia or the Herald for the weekend puzzles? Settling a family debate.",
+      "Sunday lunch at my parents' place again. Somehow there's always enough food for twice as many people."
+    ],
+    "yes_007": [
+      "Found a 1960s postcard of the old harbour lighthouse at the market. Very pleased with myself.",
+      "Salt air gets into everything. Every electrician on the waterfront knows the feeling.",
+      "Teenage nephew asked me to explain how a ferry generator works. Took an hour. He seemed interested for the first five minutes.",
+      "Anyone else collect old maritime postcards? Wondering where people find them these days."
+    ],
+    "yes_008": [
+      "Phones were ringing nonstop this afternoon. Every driver wanted the same pickup at the same time.",
+      "Podcast recommendations for a long walk? I've run out of my usual ones.",
+      "My little brother has discovered cooking. The kitchen has not recovered.",
+      "Rain started just as I left work. Kingstonia City weather has impeccable timing."
+    ],
+    "yes_009": [
+      "Sunday bread attempt number six: a little flat, still delicious.",
+      "Early runs mean seeing New Haven before anyone else is awake. Never gets old.",
+      "Kids want a pet. Partner wants a garden. Any suggestions for a compromise that doesn't eat the garden?",
+      "Does anyone know a good rye recipe that works in a hot kitchen?"
+    ],
+    "yes_010": [
+      "Saturday regular asked for 'the usual' and I knew exactly what she meant. Small-town bakery life.",
+      "Flower arranging class, week three: still more stems on the floor than in the vase.",
+      "What do people actually want from a bakery at 6am? Coffee, obviously. What else?",
+      "Living above a bakery means everything smells like bread. There are worse problems."
+    ],
+    "yes_011": [
+      "Local cricket score from the weekend: we lost, but the scorebook looks beautiful.",
+      "Late produce delivery again. The mangoes were worth the wait.",
+      "Shop owners in the city: how are you handling the early closing on public holidays this year?",
+      "My daughter is teaching me to use the new till app. Patience on both sides is required."
+    ],
+    "yes_012": [
+      "Cake experiment of the week: lime and coconut. Friends say yes. Cousins say more icing.",
+      "There's something calming about cleaning a coffee grinder during the quiet hour.",
+      "Who has the best flat white in Crown Harbour? I need to scout the competition.",
+      "Sharing a house with two cousins means the fridge is a negotiation."
+    ],
+    "yes_013": [
+      "Supplier moved the delivery to 6am. Rewrote the whole prep list. Again.",
+      "The rescue cat has decided the jazz records are hers now.",
+      "Chefs of New Haven: what's your go-to staff meal when everyone's exhausted?",
+      "Busy night, clean kitchen, no burns. Calling that a success."
+    ],
+    "yes_014": [
+      "Someone left a handwritten note inside a returned novel. Kept it on the shop noticeboard.",
+      "Our reading group has chosen a 700-page book. Nobody is going to finish it by Thursday.",
+      "What's the last book you couldn't put down? Need something for the weekend.",
+      "Rainy afternoon in the bookshop: lots of browsers, very few buyers, perfectly nice."
+    ],
+    "yes_015": [
+      "Wind took half the canopy today. Market life.",
+      "Caught nothing at dawn but saw a pod of dolphins off the point. Fair trade.",
+      "Is the Mango & Spice Festival worth getting a stall at, or is it too crowded to sell anything?",
+      "My aunt says the market was busier in her day. She also says the mangoes were bigger."
+    ],
+    "yes_016": [
+      "Mended a jacket sleeve this weekend and it looks almost new. Almost.",
+      "Returns day at the shop. Half the items still have tags; the other half have stories.",
+      "Where do people find good second-hand clothes around Kingstonia City?",
+      "My housemate borrowed my sewing kit and returned it organised. I don't know how to feel."
+    ],
+    "yes_017": [
+      "Ran out of fish by 7pm. Either a great night or a bad order. Choosing to believe the first.",
+      "School holidays mean the kids help at the shop. They mostly help themselves to chips.",
+      "Football fans of Crown Harbour: does anyone still collect match programmes, or is it just me?",
+      "New menu board finally up. Took three tries to spell 'calamari' right."
+    ],
+    "yes_018": [
+      "Garden bench restoration: sanding done, paint chosen, motivation pending.",
+      "Customer came in for one screw and left with a full toolbox. Hardware shops are dangerous.",
+      "What's the best outdoor varnish for this humidity? Weekend project question.",
+      "Dad still insists on checking every delivery himself. He's usually right."
+    ],
+    "yes_019": [
+      "Water was glass-clear on the North Coast this morning. Even the crew stopped to look.",
+      "Photographed the same rock formation for the fourth time this month. Light keeps changing.",
+      "Parents of toddlers: how do you get anything done on a day off?",
+      "Equipment check took twice as long today. One missing fin, found in the van."
+    ],
+    "yes_020": [
+      "Three late arrivals, two missed ferries, one very patient night porter.",
+      "Finished the Saturday crossword in record time. Feeling unreasonably smug.",
+      "Best quiet beach near Crown Harbour for a day off? Asking for a tired receptionist.",
+      "Guests always ask what the locals actually do for fun. Good question, honestly."
+    ],
+    "yes_021": [
+      "Changed the walking route because of the forecast. Sun came out anyway.",
+      "Drew the old customs house from the bench across the road. Proportions are wrong but I like it.",
+      "Which building in Kingstonia City do you think gets overlooked by visitors?",
+      "Walking tours teach you which corners always have shade. Valuable knowledge in October."
+    ],
+    "yes_022": [
+      "Jam season is coming. The kitchen already smells like guava.",
+      "Elderly dog has claimed the sunniest spot on the guesthouse porch. Guests step around him.",
+      "Other guesthouse owners: how far ahead are people booking for Mango & Spice this year?",
+      "A guest asked if the dog was for rent. He is not. He is, however, available for ear scratches."
+    ],
+    "yes_023": [
+      "Every paddle accounted for at closing. Small victories.",
+      "Slow paddle on my day off. Saw a turtle. Didn't take a photo, just watched.",
+      "North Coast locals: what time does the wind usually pick up this month?",
+      "Sharing a rental with a workmate means we talk about kayaks even at dinner."
+    ],
+    "yes_024": [
+      "Checkout delayed, room list rewritten, everyone still smiling. Good team today.",
+      "Sunday tea: simple lemon cake. My daughter decorated it with far too many sprinkles.",
+      "What's your trick for keeping white towels white in this humidity?",
+      "Housekeeping is the part of a hotel nobody notices until something is missing."
+    ],
+    "yes_025": [
+      "Lost three chess games online tonight. Learning a lot about what not to do.",
+      "Week four of chess lessons and I've finally stopped losing my queen in the first ten moves. Mostly.",
+      "Any chess clubs in Kingstonia City that welcome terrible beginners?",
+      "Quiet office today. The printer was the loudest thing in the room."
+    ],
+    "yes_026": [
+      "Visiting crew from overseas asked where to buy fresh fish. Sent them to the morning market.",
+      "Repotted the succulents and somehow ended up with more pots than plants.",
+      "Marina folks: is it busier this October than last year, or does it just feel like it?",
+      "Mum and I watched the sunset from the harbour wall. Still one of the best views on the island."
+    ],
+    "yes_027": [
+      "Straightened every exhibition label before opening. One was upside down. Nobody had noticed for a week.",
+      "Reading about the first settlers on the islands again. Some stories never get old.",
+      "What period of Kingstonia's history do you wish the museum covered more?",
+      "Two cats, one sunny windowsill. Negotiations continue."
+    ],
+    "yes_028": [
+      "Lunchtime library session: thirty kids, one dinosaur book, total chaos.",
+      "Swapped novels with the neighbours again. Their taste is better than mine.",
+      "Book recommendations for a teenage son who says he 'doesn't read'?",
+      "Repairing torn covers is oddly satisfying. Like surgery, but for picture books."
+    ],
+    "yes_029": [
+      "Our daughter has started a 'lost property museum' at home with things she finds in her school bag.",
+      "Weekend walk ended at a cafe with very good tea. Planning the next one already.",
+      "Does anyone know a good walking track near New Haven that's not too steep?",
+      "School office life: half admin, half lost property detective."
+    ],
+    "yes_030": [
+      "Lane bookings and lesson registers finally match. Took all morning.",
+      "Learning to make one curry properly. Third attempt was actually good.",
+      "Parents of swimmers: what time slots actually work for after-school lessons?",
+      "Pool smells like chlorine, I smell like chlorine, my flatmate has stopped commenting."
+    ],
+    "yes_031": [
+      "Lab cupboard inventory done. Somehow we have twelve funnels and no stoppers.",
+      "Finished a small wooden model of a fishing boat. The mast is crooked but I'm calling it character.",
+      "CHIT people: where's the best place on campus to eat lunch without the crowds?",
+      "My younger sibling has started borrowing my tools. They are not coming back."
+    ],
+    "yes_032": [
+      "Chilli plants have gone wild this week. Anyone want some very hot chillies?",
+      "Counting lunch orders before 9am is a skill nobody trains you for.",
+      "What's a lunchbox snack kids actually eat instead of bringing home?",
+      "Volunteers at the canteen today were brilliant. Prep done in record time."
+    ],
+    "yes_033": [
+      "Turf patched just in time for the weekend games. Fingers crossed for no rain.",
+      "Love the quiet at the ground before a match. Just birds and sprinklers.",
+      "Who's playing at New Haven this weekend? Need to know how many lines to mark.",
+      "Mowing in October heat is character building, apparently."
+    ],
+    "yes_034": [
+      "Made a pottery bowl that leans slightly to the left. It's staying.",
+      "After-school art club produced eleven paintings of sharks today. No idea why.",
+      "Where do people buy clay in Kingstonia City without paying a fortune?",
+      "Clean brushes, set tables, ten minutes until chaos. Love this job."
+    ],
+    "yes_035": [
+      "Social badminton tonight. Lost every game, laughed through all of them.",
+      "Student services rule: whatever the question, the answer is usually 'the other building'.",
+      "Is the second floor of the CHIT library being renovated, or is it just closed today?",
+      "Two flatmates, one kettle, endless tea."
+    ],
+    "yes_036": [
+      "Rewrote a handout after realising the example made sense only to me.",
+      "Morning walk along the coast: grey sky, calm sea, very good start.",
+      "Fellow tutors: how do you keep adult learners coming back after week three?",
+      "Dropping groceries at my mum's before class has become a nice little routine."
+    ],
+    "yes_037": [
+      "Knitting a scarf nobody needs in this climate. It's for the process.",
+      "Front desk tip nobody asked for: always keep a spare pen. Someone will take the first one.",
+      "What's on the radio in the afternoons that's worth listening to?",
+      "Our son has decided he wants to be a ferry captain this week. Last week it was a chef."
+    ],
+    "yes_038": [
+      "Delivery matched the order sheet exactly. That never happens.",
+      "Rebuilt the gears on an old bicycle. Rides better than mine now.",
+      "Anyone in Crown Harbour selling old bike frames? I have a project in mind.",
+      "Brother made dinner tonight. Mostly rice. Still appreciated."
+    ],
+    "yes_039": [
+      "Mint has taken over the herb pot. Mint always wins.",
+      "Rescue dog finally sat on command. Took three months and a lot of cheese.",
+      "Where do people get affordable seedlings around New Haven?",
+      "Busy week of visits. Every client had a story worth hearing."
+    ],
+    "yes_040": [
+      "Checked the trolley brakes twice. They were fine. Habit.",
+      "Fishing trip lined up for the weekend. The fish have been warned.",
+      "Kingstonia City dads: where do you take two kids on a rainy Saturday?",
+      "Hospital corridors at 6am are the quietest place in the city."
+    ],
+    "yes_041": [
+      "Music session at the care home today. One resident still knew every word of a 1960s song.",
+      "Hand-made birthday cards for three friends this month. My desk is covered in glitter.",
+      "Who still sends postcards? I'd love a few pen pals around the islands.",
+      "My sister says I talk to my plants. She's not wrong."
+    ],
+    "yes_042": [
+      "Records room has no windows, so I take my lunch on the bench outside. Best seat in New Haven.",
+      "Finished a 1000-piece jigsaw of the harbour. One piece missing. Of course.",
+      "Jigsaw people: any shop in New Haven that does puzzle swaps?",
+      "Mum insists on cooking dinner every night. I am not complaining."
+    ],
+    "yes_043": [
+      "Ferry cancelled, roster rearranged, everyone covered. That's the job.",
+      "Spotted a frigatebird over the harbour at lunch. Best five minutes of the day.",
+      "Birdwatchers of Kingstonia City: what's the best spot this time of year?",
+      "Partner made pancakes this morning. Good omen for the week."
+    ],
+    "yes_044": [
+      "Sourdough starter is alive. Named it. Not telling you the name.",
+      "Hospital kitchen at 5am: steam, radio, and someone always singing along slightly off key.",
+      "Bakers: how do you stop sourdough going flat in this humidity?",
+      "Two flatmates, two different night shifts, one very confused alarm clock."
+    ],
+    "yes_045": [
+      "Evening walk with the family turned into a family debate about ice cream flavours.",
+      "Pharmacy queue this morning was full of people asking about sunscreen. Summer is clearly on the way.",
+      "Teenagers: is there any way to get them off their phones at dinner without starting a war?",
+      "Shelf stacking at 7am is surprisingly meditative."
+    ],
+    "yes_046": [
+      "Hot take: the best debugging tool is a walk to the harbour and back.",
+      "Sketched the harbour cranes this weekend. The cat walked across the page.",
+      "Kingstonia developers: what's everyone using for side projects these days?",
+      "Cat has learned to close my laptop. She's a better project manager than most."
+    ],
+    "yes_047": [
+      "Recovered a colleague's file from the recycle bin. I am a hero for five minutes.",
+      "Got an old game console working again. Spent the evening playing instead of fixing anything else.",
+      "Is there a retro gaming meetup anywhere in Crown Harbour?",
+      "Turned it off and on again. It worked. Never tell anyone."
+    ],
+    "yes_048": [
+      "Testers know the feeling: the button works perfectly until someone clicks it twice.",
+      "Photographed a blue door on a side street I've walked past a hundred times.",
+      "Photographers: what's your favourite ordinary street in Kingstonia City?",
+      "Quiet evening, good light, camera in hand. That's the plan."
+    ],
+    "yes_049": [
+      "Labelled every replacement cable before the visit. Future me will be grateful.",
+      "Barbecue planned for the weekend. Weather forecast: undecided.",
+      "Outdoor cooking people: best thing to grill that isn't fish?",
+      "Toddler discovered the word 'why'. Every answer gets another 'why'."
+    ],
+    "yes_050": [
+      "Watched someone struggle with a tiny button today. Made the button bigger. Simple.",
+      "Restored a second-hand lamp. It flickers a little, which I'm choosing to call charm.",
+      "What's an app or website you use every day that still annoys you?",
+      "Housemate and I have very different ideas about what 'tidy' means."
+    ],
+    "yes_051": [
+      "Helped a shop cut their checkout from six steps to three. Everyone's happier.",
+      "New walking route added to the notebook: up the hill behind New Haven, worth the climb.",
+      "Small business owners: what's the one tech problem you wish someone would just fix?",
+      "Kids asked how the internet works. I'm still explaining."
+    ],
+    "yes_052": [
+      "Duplicate record finally traced. Celebrated with bread.",
+      "Baking bread is the best way to stop staring at a spreadsheet.",
+      "Data people: how do you explain your job to family without everyone's eyes glazing over?",
+      "Visited my parents for lunch. Left with leftovers for the whole week."
+    ],
+    "yes_053": [
+      "Cleaned a keyboard today. Found a coin, two crumbs and what might have been a seed.",
+      "Who has a good old detective novel to lend? I've read everything on my shelf twice.",
+      "Recommend me a detective series set somewhere warm.",
+      "Dad and my brother arguing about football again. Background noise of home."
+    ],
+    "yes_054": [
+      "Rewrote a set of instructions after realising step three assumed you knew step four.",
+      "Sketched a map of my usual Sunday walk. Wildly out of scale.",
+      "Writers: what's the worst instruction manual you've ever had to follow?",
+      "Long walk, quiet cafe, notebook. That's the whole weekend plan."
+    ],
+    "yes_055": [
+      "Ferry to the main island was running late, so the mangoes and I had a long chat on the dock.",
+      "Cricket on the radio, tools on the bench, perfect afternoon.",
+      "Growers on the outer islands: how are your mangoes looking this season?",
+      "Kids helped with the packing today. Half the fruit got eaten along the way."
+    ],
+    "yes_056": [
+      "Cooperative meetings run on two things: biscuits and someone saying 'one last thing'.",
+      "Marigolds in old paint tins on the windowsill. They're thriving.",
+      "Does the fishing cooperative still do the end-of-year dinner? Asking for a hungry partner.",
+      "Dog has opinions about the fish market. Strong ones."
+    ],
+    "yes_057": [
+      "Parts list checked twice. Still forgot the right screwdriver.",
+      "Built a small shelf for my daughter's books. She's already filled it.",
+      "Electricians: what's the most unusual wiring you've found in an old Crown Harbour house?",
+      "Saturday morning in the shed with the radio on. Bliss."
+    ],
+    "yes_058": [
+      "Truck arrived early, packing order thrown out, everyone adapted. Proud of the team.",
+      "Sewed tote bags for three friends. Only one has crooked handles.",
+      "Where can I find good fabric offcuts around New Haven?",
+      "My nephew wants to work in fruit packing. I've told him about the early starts."
+    ],
+    "yes_059": [
+      "Customer offered me a cold drink from the fridge I'd just fixed. Felt earned.",
+      "Shore fishing at sunrise. Caught one small fish and let it go.",
+      "Fishing people in the city: any good spots that aren't packed on weekends?",
+      "Summer's coming, which means every fridge in Kingstonia City is about to break."
+    ],
+    "yes_060": [
+      "Weather turned, drying racks moved inside. Spice farming is mostly weather watching.",
+      "Reading a travel book about places I'll probably never go. Lovely way to spend a rainy evening.",
+      "Is anyone else noticing the rain arriving earlier this year inland?",
+      "Brought fresh pepper to the neighbour. Got lemons back. Best kind of trade."
+    ],
+    "yes_061": [
+      "There's a particular sound a healthy outboard makes. Took me years to hear it properly.",
+      "Restored a rusty spokeshave. Works better than the new one.",
+      "Boat owners: what's the one maintenance job everyone keeps putting off?",
+      "Brother and I share the workshop. Every tool lives in two different places."
+    ],
+    "yes_062": [
+      "Wrong gate on the contractor booking, caught it in time. Coffee earned.",
+      "Packed the most elaborate picnic sandwiches ever. Ate them in ten minutes.",
+      "Best picnic spot in Kingstonia City that isn't too windy?",
+      "Son asked why construction sites need so many forms. Good question."
+    ],
+    "yes_063": [
+      "Flying fish followed the ferry for a good ten minutes this morning. Never get tired of that.",
+      "Found an old tide chart from the 1980s. Some things haven't changed.",
+      "Outer island folks: what's the one thing you always bring back from the main island?",
+      "Long day, quiet ferry ride home. Best part."
+    ],
+    "yes_064": [
+      "Month end in accounts: more coffee, fewer words, everyone very focused.",
+      "Social netball tonight. Our team is mostly enthusiasm.",
+      "Is there a netball league in Kingstonia City that takes total beginners?",
+      "Two kids, two school bags, one missing lunchbox. Every morning."
+    ],
+    "yes_065": [
+      "Two groups wanted the hall at the same time. Both got it. Puzzle solved.",
+      "Played guitar for an hour tonight. The neighbours were very polite about it.",
+      "Community groups in New Haven: what time slot do you actually want the hall for?",
+      "Partner bought me a guitar capo. Hint received."
+    ],
+    "yes_066": [
+      "Customer called just to say thanks today. Doesn't happen often, so I'm writing it down.",
+      "New cafe this weekend: great pastries, terrible chairs.",
+      "Which Kingstonia City cafe should I try next weekend?",
+      "Mum and I watched an old film tonight. She cried. I pretended not to."
+    ],
+    "yes_067": [
+      "Office plants watered, kettle descaled, lift working. The unglamorous side of a Monday.",
+      "Watched the dinghies race off the breakwater at lunch. Somebody capsized and laughed about it.",
+      "Sailing fans: who's looking strong for Regatta Week?",
+      "Dog greets the postman like an old friend every single day."
+    ],
+    "yes_068": [
+      "Found a large-print edition someone had been waiting weeks for. Their smile made my day.",
+      "Quiet hour of reading after dinner is the best part of the day.",
+      "What's a book you'd recommend to a ten-year-old who loves the sea?",
+      "Daughter asked if libraries ever run out of books. Not yet."
+    ],
+    "yes_069": [
+      "Volunteers brought homemade lemonade to the garden today. Weeding goes faster with lemonade.",
+      "Tried eggplant in a pasta dish. Unexpectedly great.",
+      "Community gardeners: what's growing best for you this month?",
+      "Two flatmates, one balcony full of pots. We have a system. Sort of."
+    ],
+    "yes_070": [
+      "Mother-in-law has taken over the kitchen for the week. We are eating extremely well.",
+      "Family crossword session on Sunday. Mother-in-law always wins.",
+      "Is the Herald crossword harder than the Daily Kingstonia one, or is that just my family?",
+      "Busy week at work. Weekend can't come soon enough."
+    ],
+    "yes_071": [
+      "Council depot coffee is terrible and somehow everyone still drinks three cups.",
+      "Restoring an old dresser. Every scratch has a story.",
+      "Furniture restorers: best way to fix a water ring on old timber?",
+      "Toddler's favourite word this week: 'truck'."
+    ],
+    "yes_072": [
+      "Payday for everyone else means a very quiet, very careful Thursday for me.",
+      "Tried my friend's grandmother's fish curry recipe. It was perfect. I won't be admitting that to her.",
+      "What's your family's one recipe that never gets written down?",
+      "Visited my sister for dinner. She cooked. I washed up. Fair."
+    ],
+    "yes_073": [
+      "Saw the first jacaranda flowers of the season on the way home. Lovely surprise.",
+      "Teenager has started making breakfast on Saturdays. Small miracles.",
+      "Where do people walk in Kingstonia City when the waterfront is too crowded?",
+      "Quiet evening, good book, early night."
+    ],
+    "yes_074": [
+      "Tomatoes finally ripening in the courtyard. Third season lucky.",
+      "Spent the weekend reading in the courtyard while the tomatoes did their thing.",
+      "Courtyard gardeners: best tomato variety for this heat?",
+      "Spouse and I have started a Sunday walk tradition. Week two, still going."
+    ],
+    "yes_075": [
+      "Checked a citation twice. It was right the first time. Still worth it.",
+      "Found an old map of the coastline at a secondhand shop. Bought it immediately.",
+      "Map collectors: where do you find old Kingstonia charts?",
+      "Dog and I took the long coastal path today. Both very tired."
+    ],
+    "yes_076": [
+      "Finished the hull of a small model boat. The deck is next.",
+      "Spent the day separating what's proposed from what's actually decided. Clarity is underrated.",
+      "Model builders in Crown Harbour: any club or shop worth knowing about?",
+      "Spouse says the model boats are taking over the shelf. Spouse is correct."
+    ],
+    "yes_077": [
+      "Cut a paragraph from the newsletter that I loved. It was too long. Editing hurts.",
+      "Photographed a hand-painted shop sign in New Haven. They don't make them like that anymore.",
+      "What's your favourite old shop sign around New Haven?",
+      "Newsletter out tomorrow. Hoping nobody finds a typo."
+    ],
+    "yes_078": [
+      "Editing tip: if a sentence needs three commas, it probably needs to be two sentences.",
+      "Local amateur theatre tonight. The lead forgot a line and the audience helped.",
+      "Has anyone seen the new play at the community theatre? Worth going?",
+      "Daughter wants to be an actor. Started rehearsing in the living room."
+    ],
+    "yes_079": [
+      "Crown Harbour after rain smells like salt and wet stone. Best time for a walk.",
+      "Every blogger has a drafts folder full of posts that will never be finished. Mine is enormous.",
+      "What's the one local story you think deserves more attention?",
+      "Flatmate and I watched the boats come in from the balcony tonight."
+    ],
+    "yes_080": [
+      "Partner made coffee before I woke up. The cats got breakfast first, naturally.",
+      "Weekend cooking project took twice as long as planned. Delicious anyway.",
+      "What's a dish that's worth spending a whole afternoon cooking?",
+      "Two cats watching me cook like judges on a TV show."
+    ],
+    "yes_081": [
+      "Two gannets off the point this morning and a gull that clearly owns the stern.",
+      "Anyone know a shop on the coast that still stocks proper wool socks?",
+      "The last crossing ran twenty minutes late and nobody minded because of the sunset.",
+      "My notebook now has eleven pages of birds and one page of complaints."
+    ],
+    "yes_082": [
+      "Twelve drops, four prescriptions, one very steep street in the rain.",
+      "The bell on my bike sounds like a doorbell and I am keeping it.",
+      "Best coffee between the depot and the old tram lines: where should I go?",
+      "Three people thanked me today for being fast, which never happens."
+    ],
+    "yes_083": [
+      "Rye sold out by nine again and I have no idea where it all goes.",
+      "Someone asked for a loaf with seeds on top and I have been thinking about it all day.",
+      "Teenagers ate an entire tray of cinnamon rolls while I was on the phone.",
+      "Question for other bakers: what time do you actually start?"
+    ],
+    "yes_084": [
+      "Forty pallets before the morning crew arrived and nobody clapped.",
+      "Aisle six at three in the morning is the quietest place in Kingstonia.",
+      "The night bus driver and I have a running argument about cricket scores.",
+      "Does anyone else find shelf-stacking strangely restful?"
+    ],
+    "yes_085": [
+      "Mostly mackerel today and a queue right out to the road.",
+      "The knife roll is older than the stall and cuts better than anything new.",
+      "My father went out at four and came back with a story about a seal.",
+      "What is the correct amount of ice for a fish box? I have opinions, tell me yours."
+    ],
+    "yes_086": [
+      "Two cancellations today, both about the date, both easily refilled.",
+      "The loose stair rail is fixed again and I give it a week.",
+      "Nine rooms, four loads of washing, one very contented cat on the landing.",
+      "Walkers: what would make a nine-room guesthouse worth coming back to?"
+    ],
+    "yes_087": [
+      "Two students, flat water, visibility about forty metres.",
+      "The wetsuit rail is the only garden this house has and it is thriving.",
+      "A grey nurse shark stayed with the boat for ten minutes and nobody spoke.",
+      "What is the best way to get a nervous student into the water, honestly?"
+    ],
+    "yes_088": [
+      "Marking forty books tonight and the handwriting is getting worse.",
+      "The hamster is called Business and it has been found.",
+      "We planted beans in paper cups and half of them have already died.",
+      "Parents: how much homework is too much in year four?"
+    ],
+    "yes_089": [
+      "Forty kids in the shallow end and not one of them listening.",
+      "The lane ropes needed redoing and I did them badly.",
+      "Cold water at dawn, two laps, and my hands did not work for an hour.",
+      "Anyone got a drill for getting a nine year old to float on their back?"
+    ],
+    "yes_090": [
+      "Night shift, two falls, one broken cardigan and a finished crossword.",
+      "One resident asked me to write down her recipe and I have carried the note around all week.",
+      "One of the residents beat me at cards three times and told everyone.",
+      "What do you take to a long night shift that is not coffee?"
+    ],
+    "yes_091": [
+      "Eighty scripts before eleven and the same question twenty times.",
+      "Bike delivery route now includes two very steep shortcuts and one orchard.",
+      "The booking software has a page that takes ninety seconds to load.",
+      "Pharmacy people: what do you do with fifty boxes of expired stock?"
+    ],
+    "yes_092": [
+      "Four hours up a ladder for a cable that turned out to be fine.",
+      "Three power strips and one working light and I still call it progress.",
+      "Fixed a router with a screwdriver and a strongly worded stare.",
+      "Anyone got a sensible way to label forty cables so they stay labelled?"
+    ],
+    "yes_093": [
+      "The dashboard now has a name and I am slightly embarrassed by it.",
+      "One chair in this flat has importance status and we rotate.",
+      "Made a chart that finally made sense of a week of noise.",
+      "What is your favourite way to spot a bad dataset before it embarrasses you?"
+    ],
+    "yes_094": [
+      "Six cracked screens and a laptop with coffee in it.",
+      "The drawer of unsorted screws is now two drawers, which is worse.",
+      "Rebuilt a phone for a man who hugged me and then apologised for hugging me.",
+      "What do you do with the boxes? Serious question, mine are winning."
+    ],
+    "yes_095": [
+      "Early apples are sizing well and the dog ate another windfall.",
+      "Sixty pickers arrive in autumn and half come across from the coast.",
+      "The tractor started on the second go, which is a good day.",
+      "Orchardists: how do you keep birds off the crop without losing your mind?"
+    ],
+    "yes_096": [
+      "Ninety-two notices and one very angry phone call about a fence.",
+      "The printer jams on the same form every second Tuesday.",
+      "Sorted the archive cupboard and found a map from nineteen eighty.",
+      "Does anyone actually enjoy filling in forms, or is it just me?"
+    ],
+    "yes_097": [
+      "Reshelved the picture books after someone turned it into a game.",
+      "The mobile van squeak has become a running joke with the children.",
+      "A six year old told me the ending of every book on the shelf.",
+      "Which book would you put in a box for a stranger who has had a bad week?"
+    ],
+    "yes_098": [
+      "Payroll for four hundred people and two sites without power.",
+      "The cat sits on the keyboard at five o'clock and is never late.",
+      "Found a rounding error that had been quietly travelling for eight years.",
+      "Spreadsheet people: who else keeps a tab called do not touch?"
+    ],
+    "yes_099": [
+      "Two patients cancelled so I walked the harbour instead.",
+      "The resistance bands in my bag have taken over the hallway.",
+      "A patient walked to the corner shop for the first time since spring.",
+      "Physio question: what is the best small exercise that people actually keep doing?"
+    ],
+    "yes_100": [
+      "Three eviction notices today and two of them from the same landlord.",
+      "Four piles on this desk and the smallest one is the urgent one.",
+      "Spent an hour translating one paragraph of a tenancy agreement.",
+      "Renters: what would you want written down before you sign anything?"
+    ],
+    "yes_101": [
+      "Two admissions before seven and one of them was a toddler who wanted to press the lift buttons.",
+      "Handover notes from the night registrar are always half warnings and half gossip.",
+      "The good coffee for the night shift was mostly gone by eleven, and I am the reason.",
+      "Kettle on this ward takes nine minutes. Is that normal, or is it just ours?"
+    ],
+    "yes_102": [
+      "Four prescriptions this morning and two of them were the same drug under different names.",
+      "Someone brought the pharmacy a box of biscuits with the wrong change attached.",
+      "Our fridge log has one line in the wrong handwriting and it is mine.",
+      "Nine o'clock and eleven o'clock queues look the same. Does anyone else notice that?"
+    ],
+    "yes_103": [
+      "The dashboard updated overnight and nobody told the people who read it aloud to others.",
+      "Three reports over lunch and only one of them told me what to do.",
+      "My train was late and I spent the wait explaining confidence intervals to nobody.",
+      "Which chart tool does not need three hours of setup before it shows anything?"
+    ],
+    "yes_104": [
+      "Two people cried in the intake room today and one of them apologised for it.",
+      "The photocopier is the only thing in this building that works every time.",
+      "The same advice went out four times today in four different ways.",
+      "Printer ate half a folder again. How do people keep this stuff in order?"
+    ],
+    "yes_105": [
+      "The consultation closed with three hundred comments and a meeting room with twelve chairs.",
+      "One sentence in a consultation can carry more weight than a whole annex.",
+      "Somebody's coffee went cold on the policy shelf, so it is a normal Wednesday.",
+      "Annexes: does anyone read them, or is it just me and the dog?"
+    ],
+    "yes_106": [
+      "One file today had eleven stamps and none of them from this century.",
+      "The waiting room chairs got replaced and nobody told the people who sit in them.",
+      "Two languages on the phone today and I forgot my own name in both.",
+      "Phone credit at short notice. Where is decent round here?"
+    ],
+    "yes_107": [
+      "The corner shop has put the Christmas chocolate out and it is still October.",
+      "Two people stopped me on the street to disagree about the bus lane.",
+      "Six hundred words written, five hundred deleted, and the last hundred still wrong.",
+      "Corner shop opened a month ago and nobody mentioned it. Did I miss a sign?"
+    ],
+    "yes_108": [
+      "The library returned my letter to sender and put a note in the margin.",
+      "Reading the council minutes has become a hobby, which is what retirement does to a person.",
+      "My grandson says my handwriting looks like it is angry at the page.",
+      "Library closes at four on the one day I have time to go. Why is that?"
+    ],
+    "yes_109": [
+      "Three drivers called in sick and the depot is held together with string and tea.",
+      "A bus broke down outside the fish market and the passengers were very patient.",
+      "The rota changed again and I found out from a text message at nine.",
+      "Eastern route skips the hospital stop on Sundays. Anyone know why?"
+    ],
+    "yes_110": [
+      "Six deliveries, one traffic warden, and a client who wanted a salad in the rain.",
+      "My chain came off in the tunnel and a stranger helped me fix it in the dark.",
+      "The city looks different at four in the afternoon, mostly hungrier.",
+      "Chain came off twice today. How do you all keep one on in this weather?"
+    ],
+    "yes_111": [
+      "The fish came in at five and the ice machine gave up at half past five.",
+      "Two customers argued about the price of mussels and both were wrong.",
+      "Only one knife in this stall works and only one person can find it.",
+      "Fishmonger who still takes a card on a Saturday. Anyone?"
+    ],
+    "yes_112": [
+      "The oven chose today of all days to make a noise like a small plane.",
+      "Somebody ordered forty loaves for a meeting that had already finished.",
+      "The flour delivery came with the wrong invoice and the right weather.",
+      "Ovens start at half four. Is that too early to wake the neighbours?"
+    ],
+    "yes_113": [
+      "The harbour was flat as a plate today and the tourists asked why we need life jackets.",
+      "A gull took a chip out of a child's hand and the child thought it was brilliant.",
+      "Six tours, one sunburn, and a couple who wanted to know where the fish market is.",
+      "Wind like this, do the harbour tours run at all?"
+    ],
+    "yes_114": [
+      "Two rooms complained about the same noise and neither of them was in that room.",
+      "The lift card reader stopped working and the stairs suddenly got popular.",
+      "A passport turned up in a drawer today, missing since August.",
+      "Lift card reader is dead again. Who do I call about that, or is it my job now?"
+    ],
+    "yes_115": [
+      "The pitch was frozen and we trained in the car park with two cones.",
+      "Fourteen year olds can smell a warm up lie from a hundred metres.",
+      "The kit bag has one boot in it and nobody will admit to owning it.",
+      "Junior team needs somewhere to train in the rain. Any ideas?"
+    ],
+    "yes_116": [
+      "Three parents arrived early and one of them had brought a whole cake.",
+      "The craft cupboard is now mostly glue and optimism.",
+      "A child told me a long story about a dog and I would like to hear the rest.",
+      "Craft idea that does not end with glitter in every corner by four o'clock?"
+    ],
+    "yes_117": [
+      "Two residents wanted the window open and two wanted it closed, so we compromised badly.",
+      "A night shift goes faster when somebody brings in the good biscuits.",
+      "Incontinence care is a kind thing to do badly and a cruel thing to do carelessly.",
+      "Last hour of a night shift when everything is done. What do you all do with it?"
+    ],
+    "yes_118": [
+      "The delivery came short again and the fridge shelf tells its own story.",
+      "A patient asked me which white tablet was which and I drew them a picture.",
+      "Eleven minutes explaining which white box was which, then the label turned up.",
+      "Three white boxes, three different labels, one of them wrong. Any tricks?"
+    ],
+    "yes_119": [
+      "The build passed on a laptop and failed on the machine that matters.",
+      "One bug only appears when the clock is wrong, and the clock was wrong.",
+      "Three meetings about the same spreadsheet, two of them about the title.",
+      "Baby sleeps through the fan but not through silence. Anyone else's like that?"
+    ],
+    "yes_120": [
+      "The frost got the first row of lettuce and nobody saw it coming except the birds.",
+      "Two stalls at the market and the good one was mine by accident.",
+      "The shed needs a new door and has needed one since spring.",
+      "Forecast or sky? What do you all trust on a morning like this?"
+    ]
+  }
+}

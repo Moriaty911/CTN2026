@@ -1,0 +1,88 @@
+{
+  "version": "blacklist.v1",
+  "notes": "Operator decision 2026-10-19: keep a separate table of accounts proven to spam, and report every post of theirs we see (no daily cap, any team or side). The legacy evidence/EV reporter is paused. Revisit after the first rulings. Rules: an upheld post pays 25 (first reporter) or 5; per target team per day full, half after 5, 10% after 10; any genuine ruling stops all our reporting for 6 hours; ~1 ruling in 4 is wrong.",
+  "npc_max_account_id": 2343,
+  "scan_every_seconds": 60,
+  "scan_lookback_seconds": 86400,
+  "copy_paste": {
+    "min_chars": 40,
+    "min_repeats": 3,
+    "min_accounts_for_shared_text": 3,
+    "shared_text_stance_pattern": "\\b(?:vote|voting|yes|no|referendum|h2d2|proof|mandate|jab|vaccin\\w*|lockdowns?)\\b",
+    "notes": "shared_text only for campaign lines (stance words) and never when any pre-open account posted the same text: identical small talk across new accounts may be the simulator's own canned citizen replies."
+  },
+  "ring": {
+    "min_repliers": 20,
+    "max_median_gap_seconds": 25,
+    "min_ring_posts_per_replier": 3,
+    "min_ring_posts_per_anchor": 2
+  },
+  "leak_patterns": [
+    "\\bsure,? here(?:'|’)?s (?:a|the|your|my)(?: [a-z-]+){0,2} (?:draft|reply|post|response|tweet|message|version)\\b",
+    "\\bas an ai\\b",
+    "\\bas a(?:n ai)? language model\\b",
+    "\\bi(?:'|’)?m (?:just )?an ai\\b",
+    "\\[insert[^\\]]*\\]",
+    "\\{(?:topic|hashtag|name)\\}",
+    "\\bi(?:'|’)?ll play along\\b"
+  ],
+  "report_detail": {
+    "prefix": "I think that this content is inauthentic (bot) activity because ",
+    "copy_paste": "this account posts the same text again and again ({n} identical posts seen), the pattern of an automated spam account.",
+    "shared_text": "the same text is posted word for word by many different new accounts ({n} accounts seen), a coordinated bot campaign.",
+    "ring": "this account is part of a ring of new accounts that reply to the same posts every ~20 seconds with short slogans ({n} such threads seen).",
+    "ring_anchor": "this account's posts are each flooded within minutes by dozens of new accounts replying every ~20 seconds ({n} such posts seen).",
+    "leak": "the text contains language-model output left in by mistake (\"{match}\").",
+    "operator": "this account belongs to a coordinated network of automated accounts we have observed posting and replying on a fixed schedule."
+  },
+  "report": {
+    "max_route_backlog_seconds": 5,
+    "forbidden_backoff_seconds": 900,
+    "pool_size": 26,
+    "pool_window_seconds": 7200,
+    "submit_interval_seconds": 90,
+    "verify_before_submit": true,
+    "account_report_min_actions": 100,
+    "account_report_recheck_seconds": 3600,
+    "hidden_check_every_seconds": 600,
+    "hidden_checks_per_step": 3,
+    "max_post_reports_per_author": 1,
+    "author_retry_after_seconds": 86400,
+    "author_retry_limit": 1,
+    "author_notes": "One post report per author; extra posts stay in the pool. A dismissal is invisible to us, so one retry per author is allowed once 24 h have passed."
+  },
+  "ranking": {
+    "candidate_pool": 60,
+    "evidence_weight": {
+      "ring": 1.0,
+      "leak": 1.0,
+      "ring_anchor": 0.95,
+      "copy_paste": 0.9,
+      "operator": 0.8,
+      "shared_text": 0.5
+    },
+    "default_weight": 0.5,
+    "trending_multiplier": 1.5,
+    "engagement_weight": 0.25,
+    "fresh_hours": {
+      "fresh": 3,
+      "stale": 12,
+      "fresh_factor": 1.0,
+      "stale_factor": 0.8,
+      "old_factor": 0.5
+    },
+    "price": {
+      "full_first": 5,
+      "half_until": 10,
+      "half_factor": 0.5,
+      "rest_factor": 0.1,
+      "allow_diminished": false
+    },
+    "price_group_mode": "family",
+    "shared_text_requires_hidden_in_cluster": true,
+    "notes": "2026-10-22: the official scoreboard shows why our blue points stayed tiny. Of 13 Moderation lines since 10-19, ten paid x0.5 and three paid x0.1 - not one paid full price - while we filed 337 reports for 267 points (0.79 each). Cause: the platform prices the 5 full-price slots per target TEAM per day, but our price groups were per ring thread and per author, so ring:14805 alone absorbed 69 reports and every group looked under quota. Fix: price_group_mode=family collapses every evidence family to one group (ring/ring_anchor -> ring, all shared campaign texts -> shared_text), account reports count against the same group, and price.allow_diminished=false makes the cap hard: once a family has used its five full-price slots it is skipped for the rest of the day instead of being ranked at 10% value. pool_size 26 self-caps below the platform's 30 unresolved reports, submit_interval_seconds paces submissions instead of bursting, verify_before_submit re-reads the post so we do not spend a slot on one that is already hidden.",
+    "notes_history": "2026-10-21: rank by evidence instead of recency. A trending post pays the same 25/5 blue points, so the ranking buys denial (a hidden post stops earning its team likes 5, replies 15, reposts 10 and change-of-mind 160) and keeps six-hour bans away by spending slots on hard evidence first. shared_text is only reported once a post of the same cluster is already hidden, because it was right 7/12 times against 6/6 for ring - one wrong report costs six hours of reporting for the whole team.",
+    "counter_cache_seconds": 300,
+    "counter_refresh_per_tick": 8
+  }
+}

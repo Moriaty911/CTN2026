@@ -265,7 +265,7 @@ class JevOutput:
     evaluation_id: str
     post_id: str
     source_kind: Literal["platform", "synthetic", "manual"]
-    stage: Literal["triage", "deep"]
+    stage: Literal["triage", "deep", "response"]
     question_set_version: str
     answers: Mapping[str, AssessmentAnswer]
     request_id: str | None = None
@@ -281,7 +281,7 @@ class JevOutput:
         for name in ("evaluation_id", "post_id", "question_set_version", "evaluated_at"):
             _text(getattr(self, name), name)
         _option(self.source_kind, {"platform", "synthetic", "manual"}, "source_kind")
-        _option(self.stage, {"triage", "deep"}, "stage")
+        _option(self.stage, {"triage", "deep", "response"}, "stage")
         for name in ("request_id", "model"):
             if getattr(self, name) is not None:
                 _text(getattr(self, name), name)

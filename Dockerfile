@@ -30,7 +30,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — dependencies (separate layer; code changes do not reinstall)
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim AS deps
+FROM python:3.14.6-slim AS deps
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
@@ -49,6 +49,8 @@ FROM deps AS verify
 
 WORKDIR /app
 COPY . .
+# Include optional UI dependencies in offline verification.
+RUN /opt/venv/bin/pip install -r requirements-discord.lock
 # Interpreter version guard plus the full offline test suite
 RUN /opt/venv/bin/python scripts/check_env.py --tests
 
@@ -56,7 +58,7 @@ RUN /opt/venv/bin/python scripts/check_env.py --tests
 # ---------------------------------------------------------------------------
 # Stage 3 — runtime
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim AS runtime
+FROM python:3.14.6-slim AS runtime
 
 # Align clocks with containers and the host; organisers publish times in AEST.
 ENV TZ=Australia/Sydney \
@@ -87,14 +89,33 @@ VOLUME ["/state", "/logs"]
 
 USER ctn
 
-# Health check: prefer the main loop's heartbeat file, fall back to the
-# environment pre-check while the heartbeat does not exist yet.
+# Health check requires a fresh service heartbeat without a recorded error.
 HEALTHCHECK --interval=60s --timeout=15s --start-period=20s --retries=3 \
   CMD ["bash", "scripts/healthcheck.sh"]
 
-# NOTE: the main loop (ctn/main.py) is not implemented yet — the Jev-API branch
-# currently carries only the decision layer. The default command therefore runs
-# the environment pre-check, which keeps the image startable and overridable
-# from compose. Once the main loop exists, change it to:
-#     CMD ["python", "-m", "ctn.main"]
-CMD ["python", "scripts/check_env.py", "--tests"]
+CMD ["python", "-m", "ctn.main"]
+
+# Optional reporting UI. Fleet runtime dependencies remain separate.
+FROM runtime AS discord-runtime
+USER root
+RUN /opt/venv/bin/pip install -r /app/requirements-discord.lock
+USER ctn
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+ CMD ["python", "-m", "ctn.discord_bot", "--healthcheck"]
+CMD ["python", "-m", "ctn.discord_bot"]
+
+# Pi is pinned to the installed and inspected CLI contract.
+FROM node:24-bookworm-slim AS pi-runtime
+RUN npm install --global @earendil-works/pi-coding-agent@1.3.0
+FROM runtime AS macro-runtime
+# Match the team's local Pi selection; credentials arrive through the Pi mount.
+ENV CTN_PI_MODEL=deepseek/deepseek-flash \
+    CTN_PI_THINKING=high
+USER root
+COPY --from=pi-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=pi-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js /usr/local/bin/pi
+USER ctn
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+ CMD ["python", "-m", "ctn.macro.worker", "--healthcheck"]
+CMD ["python", "-m", "ctn.macro.worker", "--harness", "/state/harness.md"]

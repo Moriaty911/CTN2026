@@ -130,7 +130,7 @@ class JevResponseParser:
         if type(call.call_id) is not str or not call.call_id.strip():
             raise ParsingValidationError("call_id: expected local call identifier")
         packed = call.packed_request
-        if packed.kind not in {"post", "comparison"} or packed.stage not in {"triage", "deep"}:
+        if (packed.kind, packed.stage) not in {("post", "triage"), ("post", "deep"), ("comparison", "deep"), ("response", "response"), ("postflight", "response")}:
             raise ParsingValidationError("packed: unsupported local request kind/stage")
         rubric = question_set if question_set is not None else load_rubric(packed.kind,
             version="v2" if packed.kind == "post" and packed.question_set_version == "ctn-post.v2" else "v1")
@@ -173,24 +173,30 @@ class JevResponseParser:
                 body = packed.to_provider_body()
                 if hashlib.sha256(body_bytes).hexdigest() != packed.request_id or body["questions"] != wire_questions:
                     return fail("request_binding_mismatch", "Packed request body differs from its recorded identity/questions.")
-                expected_roles = ("target",) if packed.kind == "post" else ("current", "historical")
+                expected_roles = ("target",) if packed.kind in {"post", "response", "postflight"} else ("current", "historical")
                 if tuple(t.role for t in packed.targets) != expected_roles:
                     return fail("request_binding_mismatch", "Packed target roles do not match the request kind.")
                 collected_issues = []
-                for target in packed.targets:
-                    path = "content" if packed.kind == "post" else "content." + target.role
-                    record = body["state"]["content"] if packed.kind == "post" else body["state"]["content"][target.role]
-                    content = JevInput.from_dict(record)
-                    if (target.content_path != path or target.post_id != content.post.post_id or
-                        target.source_kind != content.source.kind):
-                        return fail("request_binding_mismatch", "Packed target identity differs from the supplied state.")
-                    collected_issues.extend(ContextIssue(path + "." + item.path, item.reason)
-                                            for item in content.context_issues if item.path != "trusted_background")
-                    background = body["state"]["verified_background"] if packed.kind == "post" else (
-                        body["state"]["verified_background"][target.role])
-                    if background["status"] not in {"empty", "verified"}:
-                        reason = "unknown" if background["status"] == "not_provided" else "unverified"
-                        collected_issues.append(ContextIssue(path + ".trusted_background", reason))
+                if packed.kind == "postflight":
+                    for target in packed.targets:
+                        target_data = body.get("state", {}).get("content", {}).get("target", {})
+                        if target.content_path != "content" or target.post_id != target_data.get("post_id"):
+                            return fail("request_binding_mismatch", "Packed target identity differs from the supplied state.")
+                else:
+                    for target in packed.targets:
+                        path = "content" if packed.kind in {"post", "response"} else "content." + target.role
+                        record = body["state"]["content"] if packed.kind in {"post", "response"} else body["state"]["content"][target.role]
+                        content = JevInput.from_dict(record)
+                        if (target.content_path != path or target.post_id != content.post.post_id or
+                            target.source_kind != content.source.kind):
+                            return fail("request_binding_mismatch", "Packed target identity differs from the supplied state.")
+                        collected_issues.extend(ContextIssue(path + "." + item.path, item.reason)
+                                                for item in content.context_issues if item.path != "trusted_background")
+                        background = body["state"]["verified_background"] if packed.kind in {"post", "response"} else (
+                            body["state"]["verified_background"][target.role])
+                        if background["status"] not in {"empty", "verified"}:
+                            reason = "unknown" if background["status"] == "not_provided" else "unverified"
+                            collected_issues.append(ContextIssue(path + ".trusted_background", reason))
                 context_issues = tuple(collected_issues)
             except (ValueError, KeyError, TypeError, UnicodeError, RecursionError):
                 return fail("invalid_packed_request", "Packed request could not be validated against its local binding.")

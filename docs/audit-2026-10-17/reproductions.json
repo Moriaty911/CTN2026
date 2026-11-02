@@ -1,0 +1,90 @@
+{
+  "concurrent_token_bucket": {
+    "completion_seconds": [
+      0.0,
+      0.0511,
+      0.0511,
+      0.0511,
+      0.0511
+    ],
+    "minimum_expected_last_seconds": 0.2
+  },
+  "batch_rollback": {
+    "post_survives_rollback": true,
+    "counter_survives_rollback": 1
+  },
+  "legacy_migration": "no such column: platform_account_id",
+  "edited_post": {
+    "indexed_text": "Old content before edit.",
+    "raw_text": "Different content after edit."
+  },
+  "overlapping_account_updates": {
+    "two_successful_uses_recorded_as": 1
+  },
+  "allied_gate_without_reservations": [
+    [
+      true,
+      "allied_reply_approved:1"
+    ],
+    [
+      true,
+      "allied_reply_approved:2"
+    ],
+    [
+      true,
+      "allied_reply_approved:3"
+    ],
+    [
+      true,
+      "allied_reply_approved:4"
+    ]
+  ],
+  "dry_run": {
+    "status": "published",
+    "platform_posts": 0,
+    "persisted_post_count": 1,
+    "persisted_dedup": true
+  },
+  "macro_trending_shape": {
+    "tags": [
+      "#H2D2"
+    ],
+    "posts": []
+  },
+  "ambiguous_write_retry": {
+    "ok": true,
+    "server_posts": 2
+  },
+  "overlapping_report_sweeps": {
+    "platform_report_calls": 2,
+    "unique_ledger_rows": 1,
+    "claimed_submissions": 2
+  },
+  "three_pending_reports": {
+    "upheld_strikes": 0,
+    "fourth_post_eligible": false
+  },
+  "rejected_report": {
+    "previous_status": "confirmed_bot",
+    "new_status": "verified_npc",
+    "suspension_seconds": 21600.0
+  },
+  "comment_pagination_overlap": {
+    "done": true,
+    "persisted_replies_crawled": 4,
+    "actual_stored_replies": 2,
+    "remaining_queue": 0
+  },
+  "frontline_overflow": {
+    "first_new": 12,
+    "total_evaluated_after_two_ticks": 8,
+    "first_actions": 3,
+    "second_actions": 0,
+    "second_new": 0,
+    "loop_and_brain_share_store": false
+  },
+  "ordinary_ai_discussion": {
+    "status": "confirmed_bot",
+    "score": 100.0
+  }
+}

@@ -2,9 +2,11 @@
 #  CTN 2026 — deployment orchestration
 # ============================================================================
 #  Common commands:
-#      ./scripts/docker.sh build     # build the runtime image
+#      ./scripts/docker.sh configure # create missing local configuration files
+#      ./scripts/docker.sh build     # build fleet + Pi worker images
 #      ./scripts/docker.sh verify    # build the self-check image and run all tests
-#      ./scripts/docker.sh up        # start in the background
+#      ./scripts/docker.sh up        # start fleet + Pi worker
+#      ./scripts/docker.sh up all    # also start Discord review
 #      ./scripts/docker.sh logs      # follow logs
 #      ./scripts/docker.sh shell     # open a shell for debugging
 #      ./scripts/docker.sh down      # stop
@@ -44,6 +46,7 @@ services:
         required: false
 
     environment:
+      CTN_STATE_FILE: /state/ctn.sqlite3
       CTN_STATE_DIR: /state
       CTN_LOG_DIR: /logs
       TZ: Australia/Sydney
@@ -57,10 +60,10 @@ services:
     # Two weeks unattended: if it dies, it must come back on its own
     restart: unless-stopped
 
-    # Give the main loop time to flush state to disk after SIGTERM, before
-    # SIGKILL. Compared with a two-week run, 30 seconds of downtime is
+    # Give model/network worker threads time to finish after SIGTERM, before
+    # SIGKILL. Compared with a two-week run, a short shutdown window is
     # negligible; losing data is not.
-    stop_grace_period: 30s
+    stop_grace_period: 120s
 
     # Correct signal forwarding and zombie reaping (the classic problem when
     # Python runs as PID 1)
@@ -81,9 +84,7 @@ services:
         max-size: "20m"
         max-file: "5"
 
-    # Enable once the main loop exists; the current default CMD is documented
-    # in the Dockerfile.
-    # command: ["python", "-m", "ctn.main"]
+    command: ["python", "-m", "ctn.main"]
 
   # -------------------------------------------------------------------------
   # Self-check (not started by default; run on demand)
@@ -98,3 +99,62 @@ services:
     image: ctn2026/verify:${CTN_IMAGE_TAG:-local}
     # Fully offline: no .env, no network, no volumes
     network_mode: none
+
+  discord-review:
+    profiles: ["discord"]
+    build:
+      context: .
+      target: discord-runtime
+    image: ctn2026/discord-review:${CTN_IMAGE_TAG:-local}
+    env_file:
+      - path: .env.discord
+        required: false
+    environment:
+      CTN_STATE_FILE: /state/ctn.sqlite3
+      TZ: Australia/Sydney
+    volumes:
+      - ./state:/state
+    depends_on:
+      fleet:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  macro-agent:
+    # Built-in durable scheduling replaces the old host Pi cron publisher.
+    # Start with fleet by default; no host Python, Node, Pi or cron is needed.
+    build:
+      context: .
+      target: macro-runtime
+    image: ctn2026/macro-agent:${CTN_IMAGE_TAG:-local}
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.macro
+        required: false
+    environment:
+      CTN_STATE_FILE: /state/ctn.sqlite3
+      CTN_STATE_DIR: /state
+      CTN_LOG_DIR: /logs
+      TZ: Australia/Sydney
+    volumes:
+      - ./state:/state
+      - ./logs:/logs
+      - ./state/pi:/home/ctn/.pi
+    depends_on:
+      fleet:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

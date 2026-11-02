@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTN 2026 · Bot Loop &amp; Actions</title>
+<style>
+  :root{
+    --bg:#fafaf9; --panel:#fff; --ink:#1c1917; --muted:#57534e; --faint:#a8a29e;
+    --line:#e7e5e4; --line-strong:#d6d3d1;
+    --accent:#0f766e; --accent-bg:#f0fdfa; --accent-line:#99f6e4;
+    --warn:#b45309; --warn-bg:#fffbeb; --warn-line:#fde68a;
+    --danger:#b91c1c; --danger-bg:#fef2f2; --danger-line:#fecaca;
+    --good:#15803d; --good-bg:#f0fdf4; --good-line:#bbf7d0;
+    --code-bg:#1c1917; --code-ink:#e7e5e4; --code-dim:#a8a29e;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:15.5px; line-height:1.72; -webkit-font-smoothing:antialiased;
+  }
+
+  header.top{
+    background:linear-gradient(180deg,#0f766e 0%,#115e59 100%);
+    color:#f0fdfa; padding:34px 24px 30px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  header.top h1{margin:0 0 6px; font-size:28px; letter-spacing:-.3px}
+  header.top .sub{opacity:.82; font-size:14.5px}
+  header.top .meta{margin-top:16px; display:flex; gap:10px; flex-wrap:wrap}
+  .chip{
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22);
+    padding:4px 11px; border-radius:99px; font-size:12.5px; font-family:var(--mono);
+  }
+
+  nav.toc{
+    position:sticky; top:0; z-index:20; background:rgba(250,250,249,.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    padding:9px 24px; overflow-x:auto; white-space:nowrap;
+  }
+  nav.toc a{
+    color:var(--muted); text-decoration:none; font-size:13px; margin-right:16px;
+    padding:3px 0; border-bottom:2px solid transparent; display:inline-block;
+  }
+  nav.toc a:hover{color:var(--accent); border-bottom-color:var(--accent-line)}
+
+  main{max-width:1080px; margin:0 auto; padding:30px 24px 90px}
+  section{margin:0 0 46px; scroll-margin-top:56px}
+  h2{
+    font-size:21px; margin:0 0 6px; letter-spacing:-.2px;
+    padding-bottom:9px; border-bottom:2px solid var(--line);
+  }
+  h2 .num{
+    font-family:var(--mono); font-size:13px; color:var(--accent);
+    background:var(--accent-bg); border:1px solid var(--accent-line);
+    padding:1px 7px; border-radius:5px; margin-right:9px; vertical-align:2px;
+  }
+  h3{font-size:16.5px; margin:26px 0 8px}
+  p{margin:9px 0}
+  .lead{color:var(--muted); font-size:14.5px; margin-bottom:18px}
+  ul,ol{margin:9px 0; padding-left:22px}
+  li{margin:5px 0}
+  code{
+    font-family:var(--mono); font-size:.885em; background:#f5f5f4;
+    border:1px solid var(--line); padding:1px 5px; border-radius:4px;
+  }
+  pre{
+    background:var(--code-bg); color:var(--code-ink); padding:15px 17px;
+    border-radius:var(--r); overflow-x:auto; font-family:var(--mono);
+    font-size:12.8px; line-height:1.62; margin:12px 0;
+  }
+  pre code{background:none;border:none;padding:0;color:inherit;font-size:inherit}
+  pre .c{color:#78716c}
+  pre .k{color:#5eead4}
+  pre .s{color:#fcd34d}
+  pre .f{color:#93c5fd}
+
+  .table-wrap{overflow-x:auto; margin:14px 0}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top}
+  th{background:#f5f5f4; font-weight:600; font-size:13px; color:var(--muted)}
+  tbody tr:nth-child(even){background:#fcfcfb}
+  td.mono,th.mono{font-family:var(--mono); font-size:12.5px}
+
+  .box{border:1px solid var(--line); background:var(--panel); border-radius:var(--r); padding:15px 18px; margin:14px 0}
+  .callout{border-left:4px solid; border-radius:0 var(--r) var(--r) 0; padding:13px 17px; margin:15px 0; font-size:14.5px}
+  .callout .t{font-weight:700; display:block; margin-bottom:4px; font-size:13.5px; letter-spacing:.2px}
+  .c-key{background:var(--accent-bg); border-color:var(--accent); color:#134e4a}
+  .c-key .t{color:var(--accent)}
+  .c-warn{background:var(--warn-bg); border-color:var(--warn); color:#78350f}
+  .c-warn .t{color:var(--warn)}
+  .c-danger{background:var(--danger-bg); border-color:var(--danger); color:#7f1d1d}
+  .c-danger .t{color:var(--danger)}
+  .c-good{background:var(--good-bg); border-color:var(--good); color:#14532d}
+  .c-good .t{color:var(--good)}
+
+  /* pipeline diagram */
+  .flow{margin:20px 0}
+  .stage{
+    border:1px solid var(--line-strong); background:var(--panel);
+    border-radius:var(--r); overflow:hidden;
+    display:grid; grid-template-columns:186px 1fr; align-items:stretch;
+  }
+  .stage .tag{
+    background:#f5f5f4; border-right:1px solid var(--line);
+    padding:13px 15px; font-family:var(--mono); font-size:12.5px;
+    font-weight:600; display:flex; flex-direction:column; gap:5px;
+  }
+  .stage .tag .file{font-weight:400; color:var(--muted); font-size:11.5px}
+  .badge{
+    font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:99px;
+    align-self:flex-start; font-family:var(--sans); letter-spacing:.2px;
+  }
+  .b-read{background:var(--accent-bg); color:var(--accent); border:1px solid var(--accent-line)}
+  .b-write{background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger-line)}
+  .b-free{background:var(--good-bg); color:var(--good); border:1px solid var(--good-line)}
+  .b-store{background:#f5f5f4; color:var(--muted); border:1px solid var(--line-strong)}
+  .stage .body{padding:13px 16px; font-size:14px}
+  .stage .body b{font-size:14.5px}
+  .stage .body ul{margin:7px 0 0; padding-left:19px; color:var(--muted); font-size:13.5px}
+  .stage .body li{margin:2px 0}
+  .arrow{text-align:center; color:var(--faint); font-family:var(--mono); font-size:12px; padding:7px 0; line-height:1.35}
+  .arrow .lbl{color:var(--muted); background:var(--bg); padding:0 8px}
+
+  /* file tree */
+  .tree{background:var(--code-bg); color:var(--code-ink); border-radius:var(--r); padding:17px 19px;
+        font-family:var(--mono); font-size:12.6px; line-height:1.75; overflow-x:auto}
+  .tree .d{color:#5eead4}
+  .tree .a{color:#78716c}
+  .tree .new{color:#86efac}
+  .tree .mod{color:#fcd34d}
+
+  .tagpill{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:99px;font-weight:600;white-space:nowrap}
+  .t-new{background:var(--good-bg);color:var(--good);border:1px solid var(--good-line)}
+  .t-mod{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+  .t-ph{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger-line)}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  .grid2 .box{margin:0}
+  .grid2 h3{margin-top:0}
+
+  @media (max-width:820px){
+    .grid2{grid-template-columns:1fr}
+    .stage{grid-template-columns:1fr}
+    .stage .tag{border-right:none; border-bottom:1px solid var(--line); flex-direction:row; align-items:center; flex-wrap:wrap}
+  }
+  @media (max-width:520px){
+    header.top{padding:26px 16px 22px}
+    nav.toc{padding:9px 16px}
+    main{padding:24px 16px 70px}
+    header.top h1{font-size:23px}
+  }
+  footer{border-top:1px solid var(--line); padding:22px 24px 40px; color:var(--faint); font-size:13px; text-align:center}
+  @media print{
+    nav.toc{display:none} header.top{background:#115e59!important;-webkit-print-color-adjust:exact}
+    section{page-break-inside:avoid} pre{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <h1>CTN 2026 · Bot Loop &amp; Actions</h1>
+    <div class="sub">What was added in commit <code style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.22);color:#f0fdfa">80af07a</code>: the read → react → act skeleton and the platform action functions (like, comment, retweet, …), and how to use them.</div>
+    <div class="meta">
+      <span class="chip">branch feature/initial-bot-loop</span>
+      <span class="chip">2026-10-10</span>
+      <span class="chip">Python 3.13 · stdlib only</span>
+      <span class="chip">11 tests passing</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#summary">Summary</a>
+    <a href="#cycle">How a cycle works</a>
+    <a href="#actions">Action functions</a>
+    <a href="#react">Decision rules</a>
+    <a href="#side">Our side</a>
+    <a href="#usage">How to use</a>
+    <a href="#logs">Logs</a>
+    <a href="#fix">Rate-limit fix</a>
+    <a href="#tests">Tests</a>
+    <a href="#next">Placeholders &amp; next steps</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ═══════════════ 1 ═══════════════ -->
+<section id="summary">
+  <h2><span class="num">01</span>Summary</h2>
+  <p class="lead">Before this change the bot loop was a single function that called the platform directly, bypassing the rate limiter. Now there is one gateway for all platform calls, and the loop is split into small stages that can each be replaced independently.</p>
+
+  <div class="callout c-key">
+    <span class="t">The one rule to remember</span>
+    <b>Nothing talks to the platform except <code>ctn/actuator.py</code>.</b> Every like, comment, retweet, post, follow and every read goes through the <code>Actuator</code>, which applies rate limiting, budget accounting, retries and dry-run. If you call <code>client.like(...)</code> directly, you skip all of that and risk getting accounts suspended.
+  </div>
+
+<pre class="tree"><span class="d">ctn/</span>
+├── <span class="new">actuator.py</span>        <span class="a"># NEW  all platform actions + reads, through the rate limiter</span>
+├── <span class="mod">config.py</span>          <span class="a"># CHANGED  new CTN_SIDE setting (yes / no / unset)</span>
+├── <span class="mod">models.py</span>          <span class="a"># CHANGED  Side, ActionKind; Decision.action/.text; ActionResult.response</span>
+└── <span class="d">pipeline/</span>
+    ├── <span class="mod">__init__.py</span>    <span class="a"># CHANGED  old run_cycle() replaced; re-exports the new API</span>
+    ├── <span class="new">perceive.py</span>    <span class="a"># NEW  READ   trending + keyword search → candidate posts</span>
+    ├── <span class="new">decide.py</span>      <span class="a"># NEW  REACT  post + our side → Decision (pure, no network)</span>
+    ├── <span class="new">compose.py</span>     <span class="a"># NEW  reply text (placeholder templates) + pre-publish check</span>
+    └── <span class="new">loop.py</span>        <span class="a"># NEW  ACT    BotLoop: runs cycles, picks bots, executes</span>
+<span class="d">tests/</span>
+└── <span class="new">test_pipeline.py</span>   <span class="a"># NEW  11 tests against the mock platform</span>
+
+<span class="new">■ new file</span>   <span class="mod">■ changed file</span></pre>
+
+  <div class="callout c-warn">
+    <span class="t">Removed</span>
+    The old <code>run_cycle(client, account=...)</code>, <code>search_candidates()</code> and <code>one_cycle()</code> in <code>ctn/pipeline/__init__.py</code> no longer exist. Use <code>BotLoop</code> instead (see <a href="#usage">How to use</a>).
+  </div>
+</section>
+
+<!-- ═══════════════ 2 ═══════════════ -->
+<section id="cycle">
+  <h2><span class="num">02</span>How a cycle works</h2>
+  <p class="lead">One call to <code>BotLoop.run_cycle()</code> runs the whole read → react → act sequence once. <code>run_forever()</code> repeats it on a timer.</p>
+
+  <div class="flow">
+    <div class="stage">
+      <div class="tag">READ<span class="file">pipeline/perceive.py</span><span class="badge b-read">uses read budget</span></div>
+      <div class="body">
+        <b><code>perceive()</code> → <code>Observation</code></b>
+        <ul>
+          <li>1 <code>trending</code> call (top 10 hashtags)</li>
+          <li>1 <code>search</code> per keyword (default: <code>kingstonia</code>, <code>h2d2</code>, <code>vaccine</code>, <code>public spaces</code>) plus the top 2 trending hashtags</li>
+          <li>Converts results to <code>Post</code> objects and removes duplicates</li>
+          <li>When the read budget runs low (<code>ledger.read_pressure</code> &gt; 0) it drops the lowest-priority queries first</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow">↓ <span class="lbl">list of Post (minus posts we already acted on and posts by our own bots)</span></div>
+
+    <div class="stage">
+      <div class="tag">REACT<span class="file">pipeline/decide.py</span><span class="badge b-free">no network</span></div>
+      <div class="body">
+        <b><code>decide(post, side=…)</code> → <code>Decision</code></b>
+        <ul>
+          <li>Scores <b>relevance</b> (keyword hits + engagement) and <b>alignment</b> (+1 our side … −1 their side)</li>
+          <li>Picks one action: like, repost, reply, or observe (do nothing). Rules in <a href="#react">section 04</a></li>
+          <li>For replies, gets text from <code>compose.py</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow">↓ <span class="lbl">actionable decisions, highest relevance first, at most 3 per cycle</span></div>
+
+    <div class="stage">
+      <div class="tag">ACT<span class="file">pipeline/loop.py</span><span class="badge b-write">uses write budget</span></div>
+      <div class="body">
+        <b>Assign a bot → check text → execute through the Actuator</b>
+        <ul>
+          <li>Bots are used in rotation (round-robin), one bot per action; suspended bots are skipped</li>
+          <li>Reply text goes through <code>check_text()</code>; empty or &gt; 280 characters is blocked</li>
+          <li>Successful targets are remembered so the fleet never acts on the same post twice</li>
+          <li>If the cycle had no throttling, the rate limiter is allowed to speed back up (<a href="#fix">section 08</a>)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="arrow">↓ <span class="lbl">CycleReport</span></div>
+
+    <div class="stage">
+      <div class="tag">RESULT<span class="badge b-store">returned + logged</span></div>
+      <div class="body">
+        <b><code>CycleReport</code></b>
+        <ul>
+          <li><code>status</code>: <code>"idle"</code> (nothing found), <code>"observed"</code> (found posts, no successful action), <code>"acted"</code></li>
+          <li><code>observed</code>: number of posts read · <code>decisions</code>: every Decision · <code>results</code>: one <code>ActionResult</code> per action attempted</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 3 ═══════════════ -->
+<section id="actions">
+  <h2><span class="num">03</span>Action functions — <code>ctn/actuator.py</code></h2>
+  <p class="lead">These are the functions the team asked for. All are <code>async</code>. Write actions return an <code>ActionResult</code>; they never raise for normal platform problems. Check <code>result.ok</code> and <code>result.detail</code>.</p>
+
+  <h3>Write actions</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Function</th><th>Also called</th><th>What it does</th><th>Score channel</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">like(account, post_id)</td><td></td><td>Like a post</td><td>Story (spread)</td></tr>
+      <tr><td class="mono">repost(account, post_id)</td><td class="mono">retweet</td><td>Share a post to the bot's followers</td><td>Story (spread)</td></tr>
+      <tr><td class="mono">reply(account, post_id, text)</td><td class="mono">comment</td><td>Reply under a post</td><td>Engagement + Story</td></tr>
+      <tr><td class="mono">post(account, text)</td><td></td><td>New original post</td><td>Engagement + Story</td></tr>
+      <tr><td class="mono">follow(account, target)</td><td></td><td>Follow a user</td><td>(reach)</td></tr>
+      <tr><td class="mono">unfollow(account, target)</td><td></td><td>Unfollow a user</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+  <p>Every write also accepts an optional <code>decision_id=</code> so the action can be linked back to the decision that caused it in the logs.</p>
+
+  <h3>Read functions</h3>
+  <p><code>search(query)</code>, <code>trending()</code>, <code>get_post(id)</code>, <code>get_comments(id)</code>, <code>get_feed(account)</code>, <code>get_mentions(account)</code>, <code>get_profile(handle)</code>. On failure they return an empty list / dict instead of raising, so one bad read never stops a cycle.</p>
+
+  <h3>What happens inside every call</h3>
+  <ol>
+    <li><b>Wait for the rate limiter</b> (<code>ActionGate</code>): team bucket, and for writes the per-bot bucket too. Reads and writes have separate budgets, so heavy reading can never block posting.</li>
+    <li><b>Count it</b> in the budget ledger.</li>
+    <li><b>Call the platform</b>; retry if the error is temporary (with exponential backoff, default up to 3 retries).</li>
+    <li><b>Turn the outcome into a result</b> and log it to <code>actions.jsonl</code>.</li>
+  </ol>
+
+  <h3>How errors are handled</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Situation</th><th>What the Actuator does</th><th><code>result.detail</code></th></tr></thead>
+    <tbody>
+      <tr><td>Dry run on (the default)</td><td>Logs the write, <b>does not send it</b>; <code>ok=True</code></td><td class="mono">dry run: not sent</td></tr>
+      <tr><td>Platform throttles us (429)</td><td>Tells the rate limiter to halve its speed, waits, retries</td><td class="mono">throttled</td></tr>
+      <tr><td>Temporary error (e.g. 502)</td><td>Retries with backoff</td><td>error message</td></tr>
+      <tr><td>Bot account suspended</td><td>Adds it to <code>actuator.suspended</code>; the loop stops using it</td><td class="mono">account suspended</td></tr>
+      <tr><td>Write budget used up</td><td>Refuses the write</td><td class="mono">write budget exhausted</td></tr>
+      <tr><td>Bad credentials (<code>AuthError</code>)</td><td><b>Raises</b>, on purpose: this must stop the run loudly</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout c-warn">
+    <span class="t">Each bot is slow on purpose</span>
+    With the default config a single bot can write about <b>once every 50 seconds</b> (<code>CTN_ACCT_WRITE_RPS=0.02</code>), and the whole team about 0.15 writes/second. If you call two actions on the same bot back-to-back, the second one <b>waits</b>; it does not fail. Spread actions across bots (the loop already does this).
+  </div>
+</section>
+
+<!-- ═══════════════ 4 ═══════════════ -->
+<section id="react">
+  <h2><span class="num">04</span>Decision rules — <code>ctn/pipeline/decide.py</code></h2>
+  <p class="lead">One <code>Decision</code> per post, checked top to bottom; the first rule that matches wins.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Condition</th><th>Action</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Side not assigned</td><td><b>observe</b></td><td>Never take partisan actions without a side</td></tr>
+      <tr><td>2</td><td>Relevance &lt; 1.5 (no keyword hit)</td><td><b>observe</b></td><td>Not about the referendum</td></tr>
+      <tr><td>3</td><td>Our side, likes + reposts ≥ 5</td><td><b>repost</b></td><td>Spread what is already spreading</td></tr>
+      <tr><td>4</td><td>Our side</td><td><b>like</b></td><td>Cheap support</td></tr>
+      <tr><td>5</td><td>Their side, replies ≥ 2</td><td><b>reply</b> (counter)</td><td>People are reading that thread</td></tr>
+      <tr><td>6</td><td>Their side, quiet</td><td><b>observe</b></td><td>Replying would boost their post</td></tr>
+      <tr><td>7</td><td>Neutral but relevant</td><td><b>reply</b> (persuade)</td><td>Undecided audience</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>Thresholds are constants at the top of <code>decide.py</code> (<code>MIN_RELEVANCE</code>, <code>ALLY_ALIGNMENT</code>, <code>REPOST_MIN_ENGAGEMENT</code>, <code>COUNTER_MIN_REPLIES</code>). Side detection uses <code>SIDE_SIGNALS</code>, a short list of hashtags/phrases per side.</p>
+
+  <div class="callout c-danger">
+    <span class="t">Placeholder scoring</span>
+    Relevance and alignment are simple keyword checks, and <code>SIDE_SIGNALS</code> was guessed from the mock's hashtags. They store their output in the same <code>JevAnswers</code> format Jev will return, so when Jev is wired in, only the scoring changes. The rules above keep working.
+  </div>
+</section>
+
+<!-- ═══════════════ 5 ═══════════════ -->
+<section id="side">
+  <h2><span class="num">05</span>Our side: <code>CTN_SIDE</code></h2>
+  <p class="lead">The organisers have not assigned our side yet, so the side is a setting, not code.</p>
+
+  <div class="grid2">
+    <div class="box">
+      <h3>Not set (default)</h3>
+      <p>The loop still reads and makes decisions, but every decision is <b>observe</b>. No likes, reposts or replies are sent. <code>Settings.validate()</code> warns:<br><code>CTN_SIDE not set (yes/no); the bot loop will only observe</code></p>
+    </div>
+    <div class="box">
+      <h3>Set it when we know</h3>
+      <p>Add one line to <code>.env</code> (or the environment):</p>
+<pre>CTN_SIDE=yes   <span class="c"># or: no</span></pre>
+      <p style="margin-bottom:0">No code change needed. <code>yes</code> / <code>no</code> follow the mock's convention: +1 stance = YES.</p>
+    </div>
+  </div>
+  <p>In code it is the <code>Side</code> enum in <code>models.py</code>: <code>Side.YES</code>, <code>Side.NO</code>, <code>Side.UNASSIGNED</code>; <code>side.opponent</code> gives the other side.</p>
+</section>
+
+<!-- ═══════════════ 6 ═══════════════ -->
+<section id="usage">
+  <h2><span class="num">06</span>How to use</h2>
+
+  <h3>A. Run the bot loop</h3>
+<pre><span class="k">import</span> asyncio
+<span class="k">from</span> ctn.config <span class="k">import</span> Settings
+<span class="k">from</span> ctn.client.mock <span class="k">import</span> MockLegitClient   <span class="c"># swap for the real adapter later</span>
+<span class="k">from</span> ctn.pipeline <span class="k">import</span> BotLoop
+<span class="k">from</span> ctn.telemetry <span class="k">import</span> Telemetry
+
+settings = Settings.<span class="f">load</span>()                  <span class="c"># reads .env + environment</span>
+<span class="k">for</span> w <span class="k">in</span> settings.<span class="f">validate</span>():
+    <span class="f">print</span>(<span class="s">"warn:"</span>, w)
+
+telemetry = <span class="f">Telemetry</span>(settings.log_dir, settings.log_level)
+loop = BotLoop.<span class="f">from_settings</span>(settings, <span class="f">MockLegitClient</span>(), telemetry=telemetry)
+
+<span class="c"># one cycle, to inspect what it would do</span>
+report = asyncio.<span class="f">run</span>(loop.<span class="f">run_cycle</span>())
+<span class="f">print</span>(report.status, report.observed)
+<span class="k">for</span> r <span class="k">in</span> report.results:
+    <span class="f">print</span>(r.kind, r.account, r.ok, r.detail)
+
+<span class="c"># or keep going every 30 seconds until stopped</span>
+asyncio.<span class="f">run</span>(loop.<span class="f">run_forever</span>(interval_s=<span class="s">30</span>))</pre>
+  <p><code>from_settings()</code> builds the rate limiter, budget ledger and Actuator for you. By default it uses accounts <code>bot_001</code> … <code>bot_040</code> (from <code>CTN_BOT_ACCOUNTS</code>); pass <code>accounts=[...]</code> to choose. Other options: <code>keywords=</code>, <code>max_actions_per_cycle=</code> (default 3), <code>rng=</code> (for repeatable runs). To stop <code>run_forever</code> cleanly, pass <code>stop=asyncio.Event()</code> and call <code>stop.set()</code>.</p>
+
+  <h3>B. Call actions directly</h3>
+<pre><span class="k">from</span> ctn.actuator <span class="k">import</span> Actuator
+<span class="k">from</span> ctn.ratelimit <span class="k">import</span> build_gate, build_ledger
+
+actuator = <span class="f">Actuator</span>(client, <span class="f">build_gate</span>(settings.rate), <span class="f">build_ledger</span>(settings.budget),
+                    telemetry=telemetry, dry_run=settings.dry_run)
+
+result = <span class="k">await</span> actuator.<span class="f">like</span>(<span class="s">"bot_001"</span>, post_id)
+result = <span class="k">await</span> actuator.<span class="f">comment</span>(<span class="s">"bot_002"</span>, post_id, <span class="s">"Good point."</span>)
+result = <span class="k">await</span> actuator.<span class="f">retweet</span>(<span class="s">"bot_003"</span>, post_id)
+<span class="k">if not</span> result.ok:
+    <span class="f">print</span>(<span class="s">"failed:"</span>, result.detail)
+<span class="k">else</span>:
+    <span class="f">print</span>(result.response)   <span class="c"># platform's reply, e.g. the new post id</span></pre>
+  <p>If you already have a <code>BotLoop</code>, reuse its <code>loop.actuator</code> instead of creating a second one. Two actuators would have two separate rate limiters and could together exceed the platform limit.</p>
+
+  <h3>C. Settings that matter</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th class="mono">Variable</th><th>Default</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">CTN_SIDE</td><td class="mono">(unset)</td><td><code>yes</code> or <code>no</code>. Unset = observe only</td></tr>
+      <tr><td class="mono">CTN_DRY_RUN</td><td class="mono">true</td><td>Writes are logged, not sent. Set <code>false</code> to really act</td></tr>
+      <tr><td class="mono">CTN_BOT_ACCOUNTS</td><td class="mono">40</td><td>Number of bots used by <code>from_settings</code></td></tr>
+      <tr><td class="mono">CTN_READ_RPS / CTN_WRITE_RPS</td><td class="mono">0.35 / 0.15</td><td>Team-wide requests per second</td></tr>
+      <tr><td class="mono">CTN_ACCT_READ_RPS / CTN_ACCT_WRITE_RPS</td><td class="mono">0.05 / 0.02</td><td>Per-bot requests per second</td></tr>
+      <tr><td class="mono">CTN_LOG_DIR</td><td class="mono">logs</td><td>Where the JSONL logs go</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout c-danger">
+    <span class="t">Before turning dry run off</span>
+    <code>CTN_DRY_RUN=false</code> with the <b>real</b> platform means real actions from real accounts. Check <code>settings.validate()</code> prints no warnings about the platform URL or API key, and that <code>CTN_SIDE</code> is correct. Against the mock, turning it off is safe.
+  </div>
+  <p style="color:var(--muted);font-size:14px">Note: in dry run a cycle still reports <code>status="acted"</code>, because the decisions were "executed" in dry-run form. Check <code>result.detail == "dry run: not sent"</code>.</p>
+</section>
+
+<!-- ═══════════════ 7 ═══════════════ -->
+<section id="logs">
+  <h2><span class="num">07</span>Logs</h2>
+  <p class="lead">When a <code>Telemetry</code> is passed in, everything is written as JSON lines to <code>CTN_LOG_DIR</code> (not committed to git).</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th class="mono">File</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">decisions.jsonl</td><td>Every decision the loop tried to act on: post, action, scores, rationale, bot, text</td></tr>
+      <tr><td class="mono">actions.jsonl</td><td>Every write attempt: kind, bot, target, ok, detail, latency, platform response</td></tr>
+      <tr><td class="mono">system.jsonl</td><td>Throttle / suspension warnings, and one <code>cycle</code> metric per cycle from <code>run_forever</code> (status, counts, budget spent)</td></tr>
+    </tbody>
+  </table></div>
+  <p>Use <code>decision_id</code> to join <code>decisions.jsonl</code> with <code>actions.jsonl</code>.</p>
+</section>
+
+<!-- ═══════════════ 8 ═══════════════ -->
+<section id="fix">
+  <h2><span class="num">08</span>Rate-limit recovery fix</h2>
+  <p class="lead">Found while stress-testing the new loop against the mock (5% random errors, throttling on, one suspended bot).</p>
+
+  <div class="grid2">
+    <div class="box">
+      <h3 style="color:var(--danger)">Problem</h3>
+      <p>Each time the platform throttled us, the rate limiter halved its speed, but <b>nothing ever sped it back up</b>. <code>ActionGate.on_clean_interval()</code> existed but was never called. In the stress run reads dropped from 100 to 0.195 req/s and one cycle took 32 s. With real defaults, nine throttles would leave the bot at its floor: <b>one read every 15 minutes, permanently</b>.</p>
+    </div>
+    <div class="box">
+      <h3 style="color:var(--good)">Fix</h3>
+      <p>The Actuator counts throttles (<code>actuator.throttles</code>). After any cycle with <b>no</b> throttle, the loop calls <code>actuator.recover()</code>, which lets the team read and write rates rise again (×1.05 per clean cycle, never above the configured rate). Covered by <code>test_gate_recovers_after_clean_cycles</code>.</p>
+    </div>
+  </div>
+
+  <div class="callout c-warn">
+    <span class="t">Still open (in ratelimit.py, not changed)</span>
+    <ul style="margin:4px 0 0">
+      <li>Recovery is slow: from the floor it takes about 120 clean cycles (~1 hour at 30 s per cycle) to get back to full speed.</li>
+      <li>Only the team-wide rates recover. A per-bot rate that was slowed down stays slow.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════ 9 ═══════════════ -->
+<section id="tests">
+  <h2><span class="num">09</span>Tests — <code>tests/test_pipeline.py</code></h2>
+<pre>python -m pytest tests          <span class="c"># with pytest</span>
+python tests/test_pipeline.py   <span class="c"># without pytest</span></pre>
+  <p>All tests use the mock platform with a fast rate limiter, so the whole suite runs in a few seconds.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th class="mono">Test</th><th>Checks that…</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">test_actions_reach_platform</td><td>All six write actions (incl. <code>comment</code> / <code>retweet</code>) reach the platform and are counted</td></tr>
+      <tr><td class="mono">test_dry_run_sends_nothing</td><td>Dry run logs but sends zero writes</td></tr>
+      <tr><td class="mono">test_throttle_slows_gate_instead_of_crashing</td><td>A 429 returns <code>"throttled"</code> and slows the rate limiter</td></tr>
+      <tr><td class="mono">test_gate_recovers_after_clean_cycles</td><td>The rate climbs back after a throttle-free cycle</td></tr>
+      <tr><td class="mono">test_suspended_account_is_retired</td><td>A suspended bot is recorded and not used again</td></tr>
+      <tr><td class="mono">test_failed_read_returns_default</td><td>A failed read returns an empty result instead of crashing</td></tr>
+      <tr><td class="mono">test_unassigned_side_only_observes</td><td>No side → observe</td></tr>
+      <tr><td class="mono">test_decision_rules</td><td>Each rule in section 04 gives the expected action</td></tr>
+      <tr><td class="mono">test_cycle_acts_and_rotates_accounts</td><td>A full cycle acts, using a different bot for each action</td></tr>
+      <tr><td class="mono">test_cycle_never_acts_twice_on_same_post</td><td>Two cycles never target the same post twice</td></tr>
+      <tr><td class="mono">test_cycle_without_side_observes</td><td>A full cycle with no side sends zero writes</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ═══════════════ 10 ═══════════════ -->
+<section id="next">
+  <h2><span class="num">10</span>Placeholders &amp; next steps</h2>
+  <p class="lead">The skeleton runs end to end, but these parts are deliberately simple stand-ins. Each one can be replaced without changing the rest.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Part</th><th>Now</th><th>Replace with</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Scoring</td><td><span class="tagpill t-ph">placeholder</span> keyword relevance / alignment</td><td>Jev answers (same <code>JevAnswers</code> shape); thresholds move to <code>PolicyConfig</code></td><td class="mono">decide.py, ctn/jev/</td></tr>
+      <tr><td>Side signals</td><td><span class="tagpill t-ph">placeholder</span> 3 hashtags/phrases per side from the mock</td><td>Real campaign vocabulary once sides are assigned</td><td class="mono">decide.py SIDE_SIGNALS</td></tr>
+      <tr><td>Reply text</td><td><span class="tagpill t-ph">placeholder</span> 2 templates per side per intent</td><td>LLM + per-bot <code>Persona</code>, same function signature</td><td class="mono">compose.py, ctn/llm/</td></tr>
+      <tr><td>Safety check</td><td><span class="tagpill t-ph">placeholder</span> empty / too long → block; repeat → flag (still sent)</td><td>Jev risk / injection / hate gates</td><td class="mono">compose.py check_text</td></tr>
+      <tr><td>Platform</td><td><span class="tagpill t-mod">mock</span> <code>MockLegitClient</code></td><td>Real adapter when the official template is released; nothing else changes</td><td class="mono">ctn/client/</td></tr>
+      <tr><td>Memory</td><td><span class="tagpill t-mod">in memory</span> acted-on posts are lost on restart</td><td>sqlite state (planned <code>state.py</code>)</td><td class="mono">loop.py</td></tr>
+      <tr><td>Accounts</td><td><span class="tagpill t-mod">simple</span> round-robin, skip suspended</td><td>Account pool with warm-up and trust (planned <code>accounts.py</code>)</td><td class="mono">loop.py _next_account</td></tr>
+      <tr><td>Original posts / follows</td><td><span class="tagpill t-new">ready</span> actions exist in the Actuator</td><td>Decision rules that choose them</td><td class="mono">decide.py</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout c-good">
+    <span class="t">Difference from ctn-architecture.html</span>
+    The architecture doc plans a single <code>pipeline/act.py</code> as the only write path. In this version that role is split: <code>ctn/actuator.py</code> is the only code that touches the platform (reads and writes), and <code>pipeline/loop.py</code> decides <i>when</i> to call it. The guard step is currently the small <code>check_text()</code> in <code>compose.py</code>, not a separate <code>guard.py</code>.
+  </div>
+</section>
+
+</main>
+
+<footer>CTN 2026 · bot loop &amp; actions · commit 80af07a on feature/initial-bot-loop</footer>
+
+</body>
+</html>

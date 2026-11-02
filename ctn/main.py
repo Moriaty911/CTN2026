@@ -1,0 +1,292 @@
+"""Continuous competition service. Pi alone owns original-post strategy."""
+from __future__ import annotations
+
+import argparse
+import asyncio
+from dataclasses import replace
+import json
+import os
+from pathlib import Path
+import signal
+import time
+
+from .actuator import Actuator
+from .client.legit_v1 import OfficialLegitClient
+from .client.mock import MockLegitClient
+from .config import Settings
+from .jev import JevClient,JevWorkflow,JevPostflightChecker,JevEvaluator,JevPacker,BackgroundReference,load_rubric
+from .llm import DeepSeekClient,ReplyGenerator
+from .models import Side
+from .persona import PersonaRouter,PersonaRegistry
+from .persona.router import catalog_match
+from .pipeline.brain import JevLlmBrain
+from .pipeline.loop import BotLoop
+from .moderation.events import UnavailableModerationSource,consume_events,probe_report_targets
+from .ratelimit import build_gate,build_ledger
+from .storage import StateStore,is_lock_error
+from .telemetry import Telemetry
+from .reconcile import reconcile_unknown_posts
+from .jev.rubrics import ACTIVE_POST_VERSION
+from .analytics import PerformanceCollector
+
+def worker_error_fatal(exc: Exception) -> bool:
+    """Whether a worker tick must end the process (as opposed to being retried next tick).
+
+    Platform/network hiccups and SQLite lock contention are transient; anything else is a bug or a
+    configuration error and should stop the fleet instead of being swallowed.
+    """
+    from .client.base import PlatformError
+    if is_lock_error(exc):return False
+    if isinstance(exc,(PlatformError,TimeoutError)):return False
+    if isinstance(exc,OSError):return not isinstance(exc,(TimeoutError,ConnectionError))
+    return True
+
+
+async def serve(settings,*,mode=None,state_file=None,once=False):
+    mode=settings.execution_mode(mode)
+    if mode=='live': settings.require_live_writes(replies=True)
+    registry=PersonaRegistry()
+    if settings.side.value and settings.side.value!=registry.catalog['side']:
+        raise ValueError('assigned side conflicts with persona catalog')
+    os.umask(0o077)
+    # Platform pacing waits inside SDK worker threads; JEV, DeepSeek and SQLite share the same
+    # default executor. The stock size (CPU count + 4) starves on small hosts once rates are raised.
+    from concurrent.futures import ThreadPoolExecutor
+    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=int(os.environ.get('CTN_THREAD_WORKERS','48')),thread_name_prefix='ctn'))
+    store=StateStore(settings.database_path(state_file))
+    store.bind_data_source("mock" if mode=="mock" else "real")
+    store.set_policy('phase_auto',True)
+    if settings.side in (Side.YES,Side.NO): store.bind_campaign_side(settings.side.value)
+    router=PersonaRouter(registry=registry,default_side=settings.side.value,store=store)
+    store.seed_campaign_policy(router.registry.list_all())
+    if min(settings.max_pending_reports,settings.max_pending_per_author)<0: raise ValueError('negative pending report limit')
+    store.set_policy('max_pending_reports',settings.max_pending_reports)
+    store.set_policy('max_pending_per_author',settings.max_pending_per_author)
+    store.set_policy('report_mode',settings.report_mode)
+    store.set_policy('require_warmup',mode!='mock')
+    from .rag.corpus import Corpus
+    corpus=Corpus(settings.rag_corpus or None)
+    corpus.install_sources(store)
+    if mode=='live' and not any(not s.is_disabled() for s in store.account_states_for(store.persona_bindings().values()).values()):
+        store.close()
+        raise ValueError('live service needs a bound active account; use explicit fleet operations first')
+    telemetry=Telemetry(settings.log_dir,settings.log_level)
+    stop=asyncio.Event()
+    for signum in (signal.SIGINT,signal.SIGTERM):
+        asyncio.get_running_loop().add_signal_handler(signum,stop.set)
+    if mode=='mock': client=MockLegitClient(failure_rate=0.)
+    else:
+        if not settings.platform.api_key: raise ValueError('platform key missing; use --mock offline')
+        client=OfficialLegitClient(url=settings.platform.base_url or None,team_key=settings.platform.api_key,
+            default_password=settings.platform.bot_password,timeout=settings.platform.request_timeout_s,
+            auto_register=False,store=store)
+        client.configure_pacing(settings.rate,settings.budget)
+    actuator=Actuator(client,build_gate(settings.rate),build_ledger(settings.budget,store=store),
+        dry_run=mode!='live',store=store,telemetry=telemetry)
+    actuator.catalog_hash=router.registry.catalog_hash
+    brain=None
+    jev=None;llm=None
+    if mode!='mock' and settings.side in (Side.YES,Side.NO) and settings.jev.enabled and settings.jev.api_key and settings.llm.api_key:
+        jev=JevClient(settings.jev);llm=DeepSeekClient(settings.llm)
+        refs=tuple(BackgroundReference(**r) for r in store.policy('trusted_background',[]))
+        workflow=JevWorkflow(jev,evaluator=JevEvaluator(
+            jev,packer=JevPacker(model=settings.jev.model,verified_references=refs),
+            post_questions=load_rubric("post",version=ACTIVE_POST_VERSION)))
+        brain=JevLlmBrain(workflow,ReplyGenerator(workflow,llm),side=settings.side,router=router,
+            postflight=JevPostflightChecker(jev),trusted_background=refs,corpus=corpus)
+    accounts=[p.account_id for p in router.registry.list_by_side(settings.side.value) if p.account_id]
+    loop=BotLoop(actuator,side=settings.side,accounts=accounts,store=store,brain=brain,telemetry=telemetry)
+    performance=PerformanceCollector(actuator,router)
+    source=UnavailableModerationSource()
+    loop.reporter.enabled=settings.report_mode!="off"
+    loop.reporter.event_source=source
+    if mode=='live' and brain is None: raise ValueError('live replies require configured JEV and LLM')
+    # Read-only/dry sessions without model credentials collect only, never substitute heuristics for live decisions.
+    process_replies=(brain is not None or mode=='mock')
+    heartbeat=settings.state_dir/'heartbeat'
+    progress={};running=True;error='';started_at=time.time()
+    def write_heartbeat():
+        runtime=store.runtime_metrics()
+        counts=runtime["tasks"]
+        now=time.time()
+        import shutil
+        disk=shutil.disk_usage(settings.state_dir)
+        catalog=catalog_match(store,registry)
+        payload={**runtime,'alive':running,'timestamp':now,'mode':mode,'workers':progress,'error':error,
+            'tasks':counts,
+            'side':settings.side.value,'report_mode':settings.report_mode,'active_accounts':sum(not s.is_disabled() for s in store.account_states_for(store.persona_bindings().values()).values()),
+            'phase':store.effective_phase(),'disk_free_bytes':disk.free,'disk_warning':disk.free/disk.total<0.1,
+            'rag_version':corpus.data['corpus_version'],'moderation_capability':'unavailable',
+            'auto_reports_effective':settings.report_mode=='hybrid' and store.report_state_ready(automatic=True)[0],
+            'report_automation':store.report_state_ready(automatic=True)[1],
+            'report_block_reason':store.report_state_ready(automatic=settings.report_mode=='hybrid')[1],
+            'business_stalled':bool((counts.get('queued',0) or runtime['reply_slots'].get('pending',0)) and process_replies and
+                now-(store.get_counter('business_progress_ms')/1000 or started_at)>300),
+            'last_business_progress_at':store.get_counter('business_progress_ms')/1000 or started_at,
+            'requests':actuator.ledger.snapshot(),'db_lock':store.lock_stats(),
+            'persona_catalog':catalog}
+        if not catalog['match']:
+            # Deduplicated per hour by event_key; the fleet keeps running but every write is refused.
+            store.notify_discord(f"catalog_mismatch:{int(now//3600)}",{'type':'alert','kind':'persona_catalog_mismatch',
+                'loaded':catalog['loaded'][:12],'active':catalog['active'][:12],
+                'detail':'every persona-bound write is being refused; run ops persona apply'})
+        heartbeat.parent.mkdir(parents=True,exist_ok=True)
+        tmp=heartbeat.with_suffix('.tmp')
+        tmp.write_text(json.dumps(payload),encoding='utf-8');tmp.chmod(0o600);tmp.replace(heartbeat)
+    async def worker(name,step,interval):
+        while not stop.is_set():
+            start=time.monotonic()
+            progress[name]={**progress.get(name,{}),'started_at':time.time()}
+            try:
+                await step()
+                progress[name].pop('error',None)
+                progress[name]['completed_at']=time.time()
+            except Exception as exc:
+                lock_busy=is_lock_error(exc)
+                if worker_error_fatal(exc):
+                    raise
+                # One busy database used to end the whole fleet: every worker shares this process.
+                progress[name]['error']='database is locked' if lock_busy else type(exc).__name__
+                telemetry.error('worker database busy' if lock_busy else 'worker dependency failed',
+                                worker=name,error=type(exc).__name__)
+            duration=round(time.monotonic()-start,3)
+            telemetry.metric('worker',worker=name,duration_s=duration)
+            # Last and 5-minute max step duration, for `ops status` (lock contention shows up here first).
+            entry=progress[name]
+            if time.time()-entry.get('max_since',0)>=300:entry['max_since'],entry['max_duration_s']=time.time(),0.0
+            entry['last_duration_s']=duration;entry['max_duration_s']=max(entry.get('max_duration_s',0.0),duration)
+            entry['attempted_at']=time.time()
+            if once: return
+            try: await asyncio.wait_for(stop.wait(),timeout=max(.01,interval-(time.monotonic()-start)))
+            except asyncio.TimeoutError: pass
+    async def state_step():
+        await asyncio.to_thread(store.refresh_report_reviews)
+        await asyncio.to_thread(store.set_policy,'phase',store.effective_phase())
+        await asyncio.to_thread(store.recover_actions)
+        await consume_events(store,source)
+        if mode!='mock':await probe_report_targets(store,actuator)
+        # Reconciliation has its own worker; it cannot stall the heartbeat.
+    tasks=[]
+    stopper=None
+    async def shutdown_after_signal():
+        await stop.wait()
+        # Drain: writes still waiting for a rate slot are abandoned as definitely-not-sent;
+        # requests already on the wire get the drain window to return.
+        drain=getattr(client,'begin_shutdown',None)
+        if drain: drain()
+        telemetry.info('shutdown drain started')
+        if tasks:
+            from .storage.runtime import SEND_RECOVERY
+            _,pending=await asyncio.wait(tasks,timeout=float(SEND_RECOVERY['shutdown_drain_seconds']))
+            for task in pending: task.cancel()
+    try:
+        # Official verified status is separate from detector suspicion. The read is metered.
+        getter=getattr(client,'list_verified_accounts',None)
+        if getter:
+            rows=await actuator._read('verified_accounts',getter,[])
+            store.register_verified_accounts(rows)
+        if mode=='live':
+            with store.batch_transaction():
+                store._conn.execute("UPDATE post_tasks SET status='queued',next_attempt_at=? WHERE status='simulated'",(time.time(),))
+        telemetry.info('service started',mode=mode,database=store.db_path,moderation_capability='unavailable')
+        tasks=[asyncio.create_task(worker('frontline',loop.run_frontline_step,1.5)),
+               asyncio.create_task(worker('comments',loop.run_comment_step,2.5)),
+               asyncio.create_task(worker('state',state_step,10)),
+               asyncio.create_task(worker('heartbeat',lambda:asyncio.to_thread(write_heartbeat),5))]
+        if process_replies: tasks.append(asyncio.create_task(worker('reply',loop.process_pending,1)))
+        # Reporting (operator decision 2026-10-19): the blacklist reporter replaces the evidence/EV reporter,
+        # which is paused unless CTN_LEGACY_REPORTS=true. Runtime switch: `ops blacklist off`.
+        legacy_reports,blacklist_reports=reporting_workers()
+        if legacy_reports:tasks.append(asyncio.create_task(worker('moderation',loop.reporter.sweep_and_report,10)))
+        if blacklist_reports and mode!='mock':
+            from .blacklist import BlacklistReporter
+            blacklister=BlacklistReporter(actuator,store)
+            tasks.append(asyncio.create_task(worker('blacklist',blacklister.step,5)))
+        if brain is not None:
+            from .warmup import warmup_step
+            tasks.append(asyncio.create_task(worker('initialise',lambda:warmup_step(actuator,router,brain.postflight),30)))
+            # Our accounts liking/replying to each other. Runtime off switch: `ops launch --amplify off`;
+            # CTN_AMPLIFY=false does not start the worker at all.
+            from .config import _env_bool
+            if _env_bool('CTN_AMPLIFY',True):
+                from .amplify import AmplifyWorker
+                amplify=AmplifyWorker(actuator,router,llm,brain.postflight,side=settings.side.value)
+                tasks.append(asyncio.create_task(worker('amplify',amplify.step,5)))
+        tasks.append(asyncio.create_task(worker('performance',performance.step,30)))
+        from .pipeline.refresh import refresh_tick
+        tasks.append(asyncio.create_task(worker('refresh',lambda:refresh_tick(actuator,store),5)))
+        if mode!='mock':
+            # Eleven verified accounts, read directly: the feed crawl otherwise reaches them too late (58 expired tasks).
+            from .pipeline.bluev import verified_step
+            tasks.append(asyncio.create_task(worker('verified',lambda:verified_step(actuator,store),150)))
+            # Citizens who wrote to us: their next post should reach the queue in minutes, not whenever the feed sees it.
+            from .pipeline.sweep import sweep_step
+            tasks.append(asyncio.create_task(worker('citizen_sweep',lambda:sweep_step(actuator,store),300)))
+        if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),30)))
+        if mode!='mock':
+            # In-universe news -> attributed, verified claims (policies/news-v1.json). Extraction needs the DeepSeek key.
+            from dataclasses import replace as _replace
+            from .news.ingest import NewsIngestor
+            from .news.extract import ClaimExtractor
+            extractor=ClaimExtractor(DeepSeekClient(_replace(settings.llm,max_tokens=4096,temperature=0.1))) if settings.llm.api_key else None
+            ingestor=NewsIngestor(store,extractor=extractor)
+            tasks.append(asyncio.create_task(worker('news',ingestor.step,60)))
+            from .selfcheck import selfcheck_step
+            tasks.append(asyncio.create_task(worker('selfcheck',lambda:selfcheck_step(actuator,store),60)))
+            if mode=='live' and settings.fleet.auto_replace:
+                # A suspended account still holds one of the 50 active-persona slots and used to need a
+                # human plus a restart. The actuator records 'account suspended' on the failed write;
+                # this worker parks the dead persona and registers a same-group replacement
+                # (policies/roster-v1.json). `refresh_accounts()` picks it up next cycle, no restart.
+                from .roster import roster_step
+                tasks.append(asyncio.create_task(worker('roster',lambda:roster_step(store,router.registry,actuator.client,
+                    password=settings.platform.bot_password,max_active=settings.fleet.bot_accounts),120)))
+        stopper=asyncio.create_task(shutdown_after_signal())
+        await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        if not stop.is_set(): raise
+    except BaseException as exc:
+        error=type(exc).__name__
+        telemetry.error('service worker stopped',error=error)
+        raise
+    finally:
+        stop.set()
+        if stopper:
+            stopper.cancel()
+            await asyncio.gather(stopper,return_exceptions=True)
+        for task in tasks:
+            if not task.done(): task.cancel()
+        await asyncio.gather(*tasks,return_exceptions=True)
+        running=False
+        write_heartbeat()
+        close=getattr(client,'close',None)
+        if close: await close()
+        for component in (jev,llm):
+            closer=getattr(component,'close',None)
+            if closer: closer()
+        telemetry.close();store.close()
+
+
+def reporting_workers():
+    """(legacy evidence/EV reporter, blacklist reporter): which reporting workers this process starts."""
+    from .config import _env_bool
+    return _env_bool('CTN_LEGACY_REPORTS',False),_env_bool('CTN_BLACKLIST_REPORTS',True)
+
+
+def main(argv=None):
+    parser=argparse.ArgumentParser(description=__doc__)
+    modes=parser.add_mutually_exclusive_group()
+    modes.add_argument('--mock',action='store_const',dest='mode',const='mock')
+    modes.add_argument('--dry-run',action='store_const',dest='mode',const='dry-run')
+    modes.add_argument('--live',action='store_const',dest='mode',const='live')
+    parser.add_argument('--state-file')
+    parser.add_argument('--side',choices=['yes','no'])
+    parser.add_argument('--once',action='store_true',help='one offline/smoke cycle')
+    args=parser.parse_args(argv)
+    settings=Settings.load()
+    if args.side: settings=replace(settings,side=Side(args.side))
+    try: asyncio.run(serve(settings,mode=args.mode,state_file=args.state_file,once=args.once))
+    except (ValueError,RuntimeError) as exc:
+        parser.exit(2,str(exc)+'\n')
+
+if __name__=='__main__': main()

@@ -1,0 +1,85 @@
+{
+  "version": "reply-targeting.v1",
+  "notes": "Ordinal weights, not probabilities of scoring. Bot estimates are priors for ordering only; reports use report-decision.v2.",
+  "bot_prior": {
+    "unknown": 0.3,
+    "suspected_bot": 0.6,
+    "confirmed_bot": 0.9,
+    "upheld_author": 0.9
+  },
+  "weights": {
+    "author_reader": 10.0,
+    "onlooker": 4.0,
+    "replies_to_us": 15.0,
+    "trending": 6.0,
+    "verified_author": 16.0,
+    "persuadable": 14.0,
+    "known_citizen": 25.0
+  },
+  "freshness_half_life_seconds": 1800,
+  "bot_filter": {
+    "notes": "Suspicion is scored on 0-100 (ctn/moderation/detector.py uses >=85 to confirm a bot; the Discord panel says the score is not a probability). 2026-10-20 22:00: the first version of this rule said 0.7 because it was written as if the score were 0-1, so every author with any signal at all was skipped (1457 of 4575 accounts, 32%) and replies fell from 116/h to 72/h. The live distribution is 3116 accounts at 0, 520 at 1-9, 844 at 10-39, 91 at 40-69, 2 at 70+. 40 filters 93 accounts (2%) and leaves the weak signals alone; accounts that simply do not answer us are handled by caps.second_reply_requires_response instead.",
+    "min_suspicion": 40
+  },
+  "author_history_posts": 20,
+  "cold": {
+    "min_age_seconds": 600,
+    "max_engagement": 3,
+    "min_bot_probability": 0.5
+  },
+  "defer_suspected_until_seconds": 660,
+  "caps": {
+    "per_author_per_day": 2,
+    "verified_per_author_per_day": 3,
+    "second_reply_requires_response": true,
+    "second_reply_notes": "A second reply to the same author is only sent when that author has replied to one of our posts since our previous reply: an author who ignored us is not a conversation, and a citizen who just moved is harder to move again in the same session (organiser note 2026-10-19).",
+    "per_thread_per_day": 2,
+    "per_thread_min_gap_seconds": 1800,
+    "per_thread_notes": "2026-10-24: our own detector flagged 8-13 accounts for appearing in one thread within 15 minutes of another of our accounts (self_scan crowded_threads), the one bot signal we still emit after the phrasing gate and the AI-leak filter went to zero. 24 h of traffic: 1182 threads got one reply, 116 got two, 25 got three, and 150 pairs sat closer than 30 minutes. Cap 3->2 costs at most 25 replies a day; the 30-minute gap delays about 150 rather than dropping them.",
+    "per_account_per_day": 80,
+    "per_author_min_gap_seconds": 1800,
+    "verified_author_min_gap_seconds": 600,
+    "verified_notes": "2026-10-28: 11 verified accounts; we replied to 22 of the 579 of their items we had seen and only 3 answered us (13.6%, against 10.6% for citizens), while 58 reply tasks on them expired before we reached them and 25 died on the 2-a-day cap. Verified now ranks at 16 (was 6) and gets 3 replies a day 10 minutes apart, so we can answer the objection they just made instead of arriving hours later. Their own posts are also polled directly by the 'verified' worker, which is what actually removes the expiry."
+  },
+  "cooldown_jitter_seconds": 120,
+  "trending_window_seconds": 1800,
+  "refresh": {
+    "stages_seconds": [
+      600,
+      1500
+    ],
+    "per_minute": 120,
+    "per_step": 10,
+    "spacing_seconds": 0.5,
+    "stale_after_seconds": 300,
+    "max_team_read_backlog_seconds": 2.0
+  },
+  "feed": {
+    "trending_every": 2,
+    "page_limit": 50,
+    "backlog_max_age_seconds": 300
+  },
+  "comments": {
+    "pages_per_post_per_hour": 4,
+    "own_thread_bonus": 80,
+    "verified_bonus": 40,
+    "trending_bonus": 30
+  },
+  "thread_depth": {
+    "notes": "Organiser note 2026-10-19: NPCs are less likely to reply in deep threads. Depth 0 = top-level post. Targets deeper than max_target_depth are skipped, except a citizen replying directly to us, where we answer at most followups_when_replying_to_us times per thread per day. 2026-10-29: citizens get depth 3 (citizen_max_target_depth) because 3,021 of 6,834 citizen posts seen in 24 h were dropped for depth alone, and the caps below still bound our presence in any one thread. Other teams' accounts stay at 2: their deep threads are where our crowding is most visible.",
+    "factors": [
+      1.0,
+      0.8,
+      0.4
+    ],
+    "max_target_depth": 2,
+    "citizen_max_target_depth": 3,
+    "followups_when_replying_to_us": 2
+  },
+  "citizens": {
+    "notes": "2026-10-26, 48 h of our replies: 887 to accounts registered before the open (id <= 2343) drew a citizen answer 10.6% of the time; 3,245 to everyone else drew one 1.1% of the time, while competitor bots answered 16-23% of them. Only citizens score, so citizens get a large ordering bonus (weights.known_citizen, comparable to the 20-40 spread of the JEV score), are never removed by the detector floor, and only answers from rewarded responders raise priority, unlock deep-thread follow-ups or a second reply. Newcomers still count while their bot prior is below responder_max_bot_probability (unknown 0.3 counts; suspected, confirmed or posting >= frequency_bot.min_posts an hour does not); set count_newcomers false to reward citizens only.",
+    "max_account_id": 2343,
+    "count_newcomers": true,
+    "responder_max_bot_probability": 0.5
+  }
+}

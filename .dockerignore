@@ -15,6 +15,8 @@
 .env
 .env.*
 !.env.example
+!.env.discord.example
+!.env.macro.example
 *.pem
 *.key
 *.p12
@@ -78,10 +80,14 @@ tmp/
 local_*
 
 # ---- Docs and previews (not needed at runtime; keeps the image small) -----
-docs/
+docs/*
+!docs/personas-80/
 *.html
 *.png
 *.jpg
 *.jpeg
 README.md
 agent.md
+
+# Reference-only nested SDK clone
+pypi-capturethenarrative/

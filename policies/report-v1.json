@@ -1,0 +1,15 @@
+{
+  "version": "report-whitelist.v1",
+  "score_is_probability": false,
+  "automatic_requires_target_leak": true,
+  "automatic_behavior_groups": ["repetition", "coordination"],
+  "minimum_other_authored_posts": 2,
+  "minimum_other_threads": 2,
+  "minimum_repeated_content_characters": 80,
+  "repetition_similarity_min": 0.9,
+  "coordination_window_seconds": 15,
+  "approval_ttl_seconds": 300,
+  "dismissed_account_retry_delay_seconds": 300,
+  "max_pending_team": 5,
+  "max_pending_per_author": 1
+}

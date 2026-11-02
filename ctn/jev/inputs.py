@@ -263,6 +263,25 @@ class ContextIssue:
 
 
 @dataclass(frozen=True)
+class CampaignItem(_Record):
+    reference_id: str
+    kind: Literal["official_fact", "attributed_claim", "argument", "unknown"]
+    text: str
+    source_id: str
+
+    def __post_init__(self):
+        super().__post_init__()
+        _nonblank(self.text,"text")
+
+
+@dataclass(frozen=True)
+class CampaignMaterials(_Record):
+    snapshot_id: str
+    corpus_hash: str
+    items: tuple[CampaignItem, ...]
+
+
+@dataclass(frozen=True)
 class JevInput(_Record):
     schema_version: Literal["jev-input.v1"]
     post: InputPost
@@ -273,6 +292,7 @@ class JevInput(_Record):
     interaction_history: InteractionHistory | None = None
     task_context: TaskContext | None = None
     trusted_background: BackgroundContext | None = None
+    campaign_materials: CampaignMaterials | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()

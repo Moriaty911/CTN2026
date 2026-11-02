@@ -1,0 +1,206 @@
+{
+  "python": "3.14.6",
+  "sqlite": "3.53.3",
+  "system": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "storage": "temporary local file; WAL/NORMAL; warm cache",
+  "benchmarks": [
+    {
+      "rows": 100000,
+      "authors": 1000,
+      "confirmed_author_fraction": 0.05,
+      "bulk_population_seconds": 3.422,
+      "warm_cache_latency": {
+        "post_primary_key": {
+          "p50_ms": 0.0064,
+          "p95_ms": 0.0074,
+          "max_ms": 0.0107,
+          "repeats": 40
+        },
+        "author_last20": {
+          "p50_ms": 0.0881,
+          "p95_ms": 0.107,
+          "max_ms": 0.1745,
+          "repeats": 40
+        },
+        "norm_hash_lookup": {
+          "p50_ms": 0.0189,
+          "p95_ms": 0.022,
+          "max_ms": 0.0517,
+          "repeats": 40
+        },
+        "comment_queue15": {
+          "p50_ms": 0.0828,
+          "p95_ms": 0.0877,
+          "max_ms": 0.1761,
+          "repeats": 40
+        },
+        "confirmed_corpus150": {
+          "p50_ms": 1.5195,
+          "p95_ms": 1.619,
+          "max_ms": 1.9304,
+          "repeats": 40
+        },
+        "unconfirmed_candidates200": {
+          "p50_ms": 0.7963,
+          "p95_ms": 0.8441,
+          "max_ms": 0.9304,
+          "repeats": 40
+        },
+        "all_author_timestamps_update": {
+          "p50_ms": 0.0261,
+          "p95_ms": 0.0336,
+          "max_ms": 0.099,
+          "repeats": 40
+        },
+        "runtime_metrics": {
+          "p50_ms": 4.1725,
+          "p95_ms": 4.187,
+          "max_ms": 4.6987,
+          "repeats": 10
+        },
+        "task_recovery_first": {
+          "p50_ms": 138.5712,
+          "p95_ms": 138.5712,
+          "max_ms": 138.5712,
+          "repeats": 1
+        },
+        "task_claim8_warm": {
+          "p50_ms": 0.0968,
+          "p95_ms": 0.1122,
+          "max_ms": 0.319,
+          "repeats": 10
+        },
+        "scan_one_confirmed_author": {
+          "p50_ms": 0.2737,
+          "p95_ms": 0.3252,
+          "max_ms": 0.3505,
+          "repeats": 10
+        }
+      },
+      "ingest30_with_detector_ms": 3.547,
+      "ingest30_sql_statements": 542,
+      "ingest30_commits": 1,
+      "query_plans": {
+        "comment_queue": [
+          "SEARCH q USING INDEX idx_comment_priority (priority>?)",
+          "SEARCH p USING INDEX sqlite_autoindex_observed_posts_1 (post_id=?)"
+        ],
+        "confirmed_corpus": [
+          "MULTI-INDEX OR",
+          "INDEX 1",
+          "SEARCH b USING INDEX idx_bot_registry_status (status=?)",
+          "INDEX 2",
+          "SEARCH b USING INDEX idx_bot_registry_suspended (is_suspended=?)",
+          "SEARCH p USING INDEX idx_observed_posts_author (author=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "pragmas": {
+        "journal_mode": "wal",
+        "synchronous": 1,
+        "busy_timeout": 5000,
+        "page_size": 4096
+      },
+      "database_mb": 75.15
+    },
+    {
+      "rows": 1000000,
+      "authors": 1000,
+      "confirmed_author_fraction": 0.05,
+      "bulk_population_seconds": 40.996,
+      "warm_cache_latency": {
+        "post_primary_key": {
+          "p50_ms": 0.0066,
+          "p95_ms": 0.0089,
+          "max_ms": 0.0136,
+          "repeats": 40
+        },
+        "author_last20": {
+          "p50_ms": 0.0885,
+          "p95_ms": 0.095,
+          "max_ms": 0.2311,
+          "repeats": 40
+        },
+        "norm_hash_lookup": {
+          "p50_ms": 0.0188,
+          "p95_ms": 0.0203,
+          "max_ms": 0.053,
+          "repeats": 40
+        },
+        "comment_queue15": {
+          "p50_ms": 0.0846,
+          "p95_ms": 0.09,
+          "max_ms": 0.2039,
+          "repeats": 40
+        },
+        "confirmed_corpus150": {
+          "p50_ms": 3.6854,
+          "p95_ms": 3.8446,
+          "max_ms": 4.8283,
+          "repeats": 40
+        },
+        "unconfirmed_candidates200": {
+          "p50_ms": 0.7962,
+          "p95_ms": 0.8363,
+          "max_ms": 0.9383,
+          "repeats": 40
+        },
+        "all_author_timestamps_update": {
+          "p50_ms": 0.1264,
+          "p95_ms": 0.187,
+          "max_ms": 2.5646,
+          "repeats": 40
+        },
+        "runtime_metrics": {
+          "p50_ms": 42.4259,
+          "p95_ms": 43.2429,
+          "max_ms": 47.6147,
+          "repeats": 10
+        },
+        "task_recovery_first": {
+          "p50_ms": 1555.9113,
+          "p95_ms": 1555.9113,
+          "max_ms": 1555.9113,
+          "repeats": 1
+        },
+        "task_claim8_warm": {
+          "p50_ms": 0.0991,
+          "p95_ms": 0.12,
+          "max_ms": 0.277,
+          "repeats": 10
+        },
+        "scan_one_confirmed_author": {
+          "p50_ms": 0.2699,
+          "p95_ms": 0.2896,
+          "max_ms": 0.4001,
+          "repeats": 10
+        }
+      },
+      "ingest30_with_detector_ms": 3.52,
+      "ingest30_sql_statements": 542,
+      "ingest30_commits": 1,
+      "query_plans": {
+        "comment_queue": [
+          "SEARCH q USING INDEX idx_comment_priority (priority>?)",
+          "SEARCH p USING INDEX sqlite_autoindex_observed_posts_1 (post_id=?)"
+        ],
+        "confirmed_corpus": [
+          "MULTI-INDEX OR",
+          "INDEX 1",
+          "SEARCH b USING INDEX idx_bot_registry_status (status=?)",
+          "INDEX 2",
+          "SEARCH b USING INDEX idx_bot_registry_suspended (is_suspended=?)",
+          "SEARCH p USING INDEX idx_observed_posts_author (author=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "pragmas": {
+        "journal_mode": "wal",
+        "synchronous": 1,
+        "busy_timeout": 5000,
+        "page_size": 4096
+      },
+      "database_mb": 782.46
+    }
+  ]
+}

@@ -44,6 +44,42 @@ class Tier(str, Enum):
                             # produce citizen -> us engagement (Engagement score)
 
 
+class Side(str, Enum):
+    """Which side of the referendum the team argues for.
+
+    Assigned by the organisers, so it is configuration (CTN_SIDE), never a
+    constant. Until it is assigned the pipeline must not take partisan actions.
+    YES/NO follow the mock's stance convention: +1 = firmly YES.
+    """
+
+    YES = "yes"
+    NO = "no"
+    UNASSIGNED = ""
+
+    @property
+    def opponent(self) -> "Side":
+        if self is Side.YES:
+            return Side.NO
+        if self is Side.NO:
+            return Side.YES
+        return Side.UNASSIGNED
+
+
+class ActionKind(str, Enum):
+    """Concrete platform actions. `Tier` says how scarce an action is; this says
+    which call the actuator makes."""
+
+    NONE = "none"           # observe only
+    LIKE = "like"
+    REPOST = "repost"       # a.k.a. retweet
+    REPLY = "reply"         # a.k.a. comment
+    POST = "post"
+    FOLLOW = "follow"
+    UNFOLLOW = "unfollow"
+    REPORT = "report"
+    DELETE_ACCOUNT = "delete_account"
+
+
 class GuardVerdict(str, Enum):
     ALLOW = "allow"
     FLAG = "flag"      # allowed but logged and down-weighted
@@ -151,9 +187,14 @@ class Decision:
     account: str
     scores: JevAnswers
     rationale: str = ""
+    action: ActionKind = ActionKind.NONE
+    text: str = ""                     # reply / post body, when the action has one
+    root_post_id: str = ""             # root thread post id when replying to a nested comment
     created_at: float = field(default_factory=time.time)
     # Filled in later, when the in-universe poll next moves.
     observed_poll_delta: float | None = None
+    disposition: str = "auto"  # execute, wait, retry, skip; auto for legacy saved decisions
+    needs: tuple[str, ...] = ()
 
 
 @dataclass
@@ -165,7 +206,17 @@ class ActionResult:
     ok: bool
     detail: str = ""
     latency_ms: float = 0.0
+    response: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
+    status: str = ""
+    action_id: str = ""
+
+    def __post_init__(self):
+        if not self.status:
+            self.status = "succeeded" if self.ok else "failed"
+        if self.status not in {"succeeded", "simulated", "failed", "unknown", "blocked"}:
+            raise ValueError("invalid action result status")
+        self.ok = self.status == "succeeded"
 
 
 def to_jsonable(obj: Any) -> Any:

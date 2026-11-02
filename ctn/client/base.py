@@ -76,7 +76,9 @@ class LegitClient(Protocol):
 
     async def get_post(self, post_id: str) -> dict[str, Any]: ...
 
-    async def get_comments(self, post_id: str, *, limit: int = 50) -> list[dict[str, Any]]: ...
+    async def get_comments(
+        self, post_id: str, *, limit: int = 50, cursor: str | None = None
+    ) -> list[dict[str, Any]]: ...
 
     async def get_feed(self, account: str, *, limit: int = 50) -> list[dict[str, Any]]:
         """The feed *as a given bot account sees it*. Used to measure how much of
@@ -92,10 +94,25 @@ class LegitClient(Protocol):
 
     async def repost(self, account: str, post_id: str) -> dict[str, Any]: ...
 
-    async def reply(self, account: str, post_id: str, text: str) -> dict[str, Any]: ...
+    async def reply(
+        self,
+        account: str,
+        post_id: str,
+        text: str,
+        *,
+        root_post_id: int | str | None = None,
+    ) -> dict[str, Any]: ...
 
     async def like(self, account: str, post_id: str) -> dict[str, Any]: ...
 
     async def follow(self, account: str, target: str) -> dict[str, Any]: ...
 
     async def unfollow(self, account: str, target: str) -> dict[str, Any]: ...
+
+    async def report(self, account: str, post_id: str, *, reason: str = "inauthentic", detail: str = "") -> dict[str, Any]: ...
+
+
+
+class ReadFailurePage(list):
+    """An unsuccessful read; empty successful lists retain their normal meaning."""
+    read_failed = True

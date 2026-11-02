@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "panel_url": "https://discord.com/channels/1561240497781997708/1561240498469867633/1561306753403191318",
+  "panel_message_id": "1561306753403191318",
+  "buttons": [
+    "Review queue",
+    "Pending reports",
+    "Reporting controls",
+    "Refresh",
+    "Help"
+  ],
+  "default_json_attachments": false,
+  "interface_language": "English",
+  "required_command_arguments": {
+    "reports": [],
+    "report": [],
+    "reporting": [],
+    "ruling": []
+  },
+  "control_panels_in_recent_history": 1,
+  "report_mode": "off",
+  "action_intents": 0,
+  "candidates": 0,
+  "gateway_connected": true,
+  "panel_error": null,
+  "extra_channel_messages_sent_by_check": 0,
+  "checked_at": "2026-10-18T09:17:46.976730+00:00",
+  "offline_test_total": 681,
+  "new_ui_workflow_tests": 15,
+  "live_clicks_automated": false,
+  "interaction_validation": "Real discord.py callbacks, menus and forms exercised offline against SQLite; published panel and registered commands read back live."
+}

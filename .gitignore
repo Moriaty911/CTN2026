@@ -155,6 +155,7 @@ local_*
 # Local JEV task lists and decision notes (user requirement: never commit)
 /JEV_TASKS.local.md
 /JEV_INPUT_CONTRACT.local.md
+/jev-decision-tree-zh.html
 
 
 # ---------------------------------------------------------------------------
@@ -191,3 +192,24 @@ local_*
 #    systemd/*.service       process supervision
 #    docs/**                 documentation
 #    .env.example            configuration template (variable names only)
+
+# Optional Discord configuration template is safe to commit.
+!.env.discord.example
+!.env.macro.example
+.env.discord
+.env.macro
+*.migration.lock
+pypi-capturethenarrative/
+
+# Competition materials stay on disk only (rule 5.2: no material leaves the team).
+ctn-accounts-*.md
+docs/intel/
+leaderboard.png
+screenshot_web.png
+
+# Competition material handed over by the operator: the team log contains a team code, so it stays out of git
+# (rule 5.6 - a key in git history counts as leaked).
+chattpg-*.csv
+rank.txt
+*.png
+!docs/**/*.png

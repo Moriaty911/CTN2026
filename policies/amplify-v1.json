@@ -1,0 +1,103 @@
+{
+  "version": "amplify.v1",
+  "notes": "Our own accounts like and reply to each other's posts so they reach trending (live 2026-10-19: amplified posts drew 12-29 citizen likes each, plain ones 1-2). Interactions between our accounts score nothing themselves. Phases are Sydney time; `ops launch --amplify` overrides the level. Counts are ranges; the planner draws inside them per post.",
+  "phases": [
+    {
+      "from": "2026-10-19T18:00:00+11:00",
+      "level": "high"
+    },
+    {
+      "from": "2026-10-22T00:00:00+11:00",
+      "level": "low"
+    },
+    {
+      "from": "2026-10-31T18:00:00+11:00",
+      "level": "max"
+    }
+  ],
+  "levels": {
+    "off": {
+      "original_likes": [
+        0,
+        0
+      ],
+      "original_replies": [
+        0,
+        0
+      ],
+      "reply_likes": [
+        0,
+        0
+      ]
+    },
+    "low": {
+      "original_likes": [
+        0.15,
+        0.3
+      ],
+      "original_replies": [
+        0,
+        1
+      ],
+      "reply_likes": [
+        0,
+        1
+      ]
+    },
+    "high": {
+      "original_likes": [
+        0.5,
+        0.8
+      ],
+      "original_replies": [
+        2,
+        4
+      ],
+      "reply_likes": [
+        0,
+        2
+      ]
+    },
+    "max": {
+      "original_likes": [
+        0.7,
+        1.0
+      ],
+      "original_replies": [
+        3,
+        5
+      ],
+      "reply_likes": [
+        1,
+        3
+      ]
+    }
+  },
+  "like_window_seconds": [
+    90,
+    2400
+  ],
+  "reply_window_seconds": [
+    180,
+    3600
+  ],
+  "plan_lookback_seconds": 3600,
+  "max_publish_backlog_seconds": 60,
+  "reply_retry_seconds": 120,
+  "max_reply_attempts": 3,
+  "max_like_attempts": 6,
+  "max_wait_seconds": 7200,
+  "steps_per_tick": 4,
+  "push": {
+    "notes": "Operator decision 2026-10-20 22:00: the platform deleted every repost we made that day (32/32, verified by reading each one back: 'post not found'), so a 14-repost burst no longer buys trending - it only reads as coordination. Trending is the platform's global_hot_score; a live fit (46 posts, R2 0.99) gave ~1.2 + 3.5 ln(1+likes) + 3.3 ln(1+replies) + 4.9 ln(1+reposts) - 1.8 per hour of age, and page one ends near 29 (2026-10-20 18:00). At likes 30 / replies 9 the old 4-repost spec scored 28.0, and 14 reposts scored 34.1; the reduced spec scores ~25 and is not expected to reach page one until reposts survive again. A pushed post still gets this many reposts and replies in total (its normal amplification replies count) from different accounts, front-loaded inside the window; an account joins at most max_per_account_per_day pushes a day. Push reposts carry a short comment with the original's tags plus one of ours (policies/hashtags-v1.json `reposts`): verified 2026-10-20 that a commented repost still increments the original's reposts counter. min_seconds_between_pushes stops an accidental second push. | 2026-10-30: switched the defaults to zero. Post 842677 went out with the full package (42 likes, 8 own reposts, 6 comments from other teams' accounts, 45 views) and after 9.5 hours had ZERO citizen actions, so the package does not buy citizen attention; our own reposts and comments earn no points at all. Operator pushes now need explicit --push-reposts/--push-replies, which keeps the write budget for replies to citizens.",
+    "reposts": 0,
+    "replies": 0,
+    "window_seconds": [
+      60,
+      1500
+    ],
+    "max_per_account_per_day": 3,
+    "min_seconds_between_pushes": 10800,
+    "request_ttl_seconds": 10800
+  }
+}

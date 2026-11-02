@@ -50,6 +50,7 @@ class MockPost:
     replies: int = 0
     hashtags: list[str] = field(default_factory=list)
     likers: set[str] = field(default_factory=set)
+    parent_id: str = ""
 
 
 class MockLegitClient:
@@ -78,8 +79,10 @@ class MockLegitClient:
             for i in range(npc_count)
         }
         self.posts: dict[str, MockPost] = {}
+        self.comments: dict[str, list[MockPost]] = {}
         self.accounts: set[str] = set()
         self.suspended: set[str] = set()
+        self.reposts_with_comment: list[dict] = []
         self._latency_ms = latency_ms
         self._throttle_after = throttle_after
         self._throttle_window_s = throttle_window_s
@@ -155,9 +158,10 @@ class MockLegitClient:
                     npc.follows.add(post.author)
 
     def _as_dict(self, post: MockPost) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "post_id": post.post_id,
             "author": post.author,
+            "platform_level": "standard",
             "text": post.text,
             "created_at": post.created_at,
             "likes": post.likes,
@@ -165,6 +169,9 @@ class MockLegitClient:
             "replies": post.replies,
             "hashtags": list(post.hashtags),
         }
+        if post.parent_id:
+            d["parent_id"] = post.parent_id
+        return d
 
     # ---- reads ----------------------------------------------------------- #
     async def trending(self, *, limit: int = 50) -> list[dict[str, Any]]:
@@ -182,7 +189,7 @@ class MockLegitClient:
         q = query.lower()
         hits = [
             p for p in self.posts.values()
-            if q in p.text.lower() or any(q in h.lower() for h in p.hashtags)
+            if not p.parent_id and (q in p.text.lower() or any(q in h.lower() for h in p.hashtags))
         ]
         hits.sort(key=lambda p: -p.created_at)
         return [self._as_dict(p) for p in hits[:limit]]
@@ -194,8 +201,14 @@ class MockLegitClient:
             raise PlatformError(f"post {post_id} not found", retryable=False, status=404)
         return self._as_dict(post)
 
-    async def get_comments(self, post_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    async def get_comments(
+        self, post_id: str, *, limit: int = 50, cursor: str | None = None
+    ) -> list[dict[str, Any]]:
         await self._simulate()
+        if post_id in self.comments:
+            offset = int(cursor) if cursor and str(cursor).isdigit() else 0
+            items = [self._as_dict(c) for c in self.comments[post_id][offset : offset + limit]]
+            return items
         n = self.rng.randint(0, 8)
         return [
             {
@@ -211,9 +224,26 @@ class MockLegitClient:
             for _ in range(min(n, limit))
         ]
 
+    async def get_account_posts(
+        self, target: str, *, limit: int = 50, cursor: str | None = None
+    ) -> list[dict[str, Any]]:
+        await self._simulate()
+        clean = str(target).strip().lstrip("@")
+        authored: list[MockPost] = [
+            p for p in self.posts.values() if p.author == clean
+        ]
+        for thread in self.comments.values():
+            for c in thread:
+                if c.author == clean and c.post_id not in self.posts:
+                    authored.append(c)
+        authored.sort(key=lambda p: -p.created_at)
+        offset = int(cursor) if cursor and str(cursor).isdigit() else 0
+        return [self._as_dict(p) for p in authored[offset : offset + limit]]
+
     async def get_feed(self, account: str, *, limit: int = 50) -> list[dict[str, Any]]:
         await self._simulate()
-        recent = sorted(self.posts.values(), key=lambda p: -p.created_at)[:limit]
+        top_level = [p for p in self.posts.values() if not p.parent_id]
+        recent = sorted(top_level, key=lambda p: -p.created_at)[:limit]
         return [self._as_dict(p) for p in recent]
 
     async def get_profile(self, handle: str) -> dict[str, Any]:
@@ -260,31 +290,51 @@ class MockLegitClient:
         await self._record_write(post)
         return self._as_dict(post)
 
-    async def repost(self, account: str, post_id: str) -> dict[str, Any]:
+    async def repost(self, account: str, post_id: str, *, comment: str | None = None, visibility: str | None = None) -> dict[str, Any]:
         self._check_account(account)
         await self._simulate(write=True)
         post = self.posts.get(post_id)
         if post is None:
             raise PlatformError("no such post", retryable=False, status=404)
         post.reposts += 1
+        if comment:
+            # The real platform also creates a new post (kind='repost') but still increments the original's counter.
+            self.reposts_with_comment.append({'account': account, 'post_id': post_id, 'comment': comment})
         return {"ok": True, "post_id": post_id}
 
-    async def reply(self, account: str, post_id: str, text: str) -> dict[str, Any]:
+    async def reply(
+        self,
+        account: str,
+        post_id: str,
+        text: str,
+        *,
+        root_post_id: int | str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         self._check_account(account)
         await self._simulate(write=True)
         parent = self.posts.get(post_id)
         if parent is not None:
             parent.replies += 1
+        root_id = str(root_post_id).strip() if root_post_id is not None else ""
         reply = MockPost(
             post_id=uuid.uuid4().hex[:12],
             author=account,
             text=text,
             created_at=time.time(),
             hashtags=[w for w in text.split() if w.startswith("#")],
+            parent_id=root_id or post_id,
         )
         self.posts[reply.post_id] = reply
+        self.comments.setdefault(post_id, []).append(reply)
+        if root_id and root_id != post_id:
+            self.comments.setdefault(root_id, []).append(reply)
         await self._record_write(reply)
-        return self._as_dict(reply)
+        out = self._as_dict(reply)
+        if root_id:
+            out["root_post_id"] = root_id
+            out["reply_to_post_id"] = post_id
+        return out
 
     async def like(self, account: str, post_id: str) -> dict[str, Any]:
         self._check_account(account)
@@ -313,6 +363,29 @@ class MockLegitClient:
         if npc is not None:
             npc.follows.discard(account)
         return {"ok": True, "target": target}
+
+    async def report(self, account: str, post_id: str, *, reason: str = "", detail: str = "") -> dict[str, Any]:
+        self._check_account(account)
+        await self._simulate(write=True)
+        post = self.posts.get(post_id)
+        if post is None:
+            raise PlatformError("no such post", retryable=False, status=404)
+        # Reporting a genuine NPC citizen is rejected (6-hour penalty in 2026 rules);
+        # reporting a player-bot post is upheld.
+        is_npc = post.author in self.npcs
+        outcome = "pending"
+        return {
+            "ok": True,
+            "post_id": post_id,
+            "target_author": post.author,
+            "reason": reason,
+            "outcome": outcome,
+        }
+
+    async def report_account(self,account,target,*,reason='inauthentic',detail=''):
+        self._check_account(account)
+        await self._simulate(write=True)
+        return {'ok':True,'account_id':target,'report_id':uuid.uuid4().hex,'outcome':'pending'}
 
     # ---- simulation helpers (not part of the Protocol) -------------------- #
     async def close(self) -> None:

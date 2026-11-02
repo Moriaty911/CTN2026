@@ -1,0 +1,228 @@
+{
+  "schema_version": "ctn-implementation-validation.v1",
+  "baseline_git_commit": "9ca84184da3d29eecb256daa6e2acee93cb6db08",
+  "campaign": {
+    "side": "yes",
+    "startup": "2026-10-19T18:00:00+11:00",
+    "shaping": "2026-10-20T17:00:00+11:00",
+    "climax": "2026-11-01T00:00:00+11:00",
+    "daily_original_limit_default": 10,
+    "strategic_account_interval_seconds": 86400,
+    "initial_accounts": 50
+  },
+  "tests": {
+    "environment": "Docker Linux Python3.14.6, pinned official SDK0.5.0 and discord.py2.7.1",
+    "total": 691,
+    "passed": 691,
+    "new": 79,
+    "log": "/private/tmp/ctn-single-panel-verify.log"
+  },
+  "schema_version_sqlite": 6,
+  "sqlite_mode": "WAL/FULL",
+  "container_builds": {
+    "verify": true,
+    "discord-runtime": true,
+    "macro-runtime": true,
+    "runtime": true
+  },
+  "offline_container_checks": {
+    "pi_cli": {
+      "passed": true,
+      "output_excerpt": "Pi1.3.0 CLI flags available; no network"
+    },
+    "macro_worker": {
+      "passed": true,
+      "output_excerpt": "{\"status\": \"skipped\"}\n"
+    },
+    "discord_commands": {
+      "passed": true,
+      "output_excerpt": "['reports', 'report', 'reporting', 'ruling']\n"
+    },
+    "fleet_mock_once": {
+      "passed": true,
+      "output_excerpt": "17:37:05 INFO    ctn | service started\n"
+    },
+    "default_compose": {
+      "passed": true,
+      "services": {
+        "fleet": "healthy",
+        "macro-agent": "healthy"
+      },
+      "network_mode": "none",
+      "data_source": "mock",
+      "sqlite_version": 6,
+      "runtime_harness_created": true,
+      "pi_cli_available": true,
+      "action_intents": 0,
+      "log": "/private/tmp/ctn-docker-ready-compose-smoke.log"
+    },
+    "pi_local_configuration": {
+      "passed": true,
+      "model": "deepseek/deepseek-flash",
+      "thinking": "high",
+      "credential_matches_local": true,
+      "credential_readable_as_container_user": true,
+      "selected_model_available": true,
+      "credentials_in_app_image": false,
+      "network_mode": "none",
+      "real_model_calls": 0
+    }
+  },
+  "benchmarks": [
+    "benchmark.json",
+    "active-batches.json"
+  ],
+  "production_source_file_count": 90,
+  "source_sha256": {
+    "ctn/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ctn/accounts.py": "42ce02fc69ae70aa271cd1fcc7cbd91fb638521b6b042e0beb9a2dce43114dc3",
+    "ctn/actuator.py": "0a444abd87ce6348090de1cc12f90826faaec1748da869d8fd95ec29691a6a9b",
+    "ctn/analytics.py": "af8f4fde10f628b46ec7fc7d2134832bcc14d2d3f651a61521e4b659568ccd23",
+    "ctn/client/__init__.py": "189cfeb83c1c3ef0548233bba612872bfb78e24697ac82d87057b5cf8b2d22f8",
+    "ctn/client/base.py": "6b154bb3c65c9b2ca4edcc26e502795dcb7b9dff8d2bedcd90743b1164b25836",
+    "ctn/client/legit_v1.py": "3d538a0536d3a682cb617c95bfd7a8b3e4a4003f073544042ede67970dd6b8de",
+    "ctn/client/mock.py": "820230179bcc9a02e9492dfcf799bf3288479b2a1ab8e0070bba454031b001fa",
+    "ctn/client/pacing.py": "7039d44d7724e43477839e20be2866d92bc6854b4fd88bac7cd0695a3afced73",
+    "ctn/config.py": "368b47ca1750295812c4973b13beb661796e043f9b315aefb13a6910e5be1a34",
+    "ctn/demo.py": "8b932fae900f90b61b6493040409218ef1946e6e684e966671210cbc2674e8d8",
+    "ctn/discord_bot.py": "769016d5f2c86e3086753e1fd65aa8d1277bd363a1bd8a99ace727e5a0228c62",
+    "ctn/discord_session.py": "89505426372e5ef4afb8c60fcac44e0ca9ce7c1a2769e3c2d7610cdd20e0bff7",
+    "ctn/discord_ui.py": "3066ab5b0a8110f7ca97b06c89160e73d3d3482670df010463320cd8f611aab8",
+    "ctn/jev/__init__.py": "bccaadae61b3293f99beeaad051c74188e6549b39e706a67eed4a202411b1920",
+    "ctn/jev/actions.py": "d02d05dab8557ba4f00517a209a30ec6159e41b1f7bef7cfe12f35cf822a80d8",
+    "ctn/jev/audit.py": "479128886d3d713475310f95afa9af95884d6808ac2254438ef773ed66e63d79",
+    "ctn/jev/calibration.py": "4b4641e15f584240e9dc06646cd55a0ef767b37152fee534ffe02fbd09d5f1c4",
+    "ctn/jev/client.py": "a1d1993c703a710d3795f51e12a38a9c7b94f9273284d90902bebf4b3d8dcfa9",
+    "ctn/jev/evaluator.py": "6c026b47ae3a69a1d157090ba818c8a69ea403cd90dc4c3fa048f0d0c70f89aa",
+    "ctn/jev/expansion.py": "fe9dcf4ed53df619331e52e44761197938e32fa7a5ffd6404c53fa0a4b221f54",
+    "ctn/jev/handoff.py": "12a9f257bcb8e656c37760f221f00def1e5bd344d6bbddb84cfc9ab11d1c715f",
+    "ctn/jev/injection.py": "a51dc8bd29c59290081a27eb67054a23bc7b034a338b4730d516720579dcceb8",
+    "ctn/jev/inputs.py": "93e04d0115128d98cc6156a90f5d14b93d3ecd609a1d9db9d8280406928b55d9",
+    "ctn/jev/materials.py": "1444572ee0a3edd88d00154c9b746f1b297fb0281a27de86dfabe5596ac4ca35",
+    "ctn/jev/outputs.py": "779ca21670f91d20e31b3148ff08726676238a7f5365432aa279e265b2d62d19",
+    "ctn/jev/packing.py": "df09c3739f7efff00b2b3b614651b3230b451e0df7b5dbcdcf3a96dae70603ef",
+    "ctn/jev/parsing.py": "bb99326c81c3403ba31c6c8541f0948568137f79d815a862a3a1a3afda618788",
+    "ctn/jev/planning.py": "eb9c374e1efb56ef5ff1af22435fb39dfb5f2776d892cb6775900a95762edb83",
+    "ctn/jev/postflight.py": "8b9b24e54238d061d014d57e98573428b507fd64ccfbac5d95db90c3d4c2a201",
+    "ctn/jev/questions.py": "3a0a3530293e7a9da60a33e489fba9c56f1867547ca75a161b3e7c682f78b6d2",
+    "ctn/jev/response.py": "1810af848f6bc0c00d01aaa54bef6d89caf28e7c23f37c01af6f7f6e91d39ca8",
+    "ctn/jev/routing.py": "a0be9a9217889d28ff2f5f1b448530742d240a471dacf35856f9286a0c9e8983",
+    "ctn/jev/rubrics.py": "946f41dd5159373e2fe172b1d1691674ca5d205ef4eac8cb6e02f50e1138cac7",
+    "ctn/jev/smoke.py": "7ba84bbed42a540a94e980f8d7b93ee35aab013e2d86fca7ab4b876a26bd0bfa",
+    "ctn/jev/workflow.py": "3e6ab81a62fa39d0aad790ea9819fd3bb1e8b886ec1cb5c21f31cef058e46af8",
+    "ctn/llm/__init__.py": "0e6da6f7f2a49c8c63392adcb3e1a51f2b8db77d03d951965531d7a1cc6abffe",
+    "ctn/llm/client.py": "e6d1922df404625032340cdb49269702ffaf5223a4421ce8dccd37c79e56b078",
+    "ctn/llm/models.py": "9c4f222786b78ec66e6c652edbcc50ec3fc8c741ae1bc295823cb04362527f18",
+    "ctn/llm/prompts.py": "21afa3bd49c6b4b6dfd390e507a87528973d17ad42634dc667b10b79975b36a6",
+    "ctn/llm/smoke.py": "54679117dbd3232d7022e6cc595afe9bc190a7dfc6cfaac73bb960039891c7af",
+    "ctn/llm/workflow.py": "6f21201bbda1f6bdea4ebcb2fd5c20b7fc919af575c58715ffcb6ba80b751e71",
+    "ctn/macro/__init__.py": "131481a1bff8b7326b684d7514463a2ea08f2e8e6f0571a93de4faafa5fb700a",
+    "ctn/macro/__main__.py": "35ca6477dd49e1ddb32787f29090ce142e74da1040f73f7f5acfdb2f6ab4c40e",
+    "ctn/macro/cli.py": "62229f121b103bd7ce85bf60094681c5652382ec97a045e3e09dc5d467e5dba9",
+    "ctn/macro/publisher.py": "ed9788135620012888681c96b49c432f19e9c28e7ab5322bac98684cecd02d5f",
+    "ctn/macro/state.py": "c9e64ab725046487471b6bd46581833342bce21a6a165df2b32cb3a458b11343",
+    "ctn/macro/worker.py": "6992ec5771717e0e75fb15650a7e18e15ca0726e298ec7d1a9fa5c038554f92b",
+    "ctn/main.py": "128368c474f11fc3f22d443d6a481c694073a30219d449272269320138df26f3",
+    "ctn/models.py": "9b0ba2169bea47438479247df73e789eb6623888f939c2d343219bbabda6af19",
+    "ctn/moderation/__init__.py": "7ce78c3fced671f0883c1d2012bfe8c7daa921348f11855ab3fcf2f76b0726e5",
+    "ctn/moderation/detector.py": "ac915e3c2c992214b677e88b0e9f18e71dd69b9be342e5abdf01886210f36729",
+    "ctn/moderation/events.py": "a59c9f6cde98b5c1cf3b7101cbbced1c39d4658cef7f0ce96fcab59069f8ddc0",
+    "ctn/moderation/policy.py": "6a2e8ab948ece18011b5c4139484ee10ae918b9406fe079c39ec8d55e66d9de3",
+    "ctn/moderation/reporter.py": "cb4d8f0b89076a7133c4e372fc4fd63d634ad5fdaa264a79d30b3305605feeea",
+    "ctn/moderation/review.py": "e50a887dada4c7420e1071d32a7d1edf1a0eb9ae9b679a6946f4c09b6c6343bc",
+    "ctn/ops.py": "bd8d39f26fd45d47f1c28723b6d269d74105d7f4088da060933c4876fdb7cb6e",
+    "ctn/persona/__init__.py": "cd32bd6c19d581e0f6a31579777424939d2142733bea1e5566b749847d4a2ee5",
+    "ctn/persona/catalog.py": "48d874fc08e819fdd81c66f71d3ab8f2b67a84be0337bfe979a0ca7123197435",
+    "ctn/persona/models.py": "a72c507435a78ff64b0721b145a3e6e26b8e1a543423135d6fdcbc09c4df3609",
+    "ctn/persona/policy.py": "a5cef0eff132c27c7ea6f0c558e79b7af700f102f987572b1dc511c51f6de4c1",
+    "ctn/persona/registry.py": "48a27d69709fef8204b6403f5875c9de6f1e2e42c9564018ed78bac9c34f7287",
+    "ctn/persona/router.py": "57cd9f35ccc337135d3507f2efddc3651125503274ddbfc8cbe21833fa3aa916",
+    "ctn/persona/warmup_seeds.py": "7e3205e518b35d6ec69017c508d5aa84a013106a868994ca449b6ac8f8e12037",
+    "ctn/pipeline/__init__.py": "a0392ba2aa016118fc6d2211eb7c5c7e60464ae0b4e1a8ab07915aaf673e3b9f",
+    "ctn/pipeline/brain.py": "ae70c2e630eb9f57ef009b40b864823ba1404d0e45e6798181a8a572481b5a20",
+    "ctn/pipeline/compose.py": "2c00d670e5bc7fbdd8ebfb6697e36b3e577024c1eb14c4ee60bd42770ebdaabe",
+    "ctn/pipeline/context.py": "452dbe966d746345911779303610a50e28efc243aa28f2e1e124a8ce95df1fcb",
+    "ctn/pipeline/crawl.py": "0a5edcf60624b471c3b56ede24ff17f5085171c1f8347b171472526792d98ad8",
+    "ctn/pipeline/decide.py": "c63258993b72b92551067495d6cf7fee4a9428366a845618df9411172658fd43",
+    "ctn/pipeline/loop.py": "3ceb98f9e60ee7aa77606217bc58c7fe6527755170dcb2b6ddf363ea2660a23b",
+    "ctn/pipeline/news_crawler.py": "733622e33dc08464575ecb2768adeb79e32e27680f2c1c23fb375269bade1374",
+    "ctn/pipeline/perceive.py": "69b2835ad85ddf73793f5c85b7a35442b2fe0a0edcfba4a94a03b956455ab3ba",
+    "ctn/pipeline/reply_batches.py": "78dd8f9d8dcf115178dfb3b6c3fbf60d78ace5db01d5e85991e993803ebadca3",
+    "ctn/pipeline/scheduling.py": "adcda8f5c4b6199b05825f189d3bb5122da7ee784d5fc4118f7af6930c8b1631",
+    "ctn/rag/__init__.py": "47b4a90a0ec9fc37d4d9f13001cf30609e97d99b61c2cd5457ba0358e155dbf6",
+    "ctn/rag/__main__.py": "6652aa1da70b3f52565331fecea8c6105036348a5f4a6c1f05e9d794dd76ec69",
+    "ctn/rag/corpus.py": "9601fdf07e56ea39c9c72354fcb892f2df13008e4d78990c034bfd7f8f41e131",
+    "ctn/rag/relevance.py": "53379aab33abe7722f862c8ac351b4ec1ec62d0c41a0d094e45e7244de7cc361",
+    "ctn/ratelimit.py": "fec5c1d6a98b19041b3ed1fd549acd2a4b7bad2b985e378f299e4ba65dc26ffc",
+    "ctn/reconcile.py": "6891534b50f3ab47754ce929d0fe61f6e1abbc352754fba7b92f153ad1fac98d",
+    "ctn/storage/__init__.py": "742f61cf1a4d28d831b4848d8c7537a9b7e35e7ffb39a57af8a5e5b8852edc40",
+    "ctn/storage/campaign.py": "c4d84da77e7d95b4b84d4d222906c3eed8305715ebfb8138ea619f1ed9c6c957",
+    "ctn/storage/lifecycle.py": "b3336484208273196347e0249d43e3b01aec26bc0ef757ae18bb99c0f2e87d9c",
+    "ctn/storage/operations.py": "31494205ec422839779af59de0990f9fee17c48333a5fae5d4d56d092808245e",
+    "ctn/storage/performance.py": "e2a3cbc5bc68412ef98d0d71a9bdf9bd78c85a668bd65f0e86e4b208f46a7230",
+    "ctn/storage/runtime.py": "aba511651c95caacb353c95ed3c15debc3b0735b4845423bad749c1c5851ac7d",
+    "ctn/storage/sqlite_store.py": "b4a2bc9748b2d2bad7aa3605265331a1988902d8da4f411d9d582126c8e9e1d1",
+    "ctn/telemetry.py": "a107ed833e2e8ecf8f54c209b43673dbefc405d9d598ae7e31e52bab2301536b",
+    "ctn/warmup.py": "f2e3571abe608c0434931b8a747b090bc5059aa4c7d3c769ccde1cae8d163cd9"
+  },
+  "live_actions_performed": true,
+  "remaining_launch_validation": [
+    "Official-server response schema, live limits and moderation sources",
+    "Model behavior and real competition effectiveness"
+  ],
+  "commit_created": false,
+  "container_images": {
+    "verify": "ctn2026/verify:single-panel",
+    "runtime": "ctn2026/fleet:local",
+    "discord-runtime": "ctn2026/discord-review:local",
+    "macro-runtime": "ctn2026/macro-agent:local"
+  },
+  "deployment_helper_checks": {
+    "passed": true,
+    "cases": [
+      "idempotent configuration generation",
+      "configuration permissions 600",
+      "default fleet and macro startup",
+      "optional Discord startup",
+      "missing Discord configuration rejection",
+      "all-service shutdown"
+    ]
+  },
+  "live_discord_check": {
+    "passed": true,
+    "report": "discord-live-check.json",
+    "gateway": true,
+    "required_channel_permissions": true,
+    "configured_administrator": true,
+    "guild_commands": [
+      "report",
+      "reporting",
+      "reports",
+      "ruling"
+    ],
+    "service_running": true,
+    "competition_actions_performed": false
+  },
+  "live_discord_ui_check": {
+    "passed": true,
+    "report": "discord-panels-live-check.json",
+    "persistent_panel_published": true,
+    "interface_language": "English",
+    "default_json_attachments": false,
+    "required_command_arguments": false,
+    "reporting_mode": "off"
+  },
+  "live_actions_scope": [
+    "Discord Gateway connection",
+    "Discord guild command registration",
+    "Requested persistent Discord control panel publication and read-back"
+  ],
+  "competition_live_actions_performed": false,
+  "live_discord_single_panel_check": {
+    "passed": true,
+    "report": "discord-single-panel-check.json",
+    "public_launcher_reused": true,
+    "private_navigation": "in-place edits",
+    "reporting_mode": "off"
+  }
+}

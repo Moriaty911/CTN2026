@@ -34,7 +34,7 @@ def answer_body(body):
             answers[key] = {"type": "noul", "noul": 0.0}
         elif question["type"] == "choice":
             criteria = question["criteria"]
-            option = "yes" if key == "policy_stance" else "sufficient" if "sufficient" in criteria else next(iter(criteria))
+            option = "unknown" if key == "preferred_occupation" else "yes" if key == "policy_stance" else "sufficient" if "sufficient" in criteria else next(iter(criteria))
             answers[key] = {"type": "choice", "choice": option,
                 "probabilities": {k: float(k == option) for k in criteria}, "confidence": 1.0}
         else:

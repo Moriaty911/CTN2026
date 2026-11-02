@@ -1,0 +1,23 @@
+{
+  "network": "none",
+  "startup_healthcheck": "passed",
+  "restart_healthcheck": "passed",
+  "first_shutdown_exit_code": 0,
+  "backup_restore": {
+    "restore_matches_backup": true,
+    "integrity": "ok",
+    "schema": 5,
+    "snapshots": [
+      [
+        "eb680f460f6156e7d578e2a3a00a07da64c83fbf4bc07038ecba676e12699fa5"
+      ]
+    ],
+    "actions": 0,
+    "archives": 1
+  },
+  "temporary_container_removed": true,
+  "temporary_volume_removed": true,
+  "registered_platform_accounts": 0,
+  "real_platform_publications": 0,
+  "real_platform_reports": 0
+}

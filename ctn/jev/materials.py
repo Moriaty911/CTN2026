@@ -293,6 +293,14 @@ class MaterialChecker:
             needs.append("secondary_quote_mismatch")
         uses = {s["purpose"] for s in support}
         required = {"P01": "addition", "P02": "answer_basis", "P03": "argument_basis", "P06": "verified_correction", "P07": "response_basis"}.get(brief.prompt_type)
+        for item in brief.support:
+            path=item.span.path
+            if path[:3]==('content','campaign_materials','items'):
+                try: entry=materials['content']['campaign_materials']['items'][path[3]]
+                except (KeyError,IndexError,TypeError):
+                    needs.append('campaign_material_missing');continue
+                if entry['kind']=='unknown' and brief.prompt_type not in ('P02','P07'):
+                    needs.append('unknown_cannot_establish_claim')
         if required and required not in uses:
             needs.append(required)
         if brief.prompt_type == "P01" and data["flow"]["relative_stance"] != "aligned":

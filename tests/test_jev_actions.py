@@ -67,9 +67,10 @@ class ActionTests(unittest.TestCase):
         for level in (None, "unmapped"):
             flow, _, _ = assessed(side="no", value=2, level=level)
             decision = POLICY.decide(flow)
-            self.assertEqual(decision.status, "needs_account_metadata")
+            self.assertEqual(decision.status, "decided")
             self.assertEqual(decision.action, "reply")
-            self.assertEqual(decision.required_account_level, "unknown")
+            self.assertEqual(decision.target_level_class,"unknown")
+            self.assertEqual(decision.required_account_level, "standard")
             self.assertEqual(decision.minimum_account_level, "standard")
         flow, _, _ = assessed(side="no", value=4, level=None)
         self.assertEqual(POLICY.decide(flow).required_account_level, "high")
@@ -89,11 +90,11 @@ class ActionTests(unittest.TestCase):
             flow, _, _ = assessed(side="no", value=4, handler=handler)
             self.assertIsNone(POLICY.decide(flow).action)
 
-    def test_mixed_neutral_delegate_without_action_value_gate_or_account_selection(self):
+    def test_mixed_neutral_request_jev_without_action_value_gate_or_account_selection(self):
         for side in ("mixed", "neutral"):
             flow, _, _ = assessed(side=side, value=0, level=None)
             decision = POLICY.decide(flow)
-            self.assertEqual(decision.status, "needs_llm_assessment")
+            self.assertEqual(decision.status, "needs_jev_assessment")
             self.assertIsNone(decision.action)
             self.assertIsNone(decision.signal_value)
             self.assertIsNone(decision.required_account_level)
@@ -130,7 +131,7 @@ class ActionTests(unittest.TestCase):
             {"platform_levels": (("x", "high"), ("x", "standard"))}, {"platform_levels": (("x", {}),)}, {"aligned_reply_above": float("nan")}, {"version": {}}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ActionValidationError):
                 ActionPolicy(**kwargs)
-        for version in ("../v2", "v3", None):
+        for version in ("../v2", "v99", None):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 load_rubric("post", version=version)
 

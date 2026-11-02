@@ -1,0 +1,235 @@
+{
+  "python": "3.14.6",
+  "sqlite": "3.53.3",
+  "system": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "storage": "temporary local file; WAL/NORMAL; warm cache",
+  "benchmarks": [
+    {
+      "rows": 100000,
+      "authors": 1000,
+      "confirmed_author_fraction": 0.05,
+      "bulk_population_seconds": 3.363,
+      "warm_cache_latency": {
+        "post_primary_key": {
+          "p50_ms": 0.0064,
+          "p95_ms": 0.008,
+          "max_ms": 0.0099,
+          "repeats": 40
+        },
+        "author_last20": {
+          "p50_ms": 0.0863,
+          "p95_ms": 0.0905,
+          "max_ms": 0.1419,
+          "repeats": 40
+        },
+        "norm_hash_lookup": {
+          "p50_ms": 0.0183,
+          "p95_ms": 0.0198,
+          "max_ms": 0.0411,
+          "repeats": 40
+        },
+        "comment_queue15": {
+          "p50_ms": 0.0814,
+          "p95_ms": 0.0839,
+          "max_ms": 0.1477,
+          "repeats": 40
+        },
+        "confirmed_corpus150": {
+          "p50_ms": 1.4579,
+          "p95_ms": 1.5739,
+          "max_ms": 1.7575,
+          "repeats": 40
+        },
+        "unconfirmed_candidates200": {
+          "p50_ms": 0.7807,
+          "p95_ms": 0.8158,
+          "max_ms": 0.8722,
+          "repeats": 40
+        },
+        "all_author_timestamps_update": {
+          "p50_ms": 0.0249,
+          "p95_ms": 0.0292,
+          "max_ms": 0.0818,
+          "repeats": 40
+        },
+        "runtime_metrics": {
+          "p50_ms": 3.905,
+          "p95_ms": 3.9474,
+          "max_ms": 4.3843,
+          "repeats": 10
+        },
+        "task_recovery_first": {
+          "p50_ms": 133.0284,
+          "p95_ms": 133.0284,
+          "max_ms": 133.0284,
+          "repeats": 1
+        },
+        "task_claim8_warm": {
+          "p50_ms": 0.0927,
+          "p95_ms": 0.1271,
+          "max_ms": 0.3017,
+          "repeats": 10
+        },
+        "scan_one_confirmed_author": {
+          "p50_ms": 0.2659,
+          "p95_ms": 0.27,
+          "max_ms": 0.3047,
+          "repeats": 10
+        }
+      },
+      "ingest30_with_detector_ms": 3.39,
+      "ingest30_sql_statements": 572,
+      "ingest30_commits": 1,
+      "query_plans": {
+        "comment_queue": [
+          "SEARCH q USING INDEX idx_comment_priority (priority>?)",
+          "SEARCH p USING INDEX sqlite_autoindex_observed_posts_1 (post_id=?)"
+        ],
+        "confirmed_corpus": [
+          "MULTI-INDEX OR",
+          "INDEX 1",
+          "SEARCH b USING INDEX idx_bot_registry_status (status=?)",
+          "INDEX 2",
+          "SEARCH b USING INDEX idx_bot_registry_suspended (is_suspended=?)",
+          "SEARCH p USING INDEX idx_observed_posts_author (author=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "pragmas": {
+        "journal_mode": "wal",
+        "synchronous": 1,
+        "busy_timeout": 5000,
+        "page_size": 4096
+      },
+      "database_mb": 75.3
+    },
+    {
+      "rows": 1000000,
+      "authors": 1000,
+      "confirmed_author_fraction": 0.05,
+      "bulk_population_seconds": 43.886,
+      "warm_cache_latency": {
+        "post_primary_key": {
+          "p50_ms": 0.0064,
+          "p95_ms": 0.009,
+          "max_ms": 0.018,
+          "repeats": 40
+        },
+        "author_last20": {
+          "p50_ms": 0.0868,
+          "p95_ms": 0.0948,
+          "max_ms": 0.2128,
+          "repeats": 40
+        },
+        "norm_hash_lookup": {
+          "p50_ms": 0.0186,
+          "p95_ms": 0.0222,
+          "max_ms": 0.0496,
+          "repeats": 40
+        },
+        "comment_queue15": {
+          "p50_ms": 0.0836,
+          "p95_ms": 0.1196,
+          "max_ms": 0.1832,
+          "repeats": 40
+        },
+        "confirmed_corpus150": {
+          "p50_ms": 3.7105,
+          "p95_ms": 3.8745,
+          "max_ms": 4.6697,
+          "repeats": 40
+        },
+        "unconfirmed_candidates200": {
+          "p50_ms": 0.792,
+          "p95_ms": 0.8343,
+          "max_ms": 0.9626,
+          "repeats": 40
+        },
+        "all_author_timestamps_update": {
+          "p50_ms": 0.1244,
+          "p95_ms": 0.1672,
+          "max_ms": 2.5322,
+          "repeats": 40
+        },
+        "runtime_metrics": {
+          "p50_ms": 42.6395,
+          "p95_ms": 43.2804,
+          "max_ms": 48.3341,
+          "repeats": 10
+        },
+        "task_recovery_first": {
+          "p50_ms": 1580.9479,
+          "p95_ms": 1580.9479,
+          "max_ms": 1580.9479,
+          "repeats": 1
+        },
+        "task_claim8_warm": {
+          "p50_ms": 0.0966,
+          "p95_ms": 0.1097,
+          "max_ms": 0.3,
+          "repeats": 10
+        },
+        "scan_one_confirmed_author": {
+          "p50_ms": 0.2665,
+          "p95_ms": 0.3,
+          "max_ms": 0.4274,
+          "repeats": 10
+        }
+      },
+      "ingest30_with_detector_ms": 3.673,
+      "ingest30_sql_statements": 572,
+      "ingest30_commits": 1,
+      "query_plans": {
+        "comment_queue": [
+          "SEARCH q USING INDEX idx_comment_priority (priority>?)",
+          "SEARCH p USING INDEX sqlite_autoindex_observed_posts_1 (post_id=?)"
+        ],
+        "confirmed_corpus": [
+          "MULTI-INDEX OR",
+          "INDEX 1",
+          "SEARCH b USING INDEX idx_bot_registry_status (status=?)",
+          "INDEX 2",
+          "SEARCH b USING INDEX idx_bot_registry_suspended (is_suspended=?)",
+          "SEARCH p USING INDEX idx_observed_posts_author (author=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "pragmas": {
+        "journal_mode": "wal",
+        "synchronous": 1,
+        "busy_timeout": 5000,
+        "page_size": 4096
+      },
+      "database_mb": 782.61
+    }
+  ],
+  "routing_and_reports": {
+    "profiles": 80,
+    "synthetic_publications": 10000,
+    "post_samples": 50000,
+    "routing": {
+      "p50_ms": 0.523,
+      "p95_ms": 0.644,
+      "repeats": 100
+    },
+    "report_by_persona": {
+      "p50_ms": 179.949,
+      "p95_ms": 182.248,
+      "repeats": 5
+    },
+    "scope": "Local synthetic metadata; no model or platform latency, no behavioral effectiveness measurement."
+  },
+  "comparison_source": "docs/repair-2026-10-17/benchmark.json",
+  "comparison": [
+    {
+      "rows": 100000,
+      "bulk_population_ratio": 0.983,
+      "ingest30_ratio": 0.956
+    },
+    {
+      "rows": 1000000,
+      "bulk_population_ratio": 1.07,
+      "ingest30_ratio": 1.043
+    }
+  ]
+}

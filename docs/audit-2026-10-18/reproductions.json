@@ -1,0 +1,97 @@
+{
+  "sync_rag_snapshot_lost": {
+    "sync_status": "blocked",
+    "sync_reason": "rag_snapshot_required",
+    "direct_async_status": "published",
+    "external_network_calls": 0
+  },
+  "unknown_author_level": {
+    "normalized_level": "unknown",
+    "decision": {
+      "status": "needs_account_metadata",
+      "action": "reply",
+      "reason": "opposing_target_level_unknown",
+      "signal_id": "reply_value",
+      "signal_value": 2,
+      "required_account_level": "unknown",
+      "minimum_account_level": "standard",
+      "reply_quality": "unresolved",
+      "target_level_class": "unknown",
+      "needs": [
+        "platform_level_mapping"
+      ]
+    },
+    "note": "Conditional on server omitting an explicit level; not a live schema observation."
+  },
+  "parent_arrival_not_a_dependency": {
+    "fingerprint_changed": false,
+    "child_status_after_parent_arrival": "waiting_materials",
+    "parent_present": true
+  },
+  "context_status_mapping": {
+    "flow_status": "needs_context",
+    "brain_reason_from_action_status": "jev:needs_assessment",
+    "loop_waiting_prefix": "jev:needs_context",
+    "after_three_attempts": {
+      "status": "skipped",
+      "reason": "jev:needs_assessment",
+      "attempts": 3
+    }
+  },
+  "unsupported_response_purpose": {
+    "model_selected": "P04",
+    "brain_action": "none",
+    "brain_reason": "unsupported_purpose:P04"
+  },
+  "high_account_supply": {
+    "bound_active_accounts": 2,
+    "capability_tiers": [
+      "standard"
+    ],
+    "routing_result": "no_bound_active_capable_accounts",
+    "classification": "operational default, not a bypass bug"
+  },
+  "opposing_question_priority": {
+    "central_function": "question",
+    "selected_purpose": "P07",
+    "intended_question_purpose": "P02",
+    "text": "I'm worried about the ferry rule. What do the trials actually establish?"
+  },
+  "configurable_model_wiring": {
+    "configured_model": "synthetic-alternate-model",
+    "default_packer_model": "jev-latest",
+    "result": "EvaluatorValidationError",
+    "reason": "model: client and packer must agree"
+  },
+  "incomplete_text_flag_overridden": {
+    "input_flag": false,
+    "target_payload_flag": true,
+    "parent_payload_flag": true
+  },
+  "active_batch_ingestion": [
+    {
+      "active_batches": 0,
+      "ingest30_p50_ms": 2.43,
+      "ingest30_max_ms": 2.738,
+      "sql_statements_last_repeat": 602
+    },
+    {
+      "active_batches": 50,
+      "ingest30_p50_ms": 12.138,
+      "ingest30_max_ms": 12.419,
+      "sql_statements_last_repeat": 2102
+    },
+    {
+      "active_batches": 200,
+      "ingest30_p50_ms": 41.767,
+      "ingest30_max_ms": 42.603,
+      "sql_statements_last_repeat": 6602
+    },
+    {
+      "active_batches": 500,
+      "ingest30_p50_ms": 100.302,
+      "ingest30_max_ms": 103.749,
+      "sql_statements_last_repeat": 15602
+    }
+  ]
+}

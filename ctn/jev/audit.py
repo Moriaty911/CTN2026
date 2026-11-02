@@ -32,11 +32,22 @@ def _planning_meta(task):
             "need_count": len(task.needs)} if task else None
 
 
+def _response_meta(decision):
+    if decision is None:
+        return None
+    return {"status": decision.status, "action": decision.action, "prompt_type": decision.prompt_type,
+            "reason_hash": _hash(decision.reason), "need_count": len(decision.needs),
+            "parent_request_hash": _hash(decision.parent_request_id),
+            "thresholds": decision.policy.to_dict()["response_thresholds"],
+            "action_gate_passed": decision.action_gate.passed if decision.action_gate else None,
+            "purpose_gate_passed": decision.purpose_gate.passed if decision.purpose_gate else None}
+
+
 def _stage(stage):
     parsed, packed = stage.parsed, stage.parsed._packed
     output = parsed.output
     call = stage.to_dict()["original_call"]
-    return {"stage": _option(packed.stage, {"triage", "deep"}), "kind": _option(packed.kind, {"post", "comparison"}),
+    return {"stage": _option(packed.stage, {"triage", "deep", "response"}), "kind": _option(packed.kind, {"post", "comparison", "response"}),
             "source": _option(stage.source, {"network", "cache", "shared", "not_sent"}),
             "status": parsed.status, "request_hash": _hash(packed.request_id),
             "input_hash": _hash(packed.input_fingerprint), "questions_hash": _hash(packed.question_set_fingerprint),
@@ -62,12 +73,14 @@ class JevAuditLog:
     def __init__(self, path: Path):
         self._writer = JsonlWriter(Path(path))
 
-    def record(self, flow: EvaluationFlow, *, action=None, material_check=None, action_policy=None, response_planning=None):
+    def record(self, flow: EvaluationFlow, *, action=None, material_check=None, action_policy=None,
+               response_planning=None, response_decision=None):
         if type(flow) is not EvaluationFlow:
             raise ValueError("audit: expected evaluation flow")
         from .actions import ActionDecision, ActionPolicy
         from .materials import MaterialCheck
         from .planning import ResponsePlanningTask
+        from .response import ResponseDecision
         if action is not None and type(action) is not ActionDecision:
             raise ValueError("audit: expected action decision")
         if material_check is not None and type(material_check) is not MaterialCheck:
@@ -76,21 +89,27 @@ class JevAuditLog:
             raise ValueError("audit: expected action policy")
         if response_planning is not None and type(response_planning) is not ResponsePlanningTask:
             raise ValueError("audit: expected response planning task")
+        if response_decision is not None and type(response_decision) is not ResponseDecision:
+            raise ValueError("audit: expected response decision")
+        stages = [s for s in (flow.triage, flow.deep) if s is not None]
+        if response_decision is not None:
+            stages.append(response_decision.assessment)
         self._writer.write({"schema_version": "jev-audit.v1", "event": "post_evaluation",
             "run_hash": _hash(flow.run_id), "status": _option(flow.status, {"evaluated", "partial", "observe", "needs_context", "needs_review", "failed", "deferred"}),
             "batch_index": flow.batch_index if type(flow.batch_index) is int and flow.batch_index >= 0 else None,
             "route": _option(flow.decision.route, {"deep", "failed", "observe", "context", "complete", "review", "partial"}),
             "reason_hash": _hash(flow.decision.reason),
-            "policy_hash": flow.policy.fingerprint, "new_attempt_count": flow.new_attempt_count,
+            "policy_hash": flow.policy.fingerprint, "new_attempt_count": sum(s.new_attempt_count for s in stages),
             "action_policy_hash": action_policy.fingerprint if action_policy else None,
-            "stages": [_stage(s) for s in (flow.triage, flow.deep) if s is not None],
+            "stages": [_stage(s) for s in stages],
             "action": {"status": action.status, "action": action.action, "reason_hash": _hash(action.reason),
                 "signal_id_hash": _hash(action.signal_id), "signal_value": action.signal_value,
                 "required_account_level": action.required_account_level, "reply_quality": action.reply_quality,
                 "need_count": len(action.needs)} if action else None,
             "material_check": {"status": material_check.status, "prompt_type": material_check.prompt_type,
                 "need_count": len(material_check.needs)} if material_check else None,
-            "response_planning": _planning_meta(response_planning)})
+            "response_planning": _planning_meta(response_planning),
+            "response_decision": _response_meta(response_decision)})
 
     def record_preparation(self, package, material_check, *, response_planning=None):
         from .handoff import HandoffPackage

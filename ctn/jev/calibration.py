@@ -184,7 +184,8 @@ class CalibrationSample:
             targets[0].get("post_id") != output.post_id or targets[0].get("source_kind") != output.source_kind or
             request.get("request_id") != output.request_id or request.get("stage") != output.stage or
             request.get("question_set_version") != output.question_set_version or
-            request.get("kind") not in {"post", "comparison"}):
+            (request.get("kind"), request.get("stage")) not in {
+                ("post", "triage"), ("post", "deep"), ("comparison", "deep"), ("response", "response")}):
             raise CalibrationValidationError("sample: provenance mismatch")
         for name in ("request_id", "question_set_fingerprint", "packing_fingerprint", "input_fingerprint"):
             value = request.get(name)
