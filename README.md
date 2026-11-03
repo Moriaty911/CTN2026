@@ -1,16 +1,16 @@
-> **当前状态（2026-10-18，v6 + 举报决策 v2）**：账号初始化/维护/冲刺策略、任务恢复、托管 Pi 脉冲和 Discord 举报审核已实现；
-> 举报改为按期望值自动决策（`policies/report-v2.json`，默认 shadow 只记录不发送），见下文 [Reporting automation](#reporting-automation-report-decisionv2)。
-> 运行与恢复以 [v6 runbook](docs/repair-and-discord-2026-10-18/runbook.md) 为准，当前三棵逻辑树见 [logic-trees](docs/repair-and-discord-2026-10-18/logic-trees.md)。
-> 开服后要做的事见 [上线后 TODO](#上线后-todo)。官方服务器行为仍需开服验证。
-> 服务器值班：`CLAUDE.md`（服务器上的 Claude Code 自动读取的值班说明和巡检流程）、`docs/ops-journal.md`（值班日志）、`scripts/dbq.py`（只读查库）、`docs/system-map.html`（模块地图）。
-> 2026-10-20 的四处改动（数据库锁、自有帖子测量、push 规格与带 tag 转发、回复削减）汇总在 [changes-2026-10-20](docs/changes-2026-10-20.md)：为什么改、改了什么、上线后看什么、怎么退。
-> 10-20 之后到 10-28 的十二处改动（举报对账与名额分配、自查回读、同帖拥挤、备份瘦身、人设 80→120、句式上限与新号暖机、目标化、目录失配防护、关注引导）汇总在 [changes-2026-10-28](docs/changes-2026-10-28.md)。
+> **Current status (2026-10-18, v6 + report decisions v2):** Account initialisation, maintenance and sprint strategies, task recovery, managed Pi pulses, and Discord report review are implemented.
+> Reports now use automatic expected-value decisions (`policies/report-v2.json`, shadow mode by default: record only, do not send); see [Reporting automation](#reporting-automation-report-decisionv2) below.
+> For operations and recovery, follow the [v6 runbook](docs/repair-and-discord-2026-10-18/runbook.md). The three current logic trees are in [logic-trees](docs/repair-and-discord-2026-10-18/logic-trees.md).
+> See [Post-launch TODO](#post-launch-todo) for tasks after launch. Official server behaviour still needs to be verified once the platform opens.
+> Server operations: `CLAUDE.md` (on-call instructions and inspection procedures read automatically by Claude Code on the server), `docs/ops-journal.md` (operations journal), `scripts/dbq.py` (read-only database queries), and `docs/system-map.html` (module map).
+> The four changes on 2026-10-20 (database locking, measurement of our own posts, push specifications and tagged reposts, and reply reduction) are summarised in [changes-2026-10-20](docs/changes-2026-10-20.md): why they were needed, what changed, what to monitor after deployment, and how to roll back.
+> The twelve changes after 10-20 through 10-28 (report reconciliation and slot allocation, self-check readbacks, crowding on the same post, smaller backups, the persona expansion from 80 to 120, phrasing caps and new-account warmup, targeting, catalog mismatch protection, and follow prompts) are summarised in [changes-2026-10-28](docs/changes-2026-10-28.md).
 
-80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[人设预览](docs/personas-80/preview.md)（目录现有 120 人，其中 50 个已绑定）。新人设默认未绑定，绑定后待命。
+80 personas and multi-account replies: see [configuration, binding, activation, recovery and reporting](docs/personas-80/README.md) and the [persona preview](docs/personas-80/preview.md). The catalog now contains 120 personas, 50 of them bound to accounts. New personas are unbound by default and enter standby after binding.
 
-YES RAG 静态基础语料：见 [四类材料、来源与整理说明](docs/rag-yes-v1/README.md)及[审阅预览](docs/rag-yes-v1/preview.md)。当前版本为 `config/rag/yes.v1.1.json`，原 v1 保留供回放；已接入 Pi/JEV 与发布链路；新闻/VIP 为有范围的采样，未经整理不会自动成为已验证事实。
+YES RAG static base corpus: see the [four material types, sources and curation notes](docs/rag-yes-v1/README.md) and the [review preview](docs/rag-yes-v1/preview.md). The current version is `config/rag/yes.v1.1.json`; the original v1 is retained for replay. The corpus is integrated with Pi/JEV and the publishing pipeline. News and VIP inputs are sampled within a defined scope and do not automatically become verified facts without curation.
 
-运行入口：正式服务使用 `python -m ctn.main`（或 `./scripts/docker.sh up all`）；首次离线验证使用 `python -m ctn.main --mock --side yes --state-file state/mock.sqlite3 --once`。`docs/repair-2026-10-17/`、`docs/implementation-2026-10-18/` 的说明以及 `docs/personas-80/logic-trees.md` 是历史版本，以上面链接的 v6 文档为准。
+Entry points: use `python -m ctn.main` (or `./scripts/docker.sh up all`) for production; for the first offline check, use `python -m ctn.main --mock --side yes --state-file state/mock.sqlite3 --once`. The instructions in `docs/repair-2026-10-17/`, `docs/implementation-2026-10-18/`, and `docs/personas-80/logic-trees.md` are historical; follow the v6 documentation linked above.
 
 # CNT2026
 
@@ -893,83 +893,86 @@ the target, not the account, so the two are now handled separately (`policies/se
   the second consecutive failure posts a Discord alert.
 
 Deployment steps (git pull, verify, backup, build, replace, check, roll back) are in
-`docs/repair-and-discord-2026-10-18/runbook.md` → “代码更新与重启”.
+`docs/repair-and-discord-2026-10-18/runbook.md`, in the section on code updates and restarts.
 
-## 上线后 TODO
+## Post-launch TODO
 
-按时间顺序。带“审计”的条目来自 2026-10-18 代码审计；标 [x] 的已经改完。
+Listed in chronological order. Items labelled "Audit" come from the 2026-10-18 code audit; items marked [x] have been completed.
 
-**开服当天**
-- [ ] 核对官方真实字段：帖子/账号字段、`verified`、全文与分页语义、响应头里的 `rate_limit`。
-- [ ] 用响应头里的 `rate_limit` 核对速率：默认已改为全队读 6 rps、写 0.8 rps、单号读 1.5 / 写 0.1 rps（2026-10-18，原 0.35/0.15 来自 2025 年数据）。真正的上限由分路由桶按官方数值执行；出现大量 429 再下调 `CTN_READ_RPS` / `CTN_WRITE_RPS`。
-- [ ] 可选：给 5–10 个医疗/学术类人设设置 `python -m ctn.ops account <account_id> --tier high`。high 现在是软偏好（high 账号 → maintenance 账号 → 发帖最多的 standard 账号），没有 high 账号也会照常回复；路由原因里的 `high_fallback_*` 可用来统计回退次数。
-- [ ] 举报保持 `hybrid` + shadow。每天看 `ops reports calibration`，对比系统建议和人工决定。
-- [ ] 查看 `report_target_observations`，找出平台表示“被版主隐藏”的字段；确认举报 403 的真实文案是否含 suspend 字样。
-- [ ] **确认 latest feed 是“发帖优先”还是“回复优先”排序**（按帖子发布时间，还是按最新回复时间）。当前代码默认按发布时间：新帖只在出现时进入队列，之后靠第 10、25 分钟按帖子 id 刷新计数来发现热度变化。若实际按最新回复排序，热帖会自己回到 latest 顶部，分阶段刷新基本多余，应调低或关闭 `refresh`；同时要检查续页积压逻辑（5 分钟丢弃）是否还合理。
-- [ ] 同时核对：latest 是否包含回复；回复列表（评论区）的排序；分页最大 `limit`；开场每分钟新帖量。
-- [ ] 确认 `/accounts/{id}/posts` 是否包含回复，以及新发的帖子多久能在读接口里看到。若包含回复，可让账号历史也用于证明回复不存在；若可见延迟较大，调大 `policies/send-recovery-v1.json` 的 `check_after_seconds`、`absent_min_age_seconds`。
-- [ ] 第一次部署本版本时，旧版本退出仍会把排队中的发送记为 unknown：重启后看一次 `ops status`，这些会在 15 分钟内自动收尾。之后按运行手册“代码更新与重启”操作。
-- [ ] 确认 `get_counters`（按帖子 id 读计数）走的是普通读接口，并看 `post_refresh` 中 stale 比例；比例高说明读预算不够，降低 `refresh.per_minute` 或减少阶段。
-- [ ] 观察 neutral/mixed 帖的 decided / needs_review / needs_materials 比例，决定是否放宽 0.7 / 0.15 阈值。
+**Launch day**
 
-- [ ] **服务器上的 `state/harness.md` 不会随代码更新**：把第 1 条 `[ACTIVE]` 改成仓库模板里的新写法（加上 “P00 opening questions may be neutral in tone but must never argue against YES.”），否则 Pi 会被旧规则要求“必须支持 YES”，P00 提问容易被它拒绝或写成表态。
-- [ ] **服务器 `.env` 里把 `CTN_MAX_PENDING_REPORTS` 改成 40、`CTN_MAX_PENDING_PER_AUTHOR` 改成 2**（环境变量会覆盖代码默认值，旧 `.env` 还是 5 / 1）。
-- [ ] 开服后几小时内看前十几个举报候选（Discord 卡片和 `ops reports calibration`），系统建议靠谱就 `ops reports automation --shadow off`，先只开 `leak_behavior` 和 `account`。第一条举报 3 小时后裁决（多队报同一帖会减半到 1.5 小时甚至更短），开得越早越划算。
-- [ ] 决定要不要在官方 Discord 联系其他 YES 队（互不举报、对 NO 方机器人一起举报可让裁决缩短到 1.5 小时）。规则允许队伍协作，不需要改代码。
-- [ ] 关注 Discord 的 self-check 和 own_post_hidden 提醒；出现被隐藏的帖子，说明对方在举报我们，考虑减少相关账号的活动或调整措辞。
-- [ ] 新闻层上线前在服务器上演练一次：`docker compose exec fleet python -m ctn.news`（读取并抽取一次，打印结果），确认两家报纸都能读到、抽取出的说法和出处正确；只想测抓取用 `--no-extract`。之后看 Discord 的每日摘要和冲突提醒。
-- [ ] 把 `harness.md` 新增的第 5–7 条 `[ACTIVE]`（瞄准未决定者、引用要带出处、不承诺零死亡、口号少用）同步到服务器的 `state/harness.md`。
-- [ ] 看 `ops status` 的 `reply_reasons_24h`：中立/混合帖被 JEV 回应门槛挡下的比例高，再决定是否放宽 0.7 / 0.15。
-- [ ] 人设库已升级到 `yes.v2`（80 人全部 version 2，加了背景故事）。服务器上如果已经注册或绑定账号，重启前执行 `docker compose exec fleet python -m ctn.ops persona apply`，否则写入会因 `persona_catalog_mismatch` 被拒；还没注册则不需要。
-- [ ] 核对第 0 天确实是 10/19（由官方日期倒推，页面没有直接写明）；若不同，改 `policies/originals-v1.json` 的 `day0`。
-- [ ] 看前几条初始化帖和 P00 提问的实际效果（有没有市民回复、有没有被拒），再决定是否调整 `opener_share` 或补充日常帖。
+- [ ] Verify the actual official fields: post/account fields, `verified`, full-text and pagination semantics, and `rate_limit` in response headers.
+- [ ] Check rates against `rate_limit` in response headers. Defaults were changed to team-wide reads of 6 rps and writes of 0.8 rps, with per-account reads of 1.5 rps and writes of 0.1 rps (2026-10-18; the previous 0.35/0.15 values came from 2025 data). Route-specific buckets enforce the actual official limits. Lower `CTN_READ_RPS` / `CTN_WRITE_RPS` if many 429 responses occur.
+- [ ] Optional: assign 5–10 medical/academic personas using `python -m ctn.ops account <account_id> --tier high`. The high tier is now a soft preference (high accounts → maintenance accounts → the standard account with the most posts). Replies still proceed without high-tier accounts; use `high_fallback_*` routing reasons to count fallbacks.
+- [ ] Keep reporting in `hybrid` + shadow mode. Review `ops reports calibration` daily and compare system recommendations with human decisions.
+- [ ] Inspect `report_target_observations` to identify the platform field for "hidden by a moderator". Check whether the actual text of reporting 403 responses contains "suspend".
+- [ ] **Confirm whether the latest feed is ordered by post time or latest reply time.** The code currently assumes post time: a new post enters the queue only when it first appears, then counters are refreshed by post id at minutes 10 and 25 to detect changes in popularity. If the feed uses latest reply time, active posts return to the top automatically, making staged refreshes largely redundant; reduce or disable `refresh`. Also check whether discarding pagination backlogs after 5 minutes still makes sense.
+- [ ] Also verify whether latest includes replies, the ordering of replies in comment threads, the maximum pagination `limit`, and the number of new posts per minute at launch.
+- [ ] Confirm whether `/accounts/{id}/posts` includes replies and how long newly published posts take to appear in read endpoints. If replies are included, account history can also help prove a reply is absent. If visibility is delayed significantly, increase `check_after_seconds` and `absent_min_age_seconds` in `policies/send-recovery-v1.json`.
+- [ ] On the first deployment of this version, the old version will still mark queued sends as unknown when it exits. Check `ops status` after restarting; these sends will be resolved automatically within 15 minutes. For later deployments, follow the runbook section on code updates and restarts.
+- [ ] Confirm that `get_counters` (reading counters by post id) uses a normal read endpoint, and check the stale proportion in `post_refresh`. A high proportion indicates an insufficient read budget; lower `refresh.per_minute` or reduce the number of stages.
+- [ ] Observe the decided / needs_review / needs_materials proportions for neutral/mixed posts before deciding whether to relax the 0.7 / 0.15 thresholds.
 
-**第 1–2 天**
-- [ ] 系统建议与人工判断基本一致后：`ops reports automation --shadow off`，只放开 `leak_behavior` 和 `account`。
-- [ ] 把确认过的“隐藏”字段写成裁决事件源，接入 `consume_events`（需评审和测试，不要从 404 推断裁决）。
-- [x] （审计，2026-10-18 已改）回帖优先级：按受众排序，冷门疑似机器人在 JEV 前跳过，去掉“越旧越优先”。见 “Reply targeting”。
-- [x] （审计，2026-10-18 已改）单作者 2 / 单线程 3 / 单账号 35 条每日上限，冷却加 0–120 秒随机。
-- [ ] （审计）batch 追加账号之间仍没有额外间隔（受线程上限 3 条约束）；如开局被判刷屏，先关闭 batch。
-- [ ] 观察 `targeting:cold_likely_bot`、`author_daily_cap`、`thread_daily_cap`、`account_daily_cap` 的数量；跳过过多就调 `policies/reply-targeting-v1.json`。
-- [x] （审计，2026-10-18 已改）unknown 发送自动收尾：账号最多锁 15 分钟，自动核对，重启有序收尾。见 “Uncertain sends and restarts”。
-- [ ] 看互刷效果：被互刷的原创 1 小时 / 6 小时的点赞、浏览（`post_metric_snapshots`）和 NPC 点赞人数（`/posts/{id}/likes`，id ≤ 2343 近似 NPC），对比开互刷前。
-- [ ] 50 号满载时看发帖队列积压（`request_backlog('route:publish')`）、429、互刷回复是否经常 `publish_backlog` 让路。
-- [ ] 观察 `ops status` 里 unknown 的 `last_check`：大多数以 abandoned 结束说明读接口覆盖不够（翻页上限或可见延迟），需要调策略文件。
-- [x] **回复句式微调**（2026-10-19 开服首晚观察到；e36d769 已改：随机开头、约 15% 表态、全队查重闸门，见 `policies/phrasing-v1.json`）。3 个测试号 31 条回复里有两个固定句式，号多了容易被别家检测器归为一类：
-  - 结尾或开头常是 “I'm voting YES, but…” / “I'd vote YES”（例如 mara_bakes82 19:14、20:06，aishab_ferries 19:48）。
-    来源很可能是 RAG 例句：`config/rag/yes.v1.1.json` 里有多条以 “I'm voting YES” 开头的 `text`，起草时被直接模仿。
-  - P08（追问细节）多号共用一个模板：“Fair point / Fair enough… but before I picture… which doses / how would someone…”，3 个号都在用。
-  - 改法候选：`ctn/llm/prompts.py` 的 P01–P09 指令里禁止固定开头/结尾、要求不必每条都表态；RAG 例句改成只给观点不给句式；
-    发布闸门加一条本地检查：同一句式（开头 6 词 / 结尾 6 词）在全队最近 N 条回复里出现超过 2 次就重写。
-  - 先用 `action_intents` 里的已发回复统计开头/结尾 n-gram 频率，改完再对比。
-- [ ] **点赞加最小间隔**（2026-10-19 观察；之后用户决定按平台上限跑，节奏已放宽为每小时 15 / 每天 150，最小间隔仍未加）：`like_pacing` 只有每小时 4 / 每天 30，额度一到就连点，
-  例如 mara_bakes82 18:54:56–18:55:26 点了 4 个、nolan_mercer 19:03–19:05 点了 4 个。照 `reply_pacing` 的 `min_gap_seconds`
-  给 `claim_action` 的 like 分支加相邻两次的最小间隔（倾向 10 分钟）。同时考虑回复间隔加随机：现在几乎每条都卡在 480 秒一到就发，节奏太整齐。
-- [x] **注册其余 47 个账号之前**（2026-10-19 22:28 已完成：47 个全部成功，窗口改为 3600 秒）：①`ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3`；
-  ②`ops launch --initialise-window 18000`（开服测试时改成了 600，不改回去 47 个号会在 10 分钟内扎堆发第一帖）；
-  ③确认已部署 3231d66（第一帖按“日常生活”审核，否则大部分第一帖会因 `purpose_drifted` 被拒）；
-  ④注册必须带 `--account`，用户名见 `docs/personas-80/handles-2026-10-19.tsv`。
+- [ ] **The server's `state/harness.md` is not updated with the code.** Update the first `[ACTIVE]` directive to match the repository template, adding "P00 opening questions may be neutral in tone but must never argue against YES." Otherwise, the old rule requires Pi to support YES explicitly, making it likely to reject P00 questions or turn them into statements of support.
+- [ ] **Set `CTN_MAX_PENDING_REPORTS` to 40 and `CTN_MAX_PENDING_PER_AUTHOR` to 2 in the server's `.env`.** Environment variables override code defaults; the old `.env` still uses 5 / 1.
+- [ ] Review the first dozen or so report candidates within a few hours of launch (Discord cards and `ops reports calibration`). If recommendations are reliable, run `ops reports automation --shadow off`, initially enabling only `leak_behavior` and `account`. The first report receives a ruling after 3 hours (multiple teams reporting the same post halve this to 1.5 hours or less), so earlier activation is more useful.
+- [ ] Decide whether to contact other YES teams through the official Discord (agreeing not to report each other and jointly reporting NO-side bots can shorten rulings to 1.5 hours). The rules allow team collaboration; no code change is needed.
+- [ ] Watch Discord self-check and own_post_hidden alerts. Hidden posts indicate that others are reporting us; consider reducing activity on the affected accounts or adjusting their wording.
+- [ ] Before deploying the news layer, rehearse it once on the server with `docker compose exec fleet python -m ctn.news` (fetch and extract once, then print the results). Confirm that both newspapers are readable and that extracted claims and sources are correct; use `--no-extract` to test fetching alone. Then monitor Discord's daily summaries and conflict alerts.
+- [ ] Copy the new `[ACTIVE]` directives 5–7 from `harness.md` (target undecided citizens, attribute quotations, do not promise zero deaths, and use fewer slogans) into the server's `state/harness.md`.
+- [ ] Check `reply_reasons_24h` in `ops status`. If a high proportion of neutral/mixed posts are blocked by JEV's response gate, decide whether to relax 0.7 / 0.15.
+- [ ] The persona catalog has been upgraded to `yes.v2` (all 80 personas are version 2, with backstories). If accounts are already registered or bound on the server, run `docker compose exec fleet python -m ctn.ops persona apply` before restarting; otherwise writes will be rejected with `persona_catalog_mismatch`. This is unnecessary if no accounts have been registered yet.
+- [ ] Verify that day 0 is indeed 10/19 (inferred from official dates; the page does not state it directly). If different, change `day0` in `policies/originals-v1.json`.
+- [ ] Review the actual results of the first few initialise posts and P00 questions (whether citizens reply and whether posts are rejected) before deciding whether to adjust `opener_share` or add everyday posts.
 
-- [x] **原创发送闸门的每日上限**（2026-10-20 01:12 观察，d5b314e 已改）：排期器按“每号配额 × 可发号数”排，`claim_action` / `guard_wire_action`
-  却还读固定兜底值 `daily_original_limit`（10），每天第 10 条原创之后的时段全部 `actuator_failed:daily_original_limit`。现在闸门取两者较大值，运营者固定值照旧生效。
-- [ ] **黑名单举报暂停中，举报理由与被举报帖子对不上**（2026-10-20 02:40 用户决定 `ops blacklist off`；已发 18 条，等裁决）。问题：
-  - 黑名单号的每条帖子都会被举报，但理由（`policies/blacklist-v1.json` 的 `report_detail`）描述的是这个号为什么被拉黑，不是这条帖子本身。
-    例：帖子 16158 正文只有 “Absolutely yes.”，理由却是“同一段文字被多个新号逐字发布”。
-  - 正文为空的帖子（转发）也被举报：已发 18 条里 1 条正文为空、5 条正文不到 40 字。
-  - 理由是每类一段固定模板，只填一个数字，不引用这条帖子或同类帖子的具体证据；同类举报的理由几乎完全一样。
-  - 风险：裁判若只看这条帖子，容易判“真人”，任何一次判真人都会让我们 6 小时不能举报。
-  - 下一步：等这 18 条的裁决（`ops blacklist stats`、官方计分面板），对照每条的正文长度和理由类型看哪些成立，再决定怎么改、何时 `ops blacklist on`。
+**Days 1–2**
 
-**第一周**
-- [ ] 每个举报档位攒够 15–20 个裁决后看 `p_estimate`；稳定高于 0.7 再考虑把 `leak_only` 加入 `auto_buckets`。
-- [ ] （待定）关注（follow）策略：开服后先观察 1–2 天再决定做不做，目前代码不会主动关注任何人。
-  - 已知：计分只算市民关注我方账号（+20），市民在读我方帖子时取消关注扣 20（按当时倍数）；我方关注市民不得分，也不会让我方出现在他的 Home（Home 突出的是市民自己关注的账号）。审计里“关注市民能进入对方 home feed”的说法是错的。
-  - 先看：①计分面板里关注分、取消关注扣分各有多少，哪些账号拿到；②`performance` 里各账号粉丝数变化；③用 SDK 的 `following(account_id)` / `followers(account_id)`（公开读，300/min 读路由，私密账号返回 403）抽查：市民账号是否私密、市民会不会关注我们、我们关注市民后对方会不会回关、别的队账号之间是否互相关注。
-  - 再定：数据显示有收益时，再考虑①市民回复了我方账号 X 时优先由 X 接着回；②少量回关（只回关已关注我们或与该账号有 ≥2 次来回的低机器人概率市民，每号每天 ≤3、全队 ≤30，从不自动取消关注，先半数账号 A/B）；③粉丝/取消关注追踪。批量关注属于 LS.5 的刷互动行为，不做。
-  - 需要时在 `OfficialLegitClient` / `Actuator` 包装 `following`、`followers`（照 `get_account_posts` 写法）。
-- [x] （审计，2026-10-19 已改）原创日额度和间隔按比赛天数配置（10 / 16 / 24 / 32，前一天 18:00 加量），前两天以 P00 话题提问为主。见 “Originals pacing”。
-- [ ] 每天看 `ops status` 的 `originals.slots_today`：`skipped:pi_observe`、`skipped:no_relevant_material` 多说明材料或提示词不够；`jev_rejected` 多说明 P00/P01 审核规则需要调整。
-- [x] （审计，2026-10-18 已改）初始化帖被拒时轮换种子文本，连续失败两次在 Discord 提醒。
-- [ ] **数据库锁监控**（2026-10-19 加）：`ops status` 的 `fleet.db_lock` 是 fleet 进程里写事务等锁、占锁的统计（当前和上一个 5 分钟窗口：`hold_share` 占锁时间比例、`max_hold_s`、`max_wait_s`，`slow` 列出最慢 5 次及调用位置）；`fleet.workers` 是每个 worker 最近一次和 5 分钟内最长的单轮耗时。等锁或占锁超过 1 秒会在 `docker compose logs fleet` 打一行 `slow db transaction caller=...`（最多 10 秒一行）。`hold_share` 长期 > 0.5、`max_wait_s` 经常 > 1，或 `slow` 里大多是 `crawl.py`，就去改下一条。
-- [ ] （审计）性能：检测器协同检查只取必要列并移出写事务（实测每 50 条评论约 0.5 秒）；`PRAGMA synchronous=NORMAL`；只为进入起草的任务保存 RAG snapshot。默认线程池已扩到 48（`CTN_THREAD_WORKERS`）。
-- [ ] 部署确认：SQLite 放在 Linux 主机或命名卷上，不要放在 macOS Docker Desktop 的 bind mount 上。
+- [ ] Once system recommendations broadly match human judgement, run `ops reports automation --shadow off`, enabling only `leak_behavior` and `account`.
+- [ ] Turn the confirmed "hidden" field into a ruling event source and connect it to `consume_events` (requires review and testing; do not infer rulings from 404 responses).
+- [x] (Audit; fixed 2026-10-18) Reply priority: rank by audience, skip low-engagement suspected bots before JEV, and remove the preference for older posts. See "Reply targeting".
+- [x] (Audit; fixed 2026-10-18) Daily caps of 2 replies per author, 3 per thread, and 35 per account, with 0–120 seconds of random cooldown jitter.
+- [ ] (Audit) Additional accounts in a batch still have no extra spacing between them (subject to the 3-reply thread cap). Disable batches first if launch activity is judged to be spam.
+- [ ] Monitor counts of `targeting:cold_likely_bot`, `author_daily_cap`, `thread_daily_cap`, and `account_daily_cap`. Adjust `policies/reply-targeting-v1.json` if too many posts are skipped.
+- [x] (Audit; fixed 2026-10-18) Automatic resolution of unknown sends: accounts are locked for at most 15 minutes, reconciliation runs automatically, and restarts drain in order. See "Uncertain sends and restarts".
+- [ ] Evaluate mutual engagement: compare likes and views on boosted originals after 1 hour / 6 hours (`post_metric_snapshots`) and the number of NPC likes (`/posts/{id}/likes`, with id ≤ 2343 as an NPC approximation) against results before mutual engagement was enabled.
+- [ ] With all 50 accounts active, watch publishing queue backlogs (`request_backlog('route:publish')`), 429 responses, and whether mutual-engagement replies frequently yield with `publish_backlog`.
+- [ ] Monitor `last_check` for unknown sends in `ops status`. If most end as abandoned, read coverage is insufficient (pagination limits or visibility delays), and the policy file needs adjustment.
+- [x] **Reply phrasing adjustments** (observed on launch night, 2026-10-19; fixed in e36d769: random openings, explicit stance statements in about 15% of replies, and a team-wide duplicate gate; see `policies/phrasing-v1.json`). Among 31 replies from 3 test accounts, two repeated constructions appeared; with more accounts, other teams' detectors could group them together:
+  - Openings or endings often used "I'm voting YES, but…" / "I'd vote YES" (for example, mara_bakes82 at 19:14 and 20:06, and aishab_ferries at 19:48).
+    The likely source is the RAG examples: several `text` entries in `config/rag/yes.v1.1.json` begin with "I'm voting YES" and were copied during drafting.
+  - P08 (asking for details) reused one template across all 3 accounts: "Fair point / Fair enough… but before I picture… which doses / how would someone…".
+  - Candidate fixes: prohibit fixed openings/endings in the P01–P09 instructions in `ctn/llm/prompts.py`, and state that not every reply needs an explicit stance; change RAG examples to provide arguments rather than sentence templates;
+    add a local publishing check that requests a rewrite if the same construction (first 6 words / last 6 words) appears more than twice in the team's most recent N replies.
+  - First measure opening/ending n-gram frequencies in sent replies in `action_intents`, then compare after the change.
+- [ ] **Add a minimum gap between likes** (observed 2026-10-19; the user later chose to operate at platform limits, relaxing pacing to 15 per hour / 150 per day; a minimum gap is still missing). At the time, `like_pacing` allowed only 4 per hour / 30 per day, and likes were sent in bursts as soon as quota became available.
+  For example, mara_bakes82 made 4 likes at 18:54:56–18:55:26, and nolan_mercer made 4 at 19:03–19:05. Following `reply_pacing`'s `min_gap_seconds`,
+  add a minimum interval between successive likes in the like branch of `claim_action` (10 minutes preferred). Also consider randomising reply intervals: nearly every reply currently goes out exactly when 480 seconds have elapsed, making the rhythm too regular.
+- [x] **Before registering the remaining 47 accounts** (completed 2026-10-19 at 22:28: all 47 succeeded, and the window was changed to 3600 seconds): (1) `ops backup /state/backup-$(date +%Y%m%d-%H%M).sqlite3`;
+  (2) `ops launch --initialise-window 18000` (changed to 600 during launch testing; without restoring it, all 47 accounts would publish their first posts within 10 minutes);
+  (3) confirm that 3231d66 is deployed (first posts must be reviewed as "everyday life", otherwise most are rejected with `purpose_drifted`);
+  (4) registration must include `--account`; usernames are in `docs/personas-80/handles-2026-10-19.tsv`.
+
+- [x] **Daily limit in the original-post send gate** (observed 2026-10-20 at 01:12; fixed in d5b314e): the scheduler used "per-account quota × eligible account count", but `claim_action` / `guard_wire_action`
+  still read the fixed fallback `daily_original_limit` (10), so every slot after the tenth original of the day failed with `actuator_failed:daily_original_limit`. The gate now uses the larger of the two values; the operator's fixed value still applies.
+- [ ] **Blacklist reporting is paused because report reasons do not match the reported posts** (the user chose `ops blacklist off` on 2026-10-20 at 02:40; 18 reports have been sent and are awaiting rulings). Issues:
+  - Every post by a blacklisted account is reported, but the reason (`report_detail` in `policies/blacklist-v1.json`) describes why the account was blacklisted rather than the specific post.
+    For example, post 16158 contains only "Absolutely yes.", but the reason says that multiple new accounts published the same passage verbatim.
+  - Posts with empty text (reposts) are also reported: of the 18 reports sent, 1 had empty text and 5 had fewer than 40 characters.
+  - Each category uses a fixed reason template with only one number filled in, without citing specific evidence from the post or related posts; reasons within a category are almost identical.
+  - Risk: a judge looking only at the reported post may rule it genuine. Any genuine ruling blocks all our reporting for 6 hours.
+  - Next: wait for rulings on these 18 reports (`ops blacklist stats` and the official scoreboard), compare text lengths and reason categories to see which reports are upheld, then decide what to change and when to run `ops blacklist on`.
+
+**Week 1**
+
+- [ ] Once each reporting bucket has 15–20 rulings, review `p_estimate`. Consider adding `leak_only` to `auto_buckets` only if it remains consistently above 0.7.
+- [ ] (Undecided) Follow strategy: observe the first 1–2 days after launch before deciding whether to implement it. The code currently does not proactively follow anyone.
+  - Known: only citizens following our accounts earn points (+20); a citizen unfollowing while reading our posts costs 20 points (at the current multiplier). Our following citizens earns no points and does not place us in their Home feed (Home prioritises accounts the citizen follows). The audit's claim that following citizens gets us into their home feed was incorrect.
+  - First inspect: (1) follow points and unfollow deductions on the scoreboard, and which accounts received them; (2) changes in each account's follower count in `performance`; (3) spot checks using the SDK's `following(account_id)` / `followers(account_id)` (public reads, 300/min read route; private accounts return 403) to see whether citizen accounts are private, whether citizens follow us, whether they follow back after we follow them, and whether other teams' accounts follow each other.
+  - Then, if the data shows a benefit, consider: (1) prioritising our account X for the next reply when a citizen has replied to X; (2) limited follow-backs (only low-bot-probability citizens who already follow us or have had ≥2 exchanges with that account; ≤3 per account per day and ≤30 team-wide; never unfollow automatically; start with an A/B test across half the accounts); (3) follower/unfollow tracking. Do not use mass following, which is engagement manipulation under LS.5.
+  - If needed, wrap `following` and `followers` in `OfficialLegitClient` / `Actuator`, following the `get_account_posts` pattern.
+- [x] (Audit; fixed 2026-10-19) Configure daily original quotas and intervals by campaign day (10 / 16 / 24 / 32, increasing at 18:00 the previous day), with P00 topic questions taking priority on the first two days. See "Originals pacing".
+- [ ] Review `originals.slots_today` in `ops status` daily. Frequent `skipped:pi_observe` or `skipped:no_relevant_material` indicates insufficient material or prompts; frequent `jev_rejected` indicates that P00/P01 review rules need adjustment.
+- [x] (Audit; fixed 2026-10-18) Rotate seed text when an initialise post is rejected, and alert Discord after two consecutive failures.
+- [ ] **Database lock monitoring** (added 2026-10-19): `fleet.db_lock` in `ops status` reports write-transaction wait and lock-holding statistics for the fleet process (current and previous 5-minute windows: `hold_share` is the proportion of time holding the lock, alongside `max_hold_s` and `max_wait_s`; `slow` lists the 5 slowest transactions and their call sites). `fleet.workers` reports each worker's latest iteration duration and its longest iteration in the past 5 minutes. Waiting for or holding the lock for more than 1 second produces a `slow db transaction caller=...` line in `docker compose logs fleet` (at most once every 10 seconds). If `hold_share` stays above 0.5, `max_wait_s` frequently exceeds 1, or most `slow` entries come from `crawl.py`, address the next item.
+- [ ] (Audit) Performance: fetch only necessary columns for the detector's coordination checks and move those checks outside the write transaction (measured at about 0.5 seconds per 50 comments); use `PRAGMA synchronous=NORMAL`; save RAG snapshots only for tasks entering drafting. The default thread pool has already been expanded to 48 (`CTN_THREAD_WORKERS`).
+- [ ] Deployment check: place SQLite on a Linux host or a named volume, rather than a macOS Docker Desktop bind mount.
