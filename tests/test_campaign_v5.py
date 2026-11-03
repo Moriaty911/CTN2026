@@ -67,9 +67,9 @@ class RagRuntimeTests(unittest.TestCase):
         self.corpus=Corpus()
         self.store=StateStore();self.addCleanup(self.store.close)
 
-    def test_all_52_cases_retain_required_basis_and_qualifiers(self):
+    def test_all_cases_retain_required_basis_and_qualifiers(self):
         cases=json.loads(Path('config/rag/review-cases.v1.1.json').read_text())['cases']
-        self.assertEqual(len(cases),52)
+        self.assertEqual(len(cases),54)  # 52 curated + C053/C054 (poll window, 2026-10-26)
         for case in cases:
             with self.subTest(case=case['id']):
                 data=self.corpus.retrieve(case['query'],purpose=case.get('purpose')).to_dict()

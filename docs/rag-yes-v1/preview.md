@@ -236,6 +236,13 @@ KITB warns access-restriction powers could be reused in later emergencies.
 类型：`reported_position`；原章节：The NO Campaign。
 必须保留的限定：KITB；warns；could。
 
+### F033 · YES 组织主张早期接种可降低再次全面封锁的可能
+
+MOUK argues early, widespread vaccination would make another full lockdown less likely; this is its campaign claim.
+
+类型：`reported_position`；原章节：The YES Campaign。
+必须保留的限定：MOUK；argues；campaign claim。
+
 ## YES 论点卡
 
 这些是政策判断、推理或实施提议；依赖事实见 ID，不代表效果已证实。
@@ -511,6 +518,32 @@ Discuss understandable visitor-facing rules as a proposal. Separate public-space
 **边界：** No invented foreign-certificate recognition, visitor exemption, border closure or assured tourism recovery.
 
 依据：F001, F014, F030；未知：U005, U015, U019。
+用途：P01, P02, P03, P07；原文线索：新增补充。
+
+### A022 · 预防是为了保持开放（回应旅游顾虑）
+
+I support public-access proof because I want Kingstonia to stay open, and preventing a wave is part of that.
+
+Answer the tourism worry on its own terms. COVID restrictions disrupted businesses and families and tourism leads the economy; MOUK's campaign claim is that early, widespread vaccination makes another full lockdown less likely. Acknowledge KITB's prediction that access rules would hurt tourism confidence and present the trade-off honestly.
+
+**可能遇到的合理质疑：** KITB predicts access restrictions would themselves harm tourism confidence, and arrangements for visitors are not specified.
+
+**边界：** A campaign claim about lockdown risk is not a guarantee; do not promise that tourism will recover and do not give figures.
+
+依据：F009, F014, F030, F033；未知：U015, U019。
+用途：P01, P02, P03, P07；原文线索：新增补充。
+
+### A023 · 正面回应“两级社会”的担忧
+
+I support the requirement and take the two-tier worry seriously instead of waving it away.
+
+Name the concern plainly: KITB argues proof requirements could exclude people from work and ordinary life. Explain the YES distinction between access rules and physical compulsion without claiming it settles the question, and point to shared ground: KITB also supports voluntary vaccination, so the disagreement is about the access rule. Ask what arrangements would make it fair rather than inventing them.
+
+**可能遇到的合理质疑：** For someone who will not be vaccinated, losing access to work and ordinary life is a real cost, not a technicality.
+
+**边界：** Do not claim exemptions, time limits, reviews or alternatives that the setting does not specify.
+
+依据：F011, F012, F029；未知：U004, U008, U011, U012。
 用途：P01, P02, P03, P07；原文线索：新增补充。
 
 ## 表达示例
@@ -1429,3 +1462,19 @@ Has KITB proved the government will abuse emergency powers?
 相关材料：F032, A017, U008, U009, U018。
 
 A stated concern about future powers is not evidence of actual or inevitable abuse.
+
+### C053
+
+Won't vaccination proof hurt tourism and keep Kingstonia closed?
+
+相关材料：F030, F033, A022, U019。
+
+Present lower lockdown risk as MOUK's campaign claim, acknowledge KITB's tourism prediction, and promise no recovery or figures.
+
+### C054
+
+Doesn't this create a two-tier society that shuts people out of work?
+
+相关材料：F011, F029, A023, U012。
+
+Treat exclusion from work as a real cost; do not invent exemptions, time limits or reviews.

@@ -320,6 +320,13 @@ class JevLlmBrain:
             return BrainVerdict(ActionKind.LIKE, reason="jev:like", detail=detail)
         if action["action"] != "reply":
             return BrainVerdict(reason=f"jev:{action['action']}", detail=detail)
+        if rel_stance == "opposing":
+            from .targeting import poll_window_rules
+            window = poll_window_rules()
+            func = str(_get_val(_extract_jev_answers(data).get("expression_function")) or "").lower()
+            if window and func in window.get("skip_opposing_functions", ()):
+                # Before the poll, a reply to a venting opponent risks a change of mind away from us.
+                return BrainVerdict(reason=f"poll_window:opposing_{func}", detail=detail)
 
         selected = (data.get("response_decision") or {}).get("prompt_type")
         if selected is not None and selected not in SUPPORTED_REPLY_PURPOSES:

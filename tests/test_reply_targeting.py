@@ -503,3 +503,53 @@ class CitizenTargetingTests(unittest.TestCase):
         intent(self.store, 'a1', 't2', author='resident2', at=now - 60)
         responded(self.store, 'resident2', at=now - 30)
         self.assertEqual(targeting.cap_reason(self.store, target_author='resident2', now=now), '')
+
+
+class PollWindowTests(unittest.TestCase):
+    """Until Poll 3 is counted: undecided citizens first, opponents who engage next, venting opponents skipped."""
+
+    def setUp(self):
+        from datetime import datetime
+        self.until = datetime.fromisoformat(targeting.POLICY['poll_window']['until']).timestamp()
+
+    @staticmethod
+    def assessment(stance, function):
+        return {'flow': {'status': 'complete', 'relative_stance': stance},
+                'action_decision': {'status': 'decided', 'action': 'reply'},
+                'answers': {'expression_function': {'value': function}}}
+
+    def test_the_window_closes_on_its_own_at_the_poll(self):
+        self.assertIsNotNone(targeting.poll_window_rules(now=self.until - 60))
+        self.assertIsNone(targeting.poll_window_rules(now=self.until))
+        with patch.dict(targeting.POLICY['poll_window'], {'until': ''}):
+            self.assertIsNone(targeting.poll_window_rules(now=self.until - 60))
+
+    def test_undecided_rank_above_opponents_and_engaged_opponents_get_a_smaller_lift(self):
+        from ctn.pipeline.scheduling import assessment_priority
+        with patch('ctn.pipeline.targeting.time.time', return_value=self.until - 3600):
+            undecided = assessment_priority(self.assessment('neutral', 'assertion'), {})
+            asking = assessment_priority(self.assessment('opposing', 'question'), {})
+            asserting = assessment_priority(self.assessment('opposing', 'assertion'), {})
+            question_baseline = assessment_priority(self.assessment('aligned', 'question'), {})
+        self.assertGreater(undecided, asserting)
+        self.assertEqual(asking - question_baseline, targeting.POLICY['poll_window']['opposing_engaged_bonus'])
+        with patch('ctn.pipeline.targeting.time.time', return_value=self.until + 60):
+            after = assessment_priority(self.assessment('neutral', 'assertion'), {})
+            plain = assessment_priority(self.assessment('opposing', 'assertion'), {})
+        self.assertEqual(after, plain)
+
+    def run_think(self, stance, function, now):
+        from ctn.pipeline.brain import JevLlmBrain
+        brain = object.__new__(JevLlmBrain)
+        brain.payload_for = lambda post: {}
+        package = SimpleNamespace(to_dict=lambda: self.assessment(stance, function))
+        post = Post('t1', 'resident', 'This rule makes me so angry, honestly.', time.time())
+        with patch('ctn.pipeline.targeting.time.time', return_value=now):
+            return brain.think(post, assessment=package)
+
+    def test_a_venting_opponent_is_skipped_for_good_inside_the_window(self):
+        from ctn.pipeline.brain import JevLlmBrain
+        verdict = self.run_think('opposing', 'venting', self.until - 3600)
+        self.assertEqual(verdict.action, ActionKind.NONE)
+        self.assertEqual(verdict.reason, 'poll_window:opposing_venting')
+        self.assertEqual(JevLlmBrain._disposition(verdict, None), 'skip')

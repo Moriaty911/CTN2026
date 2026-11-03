@@ -46,6 +46,17 @@ def posting_frequency(store, author, now=None):
         return store._conn.execute('SELECT COUNT(*) FROM observed_posts WHERE author=? AND created_at>=?', (author, ts - window)).fetchone()[0]
 
 
+def poll_window_rules(now=None):
+    """The poll-window rules (policies/reply-targeting-v1.json `poll_window`) while they apply, else None."""
+    from datetime import datetime
+    rules = POLICY.get('poll_window') or {}
+    until = rules.get('until')
+    if not until:
+        return None
+    ts = time.time() if now is None else float(now)
+    return rules if ts < datetime.fromisoformat(until).timestamp() else None
+
+
 def citizen_max_id():
     return int((POLICY.get('citizens') or {}).get('max_account_id') or 0)
 

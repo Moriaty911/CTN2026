@@ -14,6 +14,14 @@ def assessment_priority(data, task):
     function=str(_get_val(answers.get('expression_function')) or '')
     base+={'question':12,'argument':8,'experience':4,'venting':-10}.get(function,0)
     base+=float(action.get('signal_value') or action.get('score') or 0)
+    from .targeting import poll_window_rules
+    window=poll_window_rules()
+    if window:
+        # Before the poll the undecided are the share that moves; opponents who engage come next.
+        stance=(data.get('flow') or {}).get('relative_stance')
+        base+=float((window.get('stance_bonus') or {}).get(stance,0))
+        if stance=='opposing' and function in window.get('opposing_engaged_functions',()):
+            base+=float(window.get('opposing_engaged_bonus',0))
     return base
 
 

@@ -77,5 +77,21 @@
     "max_account_id": 2343,
     "count_newcomers": true,
     "responder_max_bot_probability": 0.5
+  },
+  "poll_window": {
+    "notes": "Poll 3 is counted 2026-10-29 07:11 Sydney. Poll 2 (2026-10-25): Yes 39.3, No 34.1, unsure 25.9; Yes is 53.5% of the two-way share against the 52-48 'too close to call' line, and its support is soft (7.6 definite, 31.7 leaning) while No is firmer (17.1 / 17.0). Until `until`: undecided citizens (relative_stance neutral/mixed) rank higher, opposing posts that ask a question or recount an experience get a smaller lift, and opposing venting is skipped (operator decision 2026-10-26: a clarifying question to a venting opponent is the reply most likely to push someone away, and per-post persuasion attribution is not observable). Everything here stops applying on its own after `until`.",
+    "until": "2026-10-29T07:11:00+11:00",
+    "stance_bonus": {
+      "neutral": 15,
+      "mixed": 15
+    },
+    "opposing_engaged_bonus": 8,
+    "opposing_engaged_functions": [
+      "question",
+      "experience"
+    ],
+    "skip_opposing_functions": [
+      "venting"
+    ]
   }
 }

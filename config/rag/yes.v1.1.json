@@ -642,6 +642,27 @@
         "could"
       ],
       "temporal_scope": "source_snapshot"
+    },
+    {
+      "id": "F033",
+      "kind": "fact",
+      "title_zh": "YES 组织主张早期接种可降低再次全面封锁的可能",
+      "text": "MOUK argues early, widespread vaccination would make another full lockdown less likely; this is its campaign claim.",
+      "topics": [
+        "lockdown",
+        "open",
+        "prevention",
+        "campaign"
+      ],
+      "source_id": "official_setting_2026_1018",
+      "source_section": "The YES Campaign",
+      "claim_mode": "reported_position",
+      "required_qualifiers": [
+        "MOUK",
+        "argues",
+        "campaign claim"
+      ],
+      "temporal_scope": "source_snapshot"
     }
   ],
   "argument_cards": [
@@ -1460,6 +1481,81 @@
       ],
       "fair_objection": "Unclear requirements could burden visitors, staff and businesses.",
       "response_boundary": "No invented foreign-certificate recognition, visitor exemption, border closure or assured tourism recovery.",
+      "origin": "new",
+      "raw_passage_ids": []
+    },
+    {
+      "id": "A022",
+      "kind": "argument",
+      "title_zh": "预防是为了保持开放（回应旅游顾虑）",
+      "position": "yes",
+      "claim": "I support public-access proof because I want Kingstonia to stay open, and preventing a wave is part of that.",
+      "reasoning": "Answer the tourism worry on its own terms. COVID restrictions disrupted businesses and families and tourism leads the economy; MOUK's campaign claim is that early, widespread vaccination makes another full lockdown less likely. Acknowledge KITB's prediction that access rules would hurt tourism confidence and present the trade-off honestly.",
+      "topics": [
+        "tourism",
+        "open",
+        "lockdown",
+        "business",
+        "economy",
+        "visitors"
+      ],
+      "purposes": [
+        "P01",
+        "P02",
+        "P03",
+        "P07"
+      ],
+      "fact_ids": [
+        "F009",
+        "F014",
+        "F030",
+        "F033"
+      ],
+      "unknown_ids": [
+        "U015",
+        "U019"
+      ],
+      "fair_objection": "KITB predicts access restrictions would themselves harm tourism confidence, and arrangements for visitors are not specified.",
+      "response_boundary": "A campaign claim about lockdown risk is not a guarantee; do not promise that tourism will recover and do not give figures.",
+      "origin": "new",
+      "raw_passage_ids": []
+    },
+    {
+      "id": "A023",
+      "kind": "argument",
+      "title_zh": "正面回应“两级社会”的担忧",
+      "position": "yes",
+      "claim": "I support the requirement and take the two-tier worry seriously instead of waving it away.",
+      "reasoning": "Name the concern plainly: KITB argues proof requirements could exclude people from work and ordinary life. Explain the YES distinction between access rules and physical compulsion without claiming it settles the question, and point to shared ground: KITB also supports voluntary vaccination, so the disagreement is about the access rule. Ask what arrangements would make it fair rather than inventing them.",
+      "topics": [
+        "two",
+        "tier",
+        "exclusion",
+        "excluded",
+        "work",
+        "choice",
+        "access",
+        "fairness"
+      ],
+      "purposes": [
+        "P01",
+        "P02",
+        "P03",
+        "P07"
+      ],
+      "fact_ids": [
+        "F011",
+        "F012",
+        "F029"
+      ],
+      "unknown_ids": [
+        "U004",
+        "U008",
+        "U011",
+        "U012"
+      ],
+      "fair_objection": "For someone who will not be vaccinated, losing access to work and ordinary life is a real cost, not a technicality.",
+      "response_boundary": "Do not claim exemptions, time limits, reviews or alternatives that the setting does not specify.",
       "origin": "new",
       "raw_passage_ids": []
     }
@@ -3520,7 +3616,8 @@
       "F029",
       "F030",
       "F031",
-      "F032"
+      "F032",
+      "F033"
     ]
   }
 }

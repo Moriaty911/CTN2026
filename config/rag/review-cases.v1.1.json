@@ -754,6 +754,36 @@
         "U018"
       ],
       "constraint": "A stated concern about future powers is not evidence of actual or inevitable abuse."
+    },
+    {
+      "id": "C053",
+      "query": "Won't vaccination proof hurt tourism and keep Kingstonia closed?",
+      "expected_fact_ids": [
+        "F030",
+        "F033"
+      ],
+      "expected_argument_ids": [
+        "A022"
+      ],
+      "expected_unknown_ids": [
+        "U019"
+      ],
+      "constraint": "Present lower lockdown risk as MOUK's campaign claim, acknowledge KITB's tourism prediction, and promise no recovery or figures."
+    },
+    {
+      "id": "C054",
+      "query": "Doesn't this create a two-tier society that shuts people out of work?",
+      "expected_fact_ids": [
+        "F011",
+        "F029"
+      ],
+      "expected_argument_ids": [
+        "A023"
+      ],
+      "expected_unknown_ids": [
+        "U012"
+      ],
+      "constraint": "Treat exclusion from work as a real cost; do not invent exemptions, time limits or reviews."
     }
   ]
 }
