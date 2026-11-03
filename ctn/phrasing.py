@@ -36,7 +36,9 @@ def instructions(seed, policy=POLICY):
     banned = ', '.join(f'"{p}"' for p in policy['stock_openings'][:6])
     stance = ("You may mention how you will vote once, briefly, if it fits." if v['allow_stance'] else
               "Do not say how you will vote; let the reasoning show where you stand.")
-    return (f"Phrasing: {v['opening']} Never open with a stock acknowledgement such as {banned}. {stance} "
+    avoid = policy.get('overuse', {}).get('avoid_in_prompt') or []
+    overused = f" These constructions are everywhere in this debate already, so avoid them: {', '.join(avoid)}." if avoid else ''
+    return (f"Phrasing: {v['opening']} Never open with a stock acknowledgement such as {banned}.{overused} {stance} "
             "No campaign slogans or slogan hashtags.")
 
 
@@ -51,6 +53,37 @@ def recent_texts(store, policy=POLICY):
             "SELECT text FROM action_intents WHERE kind IN ('post','reply','repost') AND status IN ('claimed','sending','unknown','succeeded') "
             "AND COALESCE(json_extract(metadata_json,'$.purpose'),'') NOT IN ('initialise','warmup') AND text<>'' "
             "ORDER BY created_at DESC LIMIT ?", (int(policy['recent_window']),))]
+
+
+def _share(recent, match):
+    if not recent:
+        return 0.0
+    return sum(1 for t in recent if match(t)) / len(recent)
+
+
+def overuse_reason(text, recent, policy=POLICY):
+    """'' unless this draft leans on a construction the team is already leaning on too hard.
+
+    The gate is a share, not a ban: one account may open with 'the venue list' occasionally, but once enough of
+    the recent window does, another draft like it is rejected. Five thousand replies in three days showed the
+    team converging on a handful of constructions, which is what makes them easy to group.
+    """
+    cfg = policy.get('overuse') or {}
+    lowered = text.lower()
+    for cap in cfg.get('opening_patterns') or []:
+        rx = re.compile(cap['pattern'], re.I)
+        if not rx.match(lowered):
+            continue
+        share = _share(recent, lambda t: bool(rx.match(t.lower())))
+        if share >= float(cap['max_share']):
+            return f'overused_opening: {int(round(share * 100))}% of recent posts open like this; open differently'
+    for phrase, cap in (cfg.get('phrase_caps') or {}).items():
+        if phrase not in lowered:
+            continue
+        share = _share(recent, lambda t: phrase in t.lower())
+        if share >= float(cap):
+            return f'overused_phrase: {int(round(share * 100))}% of recent posts say "{phrase}"; say it another way'
+    return ''
 
 
 def repetition_reason(text, recent, policy=POLICY):
@@ -78,7 +111,24 @@ def repetition_reason(text, recent, policy=POLICY):
         p = ' '.join(_words(phrase))
         if p and f' {p} ' in f' {lowered} ' and any(f' {p} ' in f' {o} ' for o in full):
             return f'repetitive_phrasing: drop the stock phrase "{phrase}"'
-    return ''
+    return overuse_reason(text, recent, policy)
+
+
+# A citizen restating an objection and getting another question back is the loop behind 29 changes towards
+# neither against 25 towards YES in the three days to 2026-10-29.
+_DOUBT = re.compile(r"\b(but|still|what about|how would|who checks|who decides|why should|"
+                    r"doesn'?t|don'?t|won'?t|can'?t|cannot|not sure|unsure)\b", re.I)
+_REASON = re.compile(r"\b(because|which is why|that is why|that'?s why|the reason|so that|"
+                     r"means that|comes down to|the trade-?off is)\b", re.I)
+
+
+def unanswered_doubt(target_text, reply_text):
+    """'' when the reply gives a reason, else the feedback to hand back for one redraft."""
+    if not _DOUBT.search(str(target_text or '')):
+        return ''
+    if _REASON.search(str(reply_text or '')):
+        return ''
+    return 'doubt_left_unanswered: they restated a doubt, so answer it in one sentence with a reason (because / which is why)'
 
 
 def stats(store, n=50, policy=POLICY):
@@ -94,4 +144,6 @@ def stats(store, n=50, policy=POLICY):
         h = ' '.join(x.split()[:int(policy['opening_words'])]); heads[h] = heads.get(h, 0) + 1
     top = sorted(heads.items(), key=lambda kv: -kv[1])[:3]
     return {'sample': len(texts), 'stock_opening_share': round(stock / len(texts), 2),
-            'vote_declaration_share': round(stance / len(texts), 2), 'top_openings': dict(top)}
+            'vote_declaration_share': round(stance / len(texts), 2), 'top_openings': dict(top),
+            'overused': {p: round(_share(texts, lambda t, p=p: p in t.lower()), 2)
+                         for p in (policy.get('overuse', {}).get('phrase_caps') or {})}}

@@ -163,6 +163,40 @@ class CapTests(unittest.TestCase):
         self.assertEqual(chosen.account_id, router.registry.get('yes_002').account_id)
 
 
+class VerifiedCapTests(unittest.TestCase):
+    """Verified accounts answer, and they carry the argument: three replies a day, ten minutes apart (2026-10-28)."""
+
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+        self.store.register_verified_accounts(['mayor'], status='verified_npc')
+
+    def cap(self, author, *, at=None):
+        return targeting.cap_reason(self.store, target_author=author, now=at, include_account=False)
+
+    def test_citizen_keeps_two_a_day_and_thirty_minutes(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='citizen', at=now - 60)
+        self.assertEqual(self.cap('citizen', at=now), 'author_min_gap')
+        intent(self.store, 'a2', 't2', author='citizen', at=now - 3600)
+        self.assertEqual(self.cap('citizen', at=now), 'author_daily_cap')
+
+    def test_verified_author_gets_three_replies(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='mayor', at=now - 7200)
+        intent(self.store, 'a2', 't2', author='mayor', at=now - 7100)
+        responded(self.store, 'mayor', at=now - 7050)
+        self.assertEqual(self.cap('mayor', at=now), '')
+        intent(self.store, 'a3', 't3', author='mayor', at=now - 7000)
+        self.assertEqual(self.cap('mayor', at=now), 'author_daily_cap')
+
+    def test_verified_gap_is_ten_minutes_not_thirty(self):
+        now = time.time()
+        intent(self.store, 'a1', 't1', author='mayor', at=now - 700)
+        responded(self.store, 'mayor', at=now - 690)
+        self.assertEqual(self.cap('mayor', at=now), '')
+        self.assertEqual(self.cap('mayor', at=now - 500), 'author_min_gap')
+
+
 class ThreadGapTests(unittest.TestCase):
     """Several of our accounts in one thread within minutes is the signal a coordination detector looks for."""
 
@@ -336,6 +370,40 @@ class EarlySkipTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('cold', brain.assessed); self.assertNotIn('capped', brain.assessed)
 
 
+class WarmupTests(unittest.TestCase):
+    """A new account is throttled for its first 36 h (policies/launch-v1.json warmup)."""
+
+    def store_with_age(self, hours):
+        store = StateStore(); self.addCleanup(store.close)
+        now = time.time()
+        with store.batch_transaction():
+            store._conn.execute("INSERT INTO account_lifecycle(account_id,initialise_status,initialised_at) VALUES('a','succeeded',?)",
+                                (now - hours * 3600,))
+        return store, now
+
+    def test_fresh_account_is_held_to_two_an_hour(self):
+        store, now = self.store_with_age(2)
+        intent(store, 'a', 't1', at=now - 1000)
+        intent(store, 'a', 't2', at=now - 2000)
+        self.assertEqual(targeting.account_pacing_reason(store, 'a', now), 'account_hourly_cap')
+
+    def test_older_account_keeps_the_normal_cadence(self):
+        store, now = self.store_with_age(40)
+        intent(store, 'a', 't1', at=now - 400)
+        intent(store, 'a', 't2', at=now - 800)
+        self.assertEqual(targeting.account_pacing_reason(store, 'a', now), '')
+
+    def test_fresh_account_waits_fifteen_minutes(self):
+        store, now = self.store_with_age(1)
+        intent(store, 'a', 't1', at=now - 400)
+        self.assertEqual(targeting.account_pacing_reason(store, 'a', now), 'account_min_gap')
+
+    def test_account_without_a_first_post_keeps_the_normal_rule(self):
+        store = StateStore(); self.addCleanup(store.close)
+        intent(store, 'a', 't1', at=time.time() - 400)
+        self.assertEqual(targeting.account_pacing_reason(store, 'a', time.time()), '')
+
+
 if __name__ == '__main__':
     unittest.main()
 
@@ -366,6 +434,19 @@ class ThreadDepthAndAuthorGapTests(unittest.TestCase):
         self.assertEqual(targeting.deep_thread_reason(self.store, self.post('r3')), '')
         intent(self.store, 'ours', 'a', root='r0'); intent(self.store, 'ours', 'b', root='r0')
         self.assertEqual(targeting.deep_thread_reason(self.store, self.post('r3')), 'targeting:deep_thread')
+
+    def test_citizens_may_be_answered_one_level_deeper_than_players(self):
+        now = time.time()
+        rows = [('c0', 'npc1', None, None, 1500), ('c1', 'npc2', 'c0', 'c0', 1500), ('c2', 'npc3', 'c1', 'c0', 1500),
+                ('c3', 'npc4', 'c2', 'c0', 1500), ('c4', 'npc5', 'c3', 'c0', 1500), ('p3', 'player', 'c2', 'c0', 9000)]
+        for pid, author, parent, root, author_id in rows:
+            self.store.upsert_observed_post({'post_id': pid, 'author': author, 'author_id': author_id, 'text': 'Text ' + pid,
+                                             'created_at': now, 'parent_id': parent, 'root_post_id': root})
+        # A citizen at depth 3 is still worth answering; depth 4 is not.
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('c3')), '')
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('c4')), 'targeting:deep_thread')
+        # Another team's account at the same depth keeps the original limit.
+        self.assertEqual(targeting.deep_thread_reason(self.store, self.post('p3')), 'targeting:deep_thread')
 
     def test_deeper_targets_rank_lower(self):
         p = [targeting.audience(self.store, self.post(x))['priority'] for x in ('r0', 'r1')]
@@ -553,3 +634,33 @@ class PollWindowTests(unittest.TestCase):
         self.assertEqual(verdict.action, ActionKind.NONE)
         self.assertEqual(verdict.reason, 'poll_window:opposing_venting')
         self.assertEqual(JevLlmBrain._disposition(verdict, None), 'skip')
+
+
+class ConcernTests(unittest.TestCase):
+    """A (2026-10-26): an objection that leaves room carries more weight than a plain post.
+
+    A vent-skip rule (insults, no question) was prototyped the same day and withdrawn: over the 5,965
+    citizen posts of the previous 24 h it matched 4.6%, almost all of them all-caps posts with two
+    exclamation marks rather than rants, which is ten times the 23 hand-counted rants in 287 opposing
+    posts. Skipping conversations on a proxy that noisy loses more than it saves.
+    """
+
+    def setUp(self):
+        self.store = StateStore(); self.addCleanup(self.store.close)
+
+    def test_an_objection_with_room_counts_as_persuadable(self):
+        self.assertTrue(targeting.persuadable({'text': "I'm not against vaccines, but the fine print matters."}))
+        self.assertTrue(targeting.persuadable({'text': 'Show us how the exemption works for a night shift.'}))
+        self.assertTrue(targeting.concerned({'text': 'Fine by me as long as the venue list is published.'}))
+
+    def test_a_closed_refusal_is_not_persuadable(self):
+        self.assertFalse(targeting.persuadable({'text': 'Vaccines do not work. The whole thing is a scam.'}))
+        self.assertFalse(targeting.concerned({'text': 'Vaccines do not work. The whole thing is a scam.'}))
+
+    def test_concern_carries_more_weight_than_it_did(self):
+        # Swing and opposing citizens were already answered at 95% and 90%, so the knob that matters is
+        # which of the remaining posts is picked first.
+        self.assertGreaterEqual(float(targeting.POLICY['weights']['persuadable']), 14.0)
+
+    def test_a_blunt_post_is_not_treated_as_a_concern(self):
+        self.assertFalse(targeting.concerned({'text': 'No. Not doing this. The council can forget it.'}))

@@ -45,6 +45,21 @@ class HarnessFileIntegrityTests(unittest.TestCase):
         for directive in active_directives:
             self.assertTrue(len(directive.strip()) > 5)
 
+    def test_strategy_directives_are_in_the_template(self):
+        """2026-10-26: two topic threads, a question in most replies, and the two-tier charge kept to replies."""
+        content = self.harness_file.read_text(encoding="utf-8")
+        directives = re.findall(r"\[ACTIVE\]\s*(.*)", content)
+        self.assertGreaterEqual(len(directives), 10)
+        joined = " ".join(directives)
+        self.assertIn("proof mandatory for choices that were personal", joined)
+        self.assertIn("close four to six in ten with one concrete question", joined)
+        self.assertIn("two-tier society", joined)
+        # 2026-10-28: the reach play (follow asks) and the x4-window closing argument.
+        self.assertIn("follow the account for the weekly figures", joined)
+        self.assertIn("every original is a closing argument", joined)
+        # The state file is not in git; the template is what write_harness copies, so keep them identical.
+        self.assertIsNone(re.search(r"[\u4e00-\u9fff]", joined))
+
     def test_account_table_has_all_personas(self):
         """Verify that all default accounts are tracked in the harness.md table."""
         content = self.harness_file.read_text(encoding="utf-8")

@@ -92,6 +92,43 @@ class PlanTests(unittest.TestCase):
         self.assertNotIn(self.accounts[1], amplify.amplifiable_accounts(self.store))
 
 
+class BoostTests(unittest.TestCase):
+    def setUp(self):
+        self.store, self.router = setup_store(); self.addCleanup(self.store.close)
+        self.accounts = amplify.amplifiable_accounts(self.store)
+        publish(self.store, 'leader', self.accounts[0], at_ts=1000.0)
+
+    def likes(self, post_id='leader'):
+        return [dict(r) for r in self.store._conn.execute("SELECT * FROM amplify_plan WHERE post_id=? AND kind='like'", (post_id,))]
+
+    def test_boosts_one_post_to_the_asked_total(self):
+        got = amplify.boost_post(self.store, 'leader', self.accounts, extra_likes=3, rng=random.Random(3), now=1000.0)
+        self.assertEqual(got['added'], 3)
+        self.assertEqual(got['likes_now'], 3)
+        rows = self.likes()
+        self.assertNotIn(self.accounts[0], {r['account_id'] for r in rows})  # never the author
+        self.assertEqual(len({r['account_id'] for r in rows}), 3)
+        self.assertTrue(all(1090 <= r['due_at'] <= 3400 for r in rows))
+
+    def test_second_boost_only_tops_up_with_unused_accounts(self):
+        amplify.boost_post(self.store, 'leader', self.accounts, extra_likes=2, rng=random.Random(3), now=1000.0)
+        before = {r['account_id'] for r in self.likes()}
+        got = amplify.boost_post(self.store, 'leader', self.accounts, extra_likes=3, rng=random.Random(4), now=1100.0)
+        after = {r['account_id'] for r in self.likes()}
+        self.assertTrue(before < after)
+        self.assertEqual(len(after), 4)  # the 4 other accounts, no duplicates
+        self.assertEqual(got['already_planned'], 2)
+
+    def test_boosting_something_that_is_not_our_original_does_nothing(self):
+        got = amplify.boost_post(self.store, 'someone-else', self.accounts, extra_likes=3, now=1000.0)
+        self.assertEqual(got, {'post_id': 'someone-else', 'added': 0, 'reason': 'not_one_of_our_originals'})
+        self.assertEqual(self.likes('someone-else'), [])
+
+    def test_boost_does_not_change_the_level(self):
+        amplify.boost_post(self.store, 'leader', self.accounts, extra_likes=2, now=1000.0)
+        self.assertEqual(amplify.level(self.store, at('2026-10-29T12:00:00')), 'low')
+
+
 class CapTests(unittest.TestCase):
     def test_amplification_replies_skip_pile_on_caps_but_keep_account_pacing(self):
         from ctn.pipeline.targeting import cap_reason
@@ -387,9 +424,12 @@ class PushIntervalTests(unittest.TestCase):
         publish(self.store, 'o1', self.accounts[0])
         publish(self.store, 'o2', self.accounts[1])
 
-    def test_the_push_spec_stays_small_while_our_reposts_are_deleted(self):
+    def test_a_push_is_off_by_default_and_needs_an_explicit_size(self):
+        # 2026-10-30: the full package on post 842677 (42 likes, 8 own reposts, comments) drew ZERO citizen actions in 9.5 h,
+        # and our own reposts and comments earn no points, so the default size is zero and an operator must ask for it.
         push = amplify.POLICY['push']
-        self.assertEqual((push['reposts'], push['replies'], push['max_per_account_per_day']), (3, 4, 3))
+        self.assertEqual((push['reposts'], push['replies']), (0, 0))
+        self.assertEqual(push['max_per_account_per_day'], 3)
 
     def test_a_second_push_inside_the_minimum_interval_is_refused(self):
         gap = float(amplify.POLICY['push']['min_seconds_between_pushes'])

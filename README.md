@@ -4,8 +4,9 @@
 > 开服后要做的事见 [上线后 TODO](#上线后-todo)。官方服务器行为仍需开服验证。
 > 服务器值班：`CLAUDE.md`（服务器上的 Claude Code 自动读取的值班说明和巡检流程）、`docs/ops-journal.md`（值班日志）、`scripts/dbq.py`（只读查库）、`docs/system-map.html`（模块地图）。
 > 2026-10-20 的四处改动（数据库锁、自有帖子测量、push 规格与带 tag 转发、回复削减）汇总在 [changes-2026-10-20](docs/changes-2026-10-20.md)：为什么改、改了什么、上线后看什么、怎么退。
+> 10-20 之后到 10-28 的十二处改动（举报对账与名额分配、自查回读、同帖拥挤、备份瘦身、人设 80→120、句式上限与新号暖机、目标化、目录失配防护、关注引导）汇总在 [changes-2026-10-28](docs/changes-2026-10-28.md)。
 
-80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[80 人预览](docs/personas-80/preview.md)。新人设默认未绑定，绑定后待命。
+80 人设与多人回复：见 [配置、绑定、启停、恢复和报告](docs/personas-80/README.md)及[人设预览](docs/personas-80/preview.md)（目录现有 120 人，其中 50 个已绑定）。新人设默认未绑定，绑定后待命。
 
 YES RAG 静态基础语料：见 [四类材料、来源与整理说明](docs/rag-yes-v1/README.md)及[审阅预览](docs/rag-yes-v1/preview.md)。当前版本为 `config/rag/yes.v1.1.json`，原 v1 保留供回放；已接入 Pi/JEV 与发布链路；新闻/VIP 为有范围的采样，未经整理不会自动成为已验证事实。
 
@@ -29,7 +30,7 @@ The scenario is the fictional Kingstonia referendum on vaccination proof for acc
 | Response parsing | Validates Choice, Score, and Noul answers against the exact request; preserves per-answer failures and applies information-sufficiency gates. |
 | Evaluation routing | Runs triage and, when appropriate, deep evaluation. Supports ordered batches, duplicate-request sharing, optional caching, and explicit post-pair comparisons. |
 | Interaction decisions | Applies confirmed aligned/opposing rules; asks JEV to select the action and primary response purpose for neutral/mixed posts. Ambiguous or unavailable decisions remain pending. |
-| Multi-account personas | 80 versioned YES profiles in 11 occupation groups; explicit SQLite binding/activation, capability checks, scene routing, cooldown and fixed optional reply batches. |
+| Multi-account personas | 120 versioned YES profiles in 11 occupation groups (spares for suspensions); explicit SQLite binding/activation, capability checks, scene routing, cooldown and fixed optional reply batches. |
 | Reply drafting | Calls DeepSeek from a locally bound, checked reply task using internal P01–P09 templates; injects persona background and voice instructions. |
 | Pre-send gatekeeper | One JEV `postflight.v3` call per draft (side alignment, purpose, persona/style, toxicity/injection, send authorization, substantive addition, evidence support) plus local length/duplicate/style-copy checks, with one targeted retry. |
 | Macro sensing | Collects platform trending hashtags, headlines from dual newspapers (*Daily Kingstonia* & *Kingstonia Herald*), VIP NPC posts, and account availability. |
@@ -620,6 +621,31 @@ P(upheld) × R  >  P(genuine) × C      and      p ≥ 0.7 (hard floor, never lo
 - `probe_report_targets` records which status-like fields pending report targets expose (`report_target_observations`).
   It never creates rulings. Rulings are still entered by an administrator until those fields are verified.
 
+## Roster automation (a ban is replaced without a human)
+
+`ctn/roster.py` runs as the `roster` worker (120 s). 52 of 102 accounts were suspended between 20 and
+30 October, 3-4 a day, and each replacement used to need a human plus a fleet restart.
+
+- **Detection is passive.** The actuator already writes `status='failed', detail='account suspended'` when
+  the platform refuses a write, and `reconcile` keeps the row; no notification feed (which we cannot read)
+  is needed. Only failures inside `detect_window_seconds` for accounts we still treat as live count.
+- **`retire()` is the step that used to be missed by hand.** A suspended account keeps
+  `account_states.mode='active'` and therefore one of the 50 active-persona slots, so the replacement was
+  refused with `active persona limit exceeded` until the dead persona was parked. `retire()` sets
+  `is_banned`, marks the managed account `suspended`, and flips the persona to `standby`.
+- **Replacement** prefers an unbound persona in the same `occupation_group`, falls back to the thinnest
+  group, then registers, binds and activates through `ctn.accounts.register_one`. Its first post is still
+  the `initialise` worker's job.
+- **Stale slots and top-up.** A suspended account whose `mode` was never flipped (the leftover of the
+  old manual flow) is parked first; then, if the fleet is below the active target for any reason, the
+  worker registers the missing accounts (`top_up: true`). A ban wave plus manual retirements once left
+  48 of 50 active, and only a top-up catches that without waiting for the next suspension.
+- **No restart.** `PersonaRegistry.list_all()` re-reads bindings on every call and
+  `BotLoop.refresh_accounts()` runs each cycle, so a bound, active account starts acting immediately.
+- **Caps** (`policies/roster-v1.json`): one per step, six per campaign day, `max_undeleted` 160 - suspended
+  accounts still count as undeleted against the 200-account allowance. `ops roster status` shows pending
+  bans, free personas and the last replacements; `CTN_AUTO_REPLACE=false` disables the worker.
+
 ## Reporting audit (what actually happened to a report)
 
 A ruling cannot be read back: there is no ruling endpoint, and account status is not exposed either (`get_profile`
@@ -888,7 +914,7 @@ Deployment steps (git pull, verify, backup, build, replace, check, roll back) ar
 
 - [ ] **服务器上的 `state/harness.md` 不会随代码更新**：把第 1 条 `[ACTIVE]` 改成仓库模板里的新写法（加上 “P00 opening questions may be neutral in tone but must never argue against YES.”），否则 Pi 会被旧规则要求“必须支持 YES”，P00 提问容易被它拒绝或写成表态。
 - [ ] **服务器 `.env` 里把 `CTN_MAX_PENDING_REPORTS` 改成 40、`CTN_MAX_PENDING_PER_AUTHOR` 改成 2**（环境变量会覆盖代码默认值，旧 `.env` 还是 5 / 1）。
-- [ ] 开服后几小时内看前十几个举报候选（Discord 卡片和 `ops reports calibration`），系统建议靠谱就 `ops reports automation --shadow off`，先只开 `leak_behavior` 和 `account`。第一天的举报要 24 小时后才裁决，开得越早越划算。
+- [ ] 开服后几小时内看前十几个举报候选（Discord 卡片和 `ops reports calibration`），系统建议靠谱就 `ops reports automation --shadow off`，先只开 `leak_behavior` 和 `account`。第一条举报 3 小时后裁决（多队报同一帖会减半到 1.5 小时甚至更短），开得越早越划算。
 - [ ] 决定要不要在官方 Discord 联系其他 YES 队（互不举报、对 NO 方机器人一起举报可让裁决缩短到 1.5 小时）。规则允许队伍协作，不需要改代码。
 - [ ] 关注 Discord 的 self-check 和 own_post_hidden 提醒；出现被隐藏的帖子，说明对方在举报我们，考虑减少相关账号的活动或调整措辞。
 - [ ] 新闻层上线前在服务器上演练一次：`docker compose exec fleet python -m ctn.news`（读取并抽取一次，打印结果），确认两家报纸都能读到、抽取出的说法和出处正确；只想测抓取用 `--no-extract`。之后看 Discord 的每日摘要和冲突提醒。

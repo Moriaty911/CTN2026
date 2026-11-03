@@ -76,6 +76,66 @@ class PromptTests(unittest.TestCase):
         self.assertEqual(style, 'Shared places need shared rules.')
 
 
+class OveruseTests(unittest.TestCase):
+    """2026-10-27: 5,877 replies in 3 days converged on a few constructions; cap their share of the window."""
+
+    def test_phrase_capped_once_the_team_leans_on_it(self):
+        recent = ["I'd want the list first." if i < 9 else f'Post {i} about the ferry.' for i in range(40)]
+        self.assertIn("overused_phrase", phrasing.overuse_reason("I'd want the venue list in writing.", recent))
+        self.assertEqual(phrasing.overuse_reason('The ferry queue at six is the whole story.', recent), '')
+
+    def test_occasional_use_is_fine(self):
+        recent = ["I'd want it spelled out."] + [f'Post {i} about the depot.' for i in range(39)]
+        self.assertEqual(phrasing.overuse_reason("I'd want the list in writing.", recent), '')
+
+    def test_opening_pattern_capped(self):
+        recent = ['What would the list cover?', 'What would a list change?'] + [f'Post {i} about the bus.' for i in range(13)]
+        self.assertIn('overused_opening', phrasing.overuse_reason('What would the list look like?', recent))
+        self.assertEqual(phrasing.overuse_reason('My nan queues at six for dialysis.', recent), '')
+
+    def test_gate_rejects_through_repetition_reason(self):
+        recent = ['who checks at the gate' + f' in post {i}' for i in range(10)] + [f'Post {i} about the ferry.' for i in range(10)]
+        self.assertIn('overused_phrase', phrasing.repetition_reason('Fine in principle, but who checks at the gate?', recent))
+
+    def test_prompt_tells_the_model_what_to_avoid(self):
+        text = phrasing.instructions('seed')
+        self.assertIn('avoid them', text)
+        self.assertIn('who checks', text)
+
+    def test_stats_report_the_capped_shares(self):
+        store = StateStore(); self.addCleanup(store.close)
+        for i in range(6):
+            sent(store, f's{i}', f"Sentence {i}. I'd want the list in writing.", at=i + 1)
+        stats = phrasing.stats(store, n=10)
+        self.assertIn("i'd want", stats['overused'])
+        self.assertGreaterEqual(stats['overused']["i'd want"], 0.5)
+
+
+class UnansweredDoubtTests(unittest.TestCase):
+    """2026-10-29: towards-neither outran towards-YES 29:25, mostly replies that asked back instead of answering."""
+
+    def test_a_restated_doubt_gets_one_reason_clause(self):
+        target = 'Fine, but what about the family that cannot get the paperwork in time?'
+        self.assertTrue(phrasing.unanswered_doubt(target, 'Would you accept a paper route at the door?'))
+        self.assertEqual(
+            phrasing.unanswered_doubt(target, 'Because the paper route exists on the same day, the queue is the barrier.'),
+            '')
+
+    def test_reason_clause_is_recognised_in_its_common_shapes(self):
+        target = 'Still not convinced.'
+        for reply in ('Which is why the list has to be published first.',
+                      "That's why the paper option matters.",
+                      'It comes down to who checks the code at the door.'):
+            self.assertEqual(phrasing.unanswered_doubt(target, reply), '', reply)
+
+    def test_posts_without_a_doubt_are_left_alone(self):
+        self.assertEqual(phrasing.unanswered_doubt('The hospital numbers were bad last time.', 'What do you think?'), '')
+        self.assertEqual(phrasing.unanswered_doubt('', ''), '')
+
+    def test_a_plain_statement_is_not_treated_as_a_doubt(self):
+        self.assertEqual(phrasing.unanswered_doubt('I voted yes last time too.', 'Same here, that is why I am a yes again.'), '')
+
+
 if __name__ == '__main__':
     unittest.main()
 

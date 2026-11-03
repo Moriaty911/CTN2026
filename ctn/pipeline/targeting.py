@@ -184,10 +184,16 @@ def thread_depth(store, post, limit=4):
     return depth
 
 
+# Accounts registered before the competition opened are citizens; everything above is a player.
+CITIZEN_MAX_ID = 2343
+
+
 def deep_thread_reason(store, post, now=None):
     """Skip targets deep in a thread (NPCs rarely reply there), unless a citizen is answering us directly."""
     rules = POLICY['thread_depth']
-    if thread_depth(store, post) <= int(rules['max_target_depth']):
+    citizen = 1 <= int(post.get('author_id') or 0) <= CITIZEN_MAX_ID
+    limit = int(rules.get('citizen_max_target_depth', rules['max_target_depth'])) if citizen else int(rules['max_target_depth'])
+    if thread_depth(store, post) <= limit:
         return ''
     if counted_reply_to_us(store, post):
         ts = time.time() if now is None else now
@@ -218,10 +224,20 @@ _PERSUADABLE = re.compile(r"\b(not sure|unsure|undecided|on the fence|can'?t dec
                           r"leaning|still deciding|mixed feelings|don'?t know (how|what|whether))\b", re.I)
 
 
+_CONCERN = re.compile(r"\b(not against|not anti|not opposed|personal choice|my body|bodily autonomy|"
+                      r"exempt\w*|fine print|the details|as long as|if the (rule|plan|policy|law)|"
+                      r"show us|show me|spell (it|this) out|works? out how)\b", re.I)
+
+
 def persuadable(post):
-    """A question or open hesitation: the undecided readers the client brief asks us to find."""
+    """A question, open hesitation or an objection that leaves room: the undecided readers the brief asks us to find."""
     text = str(post.get('text', ''))
-    return bool(_PERSUADABLE.search(text)) or text.rstrip().endswith('?')
+    return bool(_PERSUADABLE.search(text)) or bool(_CONCERN.search(text)) or text.rstrip().endswith('?')
+
+
+def concerned(post):
+    """Objecting but not closed off: 'I'm not against vaccines, I'm against how this rule works'."""
+    return bool(_CONCERN.search(str(post.get('text') or '')))
 
 
 def audience(store, post, now=None):
@@ -318,6 +334,17 @@ def skip_reason(store, post, relative_stance=None, now=None):
 NOT_AMPLIFY = "COALESCE(json_extract(metadata_json,'$.engine'),'')<>'amplify'"
 
 
+def is_verified_author(store, author):
+    """True for the platform's own verified accounts (newspapers, campaign leads, moderators)."""
+    if not author:
+        return False
+    try:
+        prof = store.get_bot_profile(author)
+    except Exception:
+        return False
+    return bool(prof.get('status') == 'verified_npc' or prof.get('verified'))
+
+
 def cap_reason(store, *, target_author='', root_post_id='', account='', now=None, include_account=True):
     """Team-wide anti-pile-on caps (per target author, per thread) and per-account daily volume."""
     ts = time.time() if now is None else now
@@ -328,12 +355,16 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
         if target_author:
             n = store._conn.execute(f"SELECT COUNT(*) FROM action_intents WHERE kind='reply' AND {live} AND created_at>=? "
                                     f"AND json_extract(metadata_json,'$.target_author')=? AND {NOT_AMPLIFY}", (start, target_author)).fetchone()[0]
-            if n >= caps['per_author_per_day']:
+            # Verified accounts answer more often and carry the argument; they get a slightly wider budget (2026-10-28).
+            verified_author = is_verified_author(store, target_author)
+            per_author = int(caps.get('verified_per_author_per_day', caps['per_author_per_day'])) if verified_author else int(caps['per_author_per_day'])
+            min_gap = float(caps.get('verified_author_min_gap_seconds', caps.get('per_author_min_gap_seconds', 0))) if verified_author else float(caps.get('per_author_min_gap_seconds', 0))
+            if n >= per_author:
                 return 'author_daily_cap'
             # A citizen just persuaded in a session is less receptive to the same push (organiser note 2026-10-19).
             last = store._conn.execute(f"SELECT MAX(created_at) FROM action_intents WHERE kind='reply' AND {live} "
                                        f"AND json_extract(metadata_json,'$.target_author')=? AND {NOT_AMPLIFY}", (target_author,)).fetchone()[0]
-            if last and ts - float(last) < float(caps.get('per_author_min_gap_seconds', 0)):
+            if last and ts - float(last) < min_gap:
                 return 'author_min_gap'
             if (n >= 1 and caps.get('second_reply_requires_response')
                     and not author_responded(store, target_author, last)):
@@ -362,9 +393,26 @@ def cap_reason(store, *, target_author='', root_post_id='', account='', now=None
     return ''
 
 
+def pacing_rule(store, account, now):
+    """This account's cadence right now: tighter for its first hours, because a brand-new account at adult
+    volume is what gets it looked at. 2026-10-27: no account had ever been suspended within 37 h of its first
+    post, so this is precaution, not a measured effect."""
+    rule = launch_rule(store, 'reply_pacing')
+    warm = launch_rule(store, 'warmup') or {}
+    hours = float(warm.get('hours') or 0)
+    if hours > 0:
+        with store._lock:
+            row = store._conn.execute('SELECT initialised_at FROM account_lifecycle WHERE account_id=?', (account,)).fetchone()
+        started = float(row[0]) if row and row[0] else 0.0
+        if started and now - started < hours * 3600:
+            return {'per_hour': int(warm.get('per_hour') or rule['per_hour']),
+                    'min_gap_seconds': int(warm.get('min_gap_seconds') or rule['min_gap_seconds'])}
+    return rule
+
+
 def account_pacing_reason(store, account, now):
     """Spread an account's daily volume: a fresh account replying every two minutes reads as a bot."""
-    rule = launch_rule(store, 'reply_pacing')
+    rule = pacing_rule(store, account, now)
     stamps = [r[0] for r in store._conn.execute(
         "SELECT created_at FROM action_intents WHERE account_id=? AND kind IN ('post','reply') "
         "AND status IN ('claimed','sending','unknown','succeeded') AND created_at>=? "

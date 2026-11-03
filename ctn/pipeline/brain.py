@@ -46,9 +46,22 @@ from ..persona import PersonaRouter
 from ..persona.router import _extract_jev_answers, _get_val
 from ..jev.expansion import expansion_decision
 from ..persona.policy import REPLY_POLICY
+from .targeting import CITIZEN_MAX_ID
 
 # Generic gap used for the P08 clarification brief. It deliberately assumes no facts.
 DEFAULT_INFORMATION_GAP = "Which specific policy detail, condition or evidence does the author mean?"
+
+
+def _is_citizen(post) -> bool:
+    """Citizens are the accounts registered before the competition opened; they are who we are persuading."""
+    if hasattr(post, 'get'):
+        author_id = post.get('author_id')
+    else:  # a Post carries the platform payload in `.raw`
+        author_id = (getattr(post, 'raw', None) or {}).get('author_id')
+    try:
+        return 1 <= int(author_id or 0) <= CITIZEN_MAX_ID
+    except (TypeError, ValueError):
+        return False
 
 SUPPORTED_REPLY_PURPOSES: tuple[str, ...] = ("P01", "P02", "P03", "P07", "P08")
 
@@ -426,10 +439,12 @@ class JevLlmBrain:
         references=self.router.store.publication_references()
         if snapshot:references += [s['text'] for s in snapshot.to_dict()['styles']]
         if too_close(draft.reply,references):pv1=PostflightVerdict(False,'near_duplicate_or_style_copy')
-        from ..phrasing import recent_texts,repetition_reason
+        from ..phrasing import recent_texts,repetition_reason,unanswered_doubt
         recent=recent_texts(self.router.store)
         repeated=repetition_reason(draft.reply,recent) if pv1.can_send else ''
         if repeated:pv1=PostflightVerdict(False,repeated)
+        doubt=unanswered_doubt(post.text,draft.reply) if pv1.can_send and _is_citizen(post) else ''
+        if doubt:pv1=PostflightVerdict(False,doubt)
         self.router.store.record_quality(routing.account_id,post.post_id,pv1.can_send,pv1.reason,'primary')
         if pv1.can_send:
             self._batch_materials(detail,draft,data,post)
@@ -464,6 +479,8 @@ class JevLlmBrain:
         if too_close(draft_retry.reply,references):pv2=PostflightVerdict(False,'near_duplicate_or_style_copy')
         repeated=repetition_reason(draft_retry.reply,recent) if pv2.can_send else ''
         if repeated:pv2=PostflightVerdict(False,repeated)
+        doubt=unanswered_doubt(post.text,draft_retry.reply) if _is_citizen(post) else ''
+        if doubt:detail['doubt_unanswered']=doubt
         self.router.store.record_quality(routing.account_id,post.post_id,pv2.can_send,pv2.reason,'primary')
         if pv2.can_send:
             self._batch_materials(detail,draft_retry,data,post)

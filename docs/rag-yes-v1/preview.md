@@ -520,7 +520,85 @@ Discuss understandable visitor-facing rules as a proposal. Separate public-space
 依据：F001, F014, F030；未知：U005, U015, U019。
 用途：P01, P02, P03, P07；原文线索：新增补充。
 
-### A022 · 预防是为了保持开放（回应旅游顾虑）
+### A022 · 两级社会是真实担忧，要用具体安排回答
+
+The two-tier worry is fair: a proof rule can sort people into those who move freely and those who cannot, so the answer has to be the exemptions and the transition, not a denial.
+
+State the objection in its strongest form before answering it. Do not claim access is unaffected; point at the concrete design choices (medical exemptions, temporary proof, who checks whom) and name which ones the campaign cannot answer.
+
+**可能遇到的合理质疑：** A rule that ties ordinary places to a certificate does create a class of people who cannot enter them.
+
+**边界：** We cannot claim the rule has no unequal effects. What can be claimed is that exemptions and review decide whether the difference is tolerable.
+
+依据：F001, F011, F029；未知：U001, U004, U011, U012。
+用途：P02, P03, P07；原文线索：R011, R029, R006, R017。
+
+### A023 · 把两级社会变成可以检验的问题
+
+The two-tier charge should be judged by what can be checked: who is exempt, how an appeal works, and whether the rule sunsets.
+
+Turn a rhetorical charge into testable design questions. Answer with mechanisms (review, sunset, appeal route) instead of asserting that nobody will be left out, and say plainly which answers we do not have.
+
+**可能遇到的合理质疑：** Without published exemptions and an appeal route, a certificate requirement is a permanent second class in practice.
+
+**边界：** Mechanisms reduce the risk; they are not evidence that no one will be excluded, and the campaign has not published every detail.
+
+依据：F013, F025, F026；未知：U008, U014, U015。
+用途：P03, P07；原文线索：R013, R034, R037, R039。
+
+### A024 · 回答成本：没人给出数字，所以先把合规路径写窄
+
+The honest answer on cost is that no figure has been published, and the businesses most exposed are the ones on the tourist routes; that argues for a narrow, published compliance route rather than for pretending the cost is zero.
+
+Name the cost instead of denying it. Point at what can be limited by design (which settings, which hours, who checks), and say plainly that a cost estimate does not exist yet. Do not claim a net benefit for small business.
+
+**可能遇到的合理质疑：** A new step at the door costs small businesses money and staff time they do not have.
+
+**边界：** No cost estimate for businesses has been published (U002); the claim is about how to limit the burden, not that the burden is small.
+
+依据：F009, F014, F019, F030；未知：U002, U015。
+用途：P02, P03；原文线索：新增补充。
+
+### A025 · 回答豁免：细则应该在投票前写下来
+
+The exemption list is the part that has to be written before the vote, not after: who qualifies, how it is shown, and what happens when the paperwork is missing on the day.
+
+Treat exemptions as the test of the policy rather than a detail. Give the mechanism (a code on the pass, a paper route, a same-day appeal) and concede that the list itself is unpublished.
+
+**可能遇到的合理质疑：** A requirement with unclear exemptions leaves the people who cannot be vaccinated stuck at the door.
+
+**边界：** The exemption list has not been published (U004); this is a demand about how it should be written, not a description of settled policy.
+
+依据：F001, F005, F011；未知：U004, U009, U013。
+用途：P02, P03, P07；原文线索：新增补充。
+
+### A026 · 回答执行：谁检查，决定这套规则能不能站住
+
+Who checks is the detail that decides whether this works: a school gate and a bottle shop should not be asking the same question, and a shop assistant should not be reading medical documents.
+
+Split enforcement by setting instead of defending a blanket rule. Concede that a retail worker is not a health official, and say what the alternative is (tiered settings, a code rather than paperwork).
+
+**可能遇到的合理质疑：** Outsourcing civil enforcement to shop staff turns a policy problem into an argument at the counter.
+
+**边界：** No enforcement plan has been published (U009); the claim is that the plan must be tiered, not that a workable one already exists.
+
+依据：F001, F015, F019；未知：U009, U010, U012。
+用途：P02, P03；原文线索：新增补充。
+
+### A027 · 回答数据：通行证只证明状态，不记录行程
+
+The pass should prove a status and nothing else: no itinerary, no purchase history, and a deletion date written into the rule.
+
+Answer the surveillance fear with a design limit rather than reassurance. Say what the pass must not carry, and admit that retention rules are unpublished.
+
+**可能遇到的合理质疑：** A proof system that records where people went is a surveillance system with a health label.
+
+**边界：** No data-retention rule has been published (U006); the claim is a limit the rule should carry, not a description of what it does.
+
+依据：F001, F011；未知：U006, U008。
+用途：P02, P03；原文线索：新增补充。
+
+### A028 · 预防是为了保持开放（回应旅游顾虑）
 
 I support public-access proof because I want Kingstonia to stay open, and preventing a wave is part of that.
 
@@ -533,7 +611,7 @@ Answer the tourism worry on its own terms. COVID restrictions disrupted business
 依据：F009, F014, F030, F033；未知：U015, U019。
 用途：P01, P02, P03, P07；原文线索：新增补充。
 
-### A023 · 正面回应“两级社会”的担忧
+### A029 · 正面回应“两级社会”的担忧
 
 I support the requirement and take the two-tier worry seriously instead of waving it away.
 
@@ -741,6 +819,30 @@ The supplied material does not confirm whether vaccination is free or subsidised
 The supplied material does not specify medical exemptions or alternatives. That does not establish that none exist; I cannot promise a particular arrangement.
 
 主题关联：A015；用途：P02；长度：158。
+
+示例内容依赖：U004；实际生成仍须获得对应核准材料。
+
+### S031 · P02：承认两级担忧，再用机制回答
+
+The two-tier worry is fair: a certificate deciding who boards a tram does create a difference between people. What should settle it is who is exempt, how appeals work, and whether the rule is reviewed. I would rather name what we do not know.
+
+主题关联：A022；用途：P02, P07；长度：242。
+
+示例内容依赖：U001, U011；实际生成仍须获得对应核准材料。
+
+### S032 · P03：先承认成本，再给窄一点的合规路径，最后说个人理由
+
+The cost is real and nobody has published a number for it, which is exactly why the route should be narrow: a published venue list, one check at the door, and paper that works the same day. That is the version of this I can vote for.
+
+主题关联：A024；用途：P03；长度：233。
+
+示例内容依赖：F014, U002；实际生成仍须获得对应核准材料。
+
+### S033 · P03：回豁免——承认不知道清单，说清楚应该怎么写
+
+I do not have the exemption list, and I am not going to pretend I do. What I want written down before we vote is how it is shown at the door and what happens when the paperwork is missing that day. That is why I am still a yes.
+
+主题关联：A025；用途：P03；长度：227。
 
 示例内容依赖：U004；实际生成仍须获得对应核准材料。
 
@@ -979,18 +1081,18 @@ What supports a clinical observation, authority claim or statement about another
 | [R003](../../vote_for_raw_rag.md#L5) | 改写并合并 | A001, A010, U016 | 保留共同责任；去掉接种状态等同传播状态的暗示和把权利简单排序的绝对结论。 |
 | [R004](../../vote_for_raw_rag.md#L7) | 改写并合并 | A005, A012, U020, U022 | 保留提前行动主张；删除把延误全归因于拒绝者的指责，不虚构当前疫情阶段。 |
 | [R005](../../vote_for_raw_rag.md#L9) | 改写并合并 | A005, A006, U015 | 保留公共准入立场；不把最佳或避免重演当作已证实政策效果。 |
-| [R006](../../vote_for_raw_rag.md#L11) | 改写并合并 | A007, A015, U001 | 把 12 岁门槛识别为作者提案而非官方规则；保留学校主题，不导入该门槛。 |
+| [R006](../../vote_for_raw_rag.md#L11) | 改写并合并 | A007, A015, U001, A022 | 把 12 岁门槛识别为作者提案而非官方规则；保留学校主题，不导入该门槛。 |
 | [R007](../../vote_for_raw_rag.md#L13) | 仅保留主题 | A007, U018 | 保留学校制度问题；未证实的本地麻疹、脊灰入学制度不进入事实库。 |
 | [R008](../../vote_for_raw_rag.md#L15) | 仅保留主题 | A002, U021, U022 | 保留工作人员视角；移除未绑定的医疗职业自述、接种率暗示和粗口。 |
 | [R009](../../vote_for_raw_rag.md#L17) | 仅保留主题 | A004, U017, U021 | 保留照护关切；孩子和哮喘经历不能赋给共享语料使用者，也不作为医学效果证据。 |
 | [R010](../../vote_for_raw_rag.md#L19) | 保留为论点 | A002, S002 | 原句保留为规范性论点摘录；工作人员利益值得考虑，不据此保证疫苗或准入规则完全保护他人。 |
-| [R011](../../vote_for_raw_rag.md#L21) | 改写并合并 | A009, S009 | 保留身体强制与准入条件的区别，同时承认工作和通勤受限会形成实际压力。 |
+| [R011](../../vote_for_raw_rag.md#L21) | 改写并合并 | A009, S009, A022 | 保留身体强制与准入条件的区别，同时承认工作和通勤受限会形成实际压力。 |
 | [R012](../../vote_for_raw_rag.md#L23) | 改写并合并 | A001, A010, A012 | 保留共同责任；去掉对所有反对者动机的概括，清理 Markdown 转义。 |
-| [R013](../../vote_for_raw_rag.md#L25) | 改写并合并 | A004, A017, U008, U015 | 保留保护他人主题；不承诺疫情不会长期化或政策必然短期结束。 |
+| [R013](../../vote_for_raw_rag.md#L25) | 改写并合并 | A004, A017, U008, U015, A023 | 保留保护他人主题；不承诺疫情不会长期化或政策必然短期结束。 |
 | [R014](../../vote_for_raw_rag.md#L27) | 改写并合并 | A001, A010, U016 | 保留共同空间的取舍讨论；删除贬低和接种即不传播的隐含保证。 |
 | [R015](../../vote_for_raw_rag.md#L29) | 仅保留主题 | A005, U015, U018 | 保留提前准备主题；不把其他疾病的历史或消除疾病类比作为该政策效果的证据。 |
 | [R016](../../vote_for_raw_rag.md#L31) | 改写并合并 | A006, U015, U018 | 保留商户与员工利益；删除绝对法律权利和最优政策断言。 |
-| [R017](../../vote_for_raw_rag.md#L33) | 改写并合并 | A006, A015, U002 | 保留共同责任讨论；删除免费疫苗假设和拒绝者应被排除的动机判断。 |
+| [R017](../../vote_for_raw_rag.md#L33) | 改写并合并 | A006, A015, U002, A022 | 保留共同责任讨论；删除免费疫苗假设和拒绝者应被排除的动机判断。 |
 | [R018](../../vote_for_raw_rag.md#L35) | 改写并合并 | A008, A014, U010 | 保留交通和场所差异的讨论；公园仍在公投问题内，差异化实施不能冒充官方豁免。 |
 | [R019](../../vote_for_raw_rag.md#L37) | 仅保留主题 | A008, U016, U021 | 保留共享规则的价值判断；移除本人已接种经历，不保证对传播的效果。 |
 | [R020](../../vote_for_raw_rag.md#L39) | 改写并合并 | A003, A011, U015, U016 | 把疫苗试验证据、接种覆盖率和证明制度的增量效果分开，不沿用必然加快的推论。 |
@@ -1002,17 +1104,17 @@ What supports a clinical observation, authority claim or statement about another
 | [R026](../../vote_for_raw_rag.md#L51) | 改写并合并 | A004, A015, U001, U017 | 保留保护他人关切；删除儿童不能接种的未经确认断言，不虚构 H2D2 人群风险排序。 |
 | [R027](../../vote_for_raw_rag.md#L53) | 仅保留主题 | A003, A019, U020, U021 | 保留医疗承载和历史主题；明确 COVID 与 H2D2 区别，不保留未绑定的医院亲历。 |
 | [R028](../../vote_for_raw_rag.md#L55) | 改写并合并 | A006, U015 | 保留恢复生活的目标；不把疫苗与证明制度合并为一定更快恢复的因果保证。 |
-| [R029](../../vote_for_raw_rag.md#L57) | 改写并合并 | A009, U015 | 保留准入政策立场；去掉必然避免封控和以迫使他人为唯一理由的表达。 |
+| [R029](../../vote_for_raw_rag.md#L57) | 改写并合并 | A009, U015, A022 | 保留准入政策立场；去掉必然避免封控和以迫使他人为唯一理由的表达。 |
 | [R030](../../vote_for_raw_rag.md#L59) | 仅保留主题 | A008, U016, U021 | 保留通勤关切；移除本人已接种自述，不把未接种乘客判为传染源。 |
 | [R031](../../vote_for_raw_rag.md#L61) | 改写并合并 | A001, A020 | 保留公共责任价值判断；删去不值得讨论的口吻，不把口号当作科学结论。 |
 | [R032](../../vote_for_raw_rag.md#L63) | 排除 | U021, U022 | 对反对者是否照护过脆弱亲属的推测完全排除；没有可验证依据，也没有独立回应价值。 |
 | [R033](../../vote_for_raw_rag.md#L65) | 改写并合并 | A007, A011, U015, U022 | 保留学校和工作生活场景；删除科学必然支持该具体准入制度的跳步。 |
-| [R034](../../vote_for_raw_rag.md#L67) | 改写并合并 | A017, U005, U015 | 保留实施成本与疫情成本的取舍；30 秒核验与一定避免停摆均未确认。 |
+| [R034](../../vote_for_raw_rag.md#L67) | 改写并合并 | A017, U005, U015, A023 | 保留实施成本与疫情成本的取舍；30 秒核验与一定避免停摆均未确认。 |
 | [R035](../../vote_for_raw_rag.md#L69) | 仅保留主题 | A005, A019, U018 | 保留历史比较主题；不同制度是否存在、是否适用不能用负责任地区的泛称证明。 |
 | [R036](../../vote_for_raw_rag.md#L71) | 仅保留主题 | A004, U016, U021 | 保留照护关切；父母年龄与个人家事不进入共享事实，不把接种状态等同保护程度。 |
-| [R037](../../vote_for_raw_rag.md#L73) | 改写并合并 | A006, A017, U008, U015 | 保留负担比较；临时、有效和最小干扰均不能作为已确认属性。 |
+| [R037](../../vote_for_raw_rag.md#L73) | 改写并合并 | A006, A017, U008, U015, A023 | 保留负担比较；临时、有效和最小干扰均不能作为已确认属性。 |
 | [R038](../../vote_for_raw_rag.md#L75) | 改写并合并 | A001, A010, U016 | 保留公共准入主张；去掉未接种者必然把场所变成危险区的概括。 |
-| [R039](../../vote_for_raw_rag.md#L77) | 改写并合并 | A017, U003, U014, U015 | 保留减少干扰的目标；移除多数人已接种与实施后即可恢复的无依据结论。 |
+| [R039](../../vote_for_raw_rag.md#L77) | 改写并合并 | A017, U003, U014, U015, A023 | 保留减少干扰的目标；移除多数人已接种与实施后即可恢复的无依据结论。 |
 | [R040](../../vote_for_raw_rag.md#L79) | 改写并合并 | A014, A020, S020 | 保留直接 YES 立场和场所主题；保护、营业、上课写作目标，不作结果保证。 |
 | [R041](../../vote_for_raw_rag.md#L81) | 仅保留主题 | A004, U017, U021 | 保留照护主题；74 岁母亲及免疫抑制经历不复制到现有任意 persona。 |
 | [R042](../../vote_for_raw_rag.md#L83) | 改写并合并 | A018, S018 | 保留先承认担忧的方向；删除泛化心理判断和以排除命令替代回答。 |

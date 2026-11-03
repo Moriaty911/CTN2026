@@ -1,0 +1,12 @@
+{
+  "schema_version": "ctn-roster.v1",
+  "version": "roster.v1",
+  "enabled": true,
+  "top_up": true,
+  "interval_seconds": 120,
+  "max_per_step": 1,
+  "max_per_day": 6,
+  "detect_window_seconds": 21600,
+  "max_undeleted": 160,
+  "notes": "2026-10-30: 54 of 102 accounts were suspended, 3-4 a day, and every replacement needed a human plus a fleet restart. A suspended account keeps mode='active' and therefore keeps one of the 50 active-persona slots, so the replacement is rejected with 'active persona limit exceeded' until the dead persona is parked - stale_slots()/retire() fix that. top_up fills the fleet back to the active target even with no fresh suspension (a ban wave plus manual retirements left 48 of 50 active). max_per_day 6 keeps a mass ban from spending the 200-account allowance in one afternoon; max_undeleted 160 leaves headroom under the same ceiling because suspended accounts still count as undeleted. Detection is passive: the actuator writes status='failed', detail='account suspended' on the rejected write and reconcile keeps the row, so platform notifications (which we cannot read) are not needed."
+}

@@ -1,22 +1,73 @@
 {
   "version": "phrasing.v1",
-  "notes": "Live 2026-10-19: of 52 replies/originals, 37% opened with 'Fair point / Fair enough / You're right' and 27% said 'I'm voting YES'; many accounts sharing a template are easy to group. Drafts get a random opening style and rarely a vote declaration; a local gate rejects a draft whose opening, closing or stock phrase the team used recently.",
+  "notes": "Live 2026-10-19: of 52 replies/originals, 37% opened with 'Fair point / Fair enough / You're right' and 27% said 'I'm voting YES'; many accounts sharing a template are easy to group. Drafts get a random opening style and rarely a vote declaration; a local gate rejects a draft whose opening, closing or stock phrase the team used recently. 2026-10-27: 5,877 replies over 3 days show one construction family dominating (24.4% contain \"I'd want\", 3.6% \"spelled out\", 2.7% \"who checks\", 1.3% \"what data would be collected\"; openings cluster on \"the venue list\" 117, \"what would the/a\" 177, \"I support requiring/the\" 170, \"I run a|music\" 101). 11 of 408 recent posts were ruled inauthentic; those read exactly like this house style, so the working assumption (unproven) is that the same construction in every thread is what a moderator recognises.",
   "recent_window": 40,
   "opening_words": 3,
   "closing_words": 4,
   "max_repeats": 2,
   "stance_share": 0.15,
   "stock_phrases": [
-    "i'm voting yes", "i am voting yes", "i'll be voting yes", "i'd vote yes", "voting yes because",
-    "fair point", "fair enough", "fair question", "you're right", "you are right", "that's a fair",
-    "i support the requirement", "i support the proof requirement", "before i picture",
-    "i want this to work", "#voteyes", "#voteno"
+    "i'm voting yes",
+    "i am voting yes",
+    "i'll be voting yes",
+    "i'd vote yes",
+    "voting yes because",
+    "fair point",
+    "fair enough",
+    "fair question",
+    "you're right",
+    "you are right",
+    "that's a fair",
+    "i support the requirement",
+    "i support the proof requirement",
+    "before i picture",
+    "i want this to work",
+    "#voteyes",
+    "#voteno"
   ],
-  "stock_openings": ["fair point", "fair enough", "fair question", "you're right", "you are right", "that's a fair", "that worry", "i hear you", "good question", "great point"],
+  "stock_openings": [
+    "fair point",
+    "fair enough",
+    "fair question",
+    "you're right",
+    "you are right",
+    "that's a fair",
+    "that worry",
+    "i hear you",
+    "good question",
+    "great point"
+  ],
   "opening_styles": [
     "Open with one concrete detail from your own daily life that bears on the point.",
     "Open with the specific thing the author mentioned (a place, a service, a rule), not with a reaction to them.",
     "Open by stating your point directly in your own words.",
     "Open with a short, genuine question about the specific situation."
-  ]
+  ],
+  "overuse": {
+    "notes": "Caps apply to the recent window: when that share of recent posts already uses the construction, a draft that uses it again is rejected and redrafted.",
+    "opening_patterns": [
+      {
+        "pattern": "^(the venue list|what would (the|a|an) )",
+        "max_share": 0.06
+      },
+      {
+        "pattern": "^(i support (requiring|the)|i run (a|music))",
+        "max_share": 0.08
+      }
+    ],
+    "phrase_caps": {
+      "i'd want": 0.18,
+      "spelled out": 0.06,
+      "who checks": 0.05,
+      "what data would be collected": 0.04,
+      "the venue list": 0.05
+    },
+    "avoid_in_prompt": [
+      "I'd want ... spelled out",
+      "who checks ...",
+      "what data would be collected",
+      "the venue list",
+      "I support requiring ... but"
+    ]
+  }
 }

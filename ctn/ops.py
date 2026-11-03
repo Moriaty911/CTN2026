@@ -13,6 +13,22 @@ from .persona import AccountState
 from .storage import StateStore
 from .storage.sqlite_store import BACKUP_AUDIT_TABLES, gzip_backup
 
+def post_plan(registry, persona_id, text, purpose='P01', *, decision_id=''):
+    """Resolve one explicit original: which account, under which catalog, with which metadata."""
+    import time as _time
+    import uuid
+    persona=registry.get(persona_id)
+    if persona is None:raise ValueError('unknown persona %s'%persona_id)
+    if not persona.account_id:raise ValueError('persona %s is not bound to an account'%persona_id)
+    body=str(text or '').strip()
+    if not body:raise ValueError('text is empty')
+    return {'account':persona.account_id,'text':body,
+            'decision_id':decision_id or ('ops-'+uuid.uuid4().hex[:10]),
+            'metadata':{'persona_id':persona.persona_id,'persona_version':persona.version,
+                        'catalog_hash':registry.catalog_hash,'purpose':purpose,
+                        'engine':'operator','created_by':'ops','created_at':_time.time()}}
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-file')
@@ -40,6 +56,11 @@ def main(argv=None):
     p=subs.add_parser('launch');p.add_argument('--batches',choices=['on','off']);p.add_argument('--initialise-window',type=int,help='seconds to spread initialise posts over');p.add_argument('--unslow',help='restore the normal daily cap for an account');p.add_argument('--amplify',choices=['auto','off','low','high','max'],help='team amplification level; auto follows the phase schedule')
     p.add_argument('--push',help="'next' pushes the next original we publish towards trending, a post id pushes that original of ours now, 'cancel' drops a pending 'next'")
     p.add_argument('--push-reposts',type=int);p.add_argument('--push-replies',type=int)
+    p.add_argument('--boost',help='post id: add more of our accounts\' likes to that one original (no level change)')
+    p.add_argument('--boost-likes',type=int,help='how many likes --boost should top the plan up to (default 55)')
+    p=subs.add_parser('post',help='publish one explicit original from a bound persona (operator experiment)')
+    p.add_argument('operation',choices=['send']);p.add_argument('--persona',required=True)
+    p.add_argument('--text',required=True);p.add_argument('--purpose',default='P01');p.add_argument('--execute',action='store_true')
     p=subs.add_parser('blacklist',help='accounts whose every post is reported (ctn/blacklist.py)')
     p.add_argument('operation',choices=['list','stats','add','remove','import','scan','on','off'])
     p.add_argument('target',nargs='?',help='account id for add/remove, file for import')
@@ -48,6 +69,7 @@ def main(argv=None):
     p=subs.add_parser('rag-withdraw');p.add_argument('snapshot_id',nargs='?');p.add_argument('--reference');p.add_argument('--corpus-hash')
     p=subs.add_parser('account');p.add_argument('account_id');p.add_argument('--mode',choices=['active','standby','dormant'])
     p.add_argument('--tier',choices=['standard','high']);p.add_argument('--original-locked-until',type=float)
+    p=subs.add_parser('roster');p.add_argument('operation',choices=['status','run']);p.add_argument('--dry-run',action='store_true')
     p=subs.add_parser('account-activity');p.add_argument('source',help='confirmed account_id/action_count/observed_at/source JSON')
     p=subs.add_parser('import-events');p.add_argument('source',help='JSON array of explicit, verified ruling events')
     p=subs.add_parser('import-accounts');p.add_argument('source',help='legacy JSON account-state mapping')
@@ -81,7 +103,7 @@ def main(argv=None):
             preview=render_preview(data)
             if args.output:Path(args.output).write_text(preview)
             else:print(preview)
-        else:print(json.dumps({'valid':True,'personas':80,'version':data['catalog_version'],'hash':digest(data)}))
+        else:print(json.dumps({'valid':True,'personas':len(data['personas']),'version':data['catalog_version'],'hash':digest(data)}))
         return 0
     path=settings.database_path(args.state_file)
     store=StateStore(path)
@@ -185,13 +207,35 @@ def main(argv=None):
                 from ctn.amplify import request_push
                 try:pushed=request_push(store,args.push,reposts=args.push_reposts,replies=args.push_replies)
                 except ValueError as exc:parser.error(str(exc))
+            if args.boost:
+                from ctn.amplify import amplifiable_accounts, boost_post
+                try:boosted=boost_post(store,args.boost,amplifiable_accounts(store),extra_likes=args.boost_likes or 55)
+                except ValueError as exc:parser.error(str(exc))
             from ctn.amplify import summary as amplify_summary
-            result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown','like_pacing','reply_pacing')}
+            result={k:launch_rule(store,k) for k in ('reply_batches_enabled','initialise_spread','frequency_bot','hidden_slowdown','like_pacing','reply_pacing','warmup')}
             result['amplify']=amplify_summary(store,since=time.time()-86400)
             if args.push:result['push']=pushed
+            if args.boost:result['boost']=boosted
             from ctn.phrasing import stats as phrasing_stats
             result['phrasing']=phrasing_stats(store)
             result['slowed_accounts']=store.policy('slowed_accounts',{})
+        elif args.command=='post':
+            if not args.execute:parser.error('post send requires --execute')
+            from .persona.registry import PersonaRegistry
+            registry=PersonaRegistry().attach(store)
+            plan=post_plan(registry,args.persona,args.text,args.purpose)
+            import asyncio
+            from .actuator import Actuator
+            from .client.legit_v1 import OfficialLegitClient
+            from .ratelimit import build_gate,build_ledger
+            if not settings.platform.api_key:parser.error('platform credentials required')
+            actuator=Actuator(OfficialLegitClient(url=settings.platform.base_url or None,team_key=settings.platform.api_key,
+                default_password=settings.platform.bot_password,auto_register=False,store=store),
+                build_gate(settings.rate),build_ledger(settings.budget,store=store),dry_run=False,store=store)
+            actuator.catalog_hash=plan['metadata']['catalog_hash']
+            outcome=asyncio.run(actuator.post(plan['account'],plan['text'],decision_id=plan['decision_id'],context=plan['metadata']))
+            result={'account':plan['account'],'persona':args.persona,'ok':outcome.ok,'status':outcome.status,
+                    'detail':outcome.detail,'post_id':(outcome.response or {}).get('post_id')}
         elif args.command=='blacklist':
             from ctn import blacklist
             blacklist.ensure_schema(store)
@@ -317,6 +361,24 @@ def main(argv=None):
             if args.action_id not in unknown: parser.error('action is not unknown')
             result={'resolved':store.finish_action(args.action_id,outcome,
                 response={**proof.get('response',{}),'operator_resolution':proof},detail='operator verified: '+proof['source'])}
+        elif args.command=='roster':
+            from .roster import log, pending_replacements, pick_persona, policy, reserve, roster_step
+            from .persona.catalog import load_catalog
+            pol=policy(store)
+            free=[p for p in load_catalog()['personas'] if not (store.persona_bindings().get(p['persona_id']))]
+            result={'enabled':pol['enabled'],'auto_replace':settings.fleet.auto_replace,
+                'pending':[(row['account_id'],row['detail']) for row in pending_replacements(store, since_s=float(pol['detect_window_seconds']))],
+                'free_personas':len(free),'reserve':[row.get('account') for row in reserve(store)],
+                'log':log(store)[-10:]}
+            if args.operation=='run' and not args.dry_run:
+                import asyncio
+                from .persona.router import get_default_registry
+                registry=get_default_registry().attach(store)
+                async def _run():
+                    from .client.legit_v1 import OfficialLegitClient
+                    client=OfficialLegitClient(settings.platform,store=store)
+                    return await roster_step(store,registry,client,password=settings.platform.bot_password,max_active=settings.fleet.bot_accounts)
+                result['run']=asyncio.run(_run())
         elif args.command=='account-activity':
             proof=json.loads(Path(args.source).read_text())
             store.record_confirmed_activity(proof['account_id'],proof['action_count'],observed_at=proof['observed_at'],source=proof['source'])
@@ -355,6 +417,7 @@ def main(argv=None):
             try:fleet=json.loads((settings.state_dir/'heartbeat').read_text())
             except (OSError,ValueError):fleet={}
             result['fleet']={'heartbeat_at':fleet.get('timestamp'),'db_lock':fleet.get('db_lock'),
+                             'persona_catalog':fleet.get('persona_catalog'),
                              'workers':{k:{f:v.get(f) for f in ('last_duration_s','max_duration_s','error')} for k,v in (fleet.get('workers') or {}).items()}}
         print(json.dumps(result,ensure_ascii=False,indent=2));return 0
     except ValueError as exc:

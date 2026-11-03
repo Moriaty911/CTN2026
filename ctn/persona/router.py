@@ -31,6 +31,19 @@ TOPIC_TAGS={'vaccine_evidence':'vaccine_evidence','public_health':'healthcare',
     'public_access':'access','economic_effects':'business','voting_process':'administration'}
 
 
+def catalog_match(store,registry):
+    """Compare the catalog the code loaded with the one the database has activated.
+
+    A rebuilt image ships a new catalog hash while `active_persona_catalog` still points at the
+    previous one, and every persona-bound write is then refused with
+    `persona_catalog_mismatch` (2026-10-26: 3 h, 2026-10-27: 6 h of silence). Nothing raises,
+    so the fleet looks healthy; this is the check that makes the stall visible.
+    """
+    loaded=getattr(registry,'catalog_hash','') or ''
+    active=store.policy('active_persona_catalog') or ''
+    return {'loaded':loaded,'active':active,'match':(not loaded) or loaded==active}
+
+
 def _extract_jev_answers(data):
     if not isinstance(data,dict): return {}
     if isinstance(data.get('answers'),dict): return data['answers']

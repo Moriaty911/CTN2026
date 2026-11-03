@@ -18,6 +18,7 @@ from .jev import JevClient,JevWorkflow,JevPostflightChecker,JevEvaluator,JevPack
 from .llm import DeepSeekClient,ReplyGenerator
 from .models import Side
 from .persona import PersonaRouter,PersonaRegistry
+from .persona.router import catalog_match
 from .pipeline.brain import JevLlmBrain
 from .pipeline.loop import BotLoop
 from .moderation.events import UnavailableModerationSource,consume_events,probe_report_targets
@@ -110,6 +111,7 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         now=time.time()
         import shutil
         disk=shutil.disk_usage(settings.state_dir)
+        catalog=catalog_match(store,registry)
         payload={**runtime,'alive':running,'timestamp':now,'mode':mode,'workers':progress,'error':error,
             'tasks':counts,
             'side':settings.side.value,'report_mode':settings.report_mode,'active_accounts':sum(not s.is_disabled() for s in store.account_states_for(store.persona_bindings().values()).values()),
@@ -121,7 +123,13 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             'business_stalled':bool((counts.get('queued',0) or runtime['reply_slots'].get('pending',0)) and process_replies and
                 now-(store.get_counter('business_progress_ms')/1000 or started_at)>300),
             'last_business_progress_at':store.get_counter('business_progress_ms')/1000 or started_at,
-            'requests':actuator.ledger.snapshot(),'db_lock':store.lock_stats()}
+            'requests':actuator.ledger.snapshot(),'db_lock':store.lock_stats(),
+            'persona_catalog':catalog}
+        if not catalog['match']:
+            # Deduplicated per hour by event_key; the fleet keeps running but every write is refused.
+            store.notify_discord(f"catalog_mismatch:{int(now//3600)}",{'type':'alert','kind':'persona_catalog_mismatch',
+                'loaded':catalog['loaded'][:12],'active':catalog['active'][:12],
+                'detail':'every persona-bound write is being refused; run ops persona apply'})
         heartbeat.parent.mkdir(parents=True,exist_ok=True)
         tmp=heartbeat.with_suffix('.tmp')
         tmp.write_text(json.dumps(payload),encoding='utf-8');tmp.chmod(0o600);tmp.replace(heartbeat)
@@ -207,6 +215,13 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
         tasks.append(asyncio.create_task(worker('performance',performance.step,30)))
         from .pipeline.refresh import refresh_tick
         tasks.append(asyncio.create_task(worker('refresh',lambda:refresh_tick(actuator,store),5)))
+        if mode!='mock':
+            # Eleven verified accounts, read directly: the feed crawl otherwise reaches them too late (58 expired tasks).
+            from .pipeline.bluev import verified_step
+            tasks.append(asyncio.create_task(worker('verified',lambda:verified_step(actuator,store),150)))
+            # Citizens who wrote to us: their next post should reach the queue in minutes, not whenever the feed sees it.
+            from .pipeline.sweep import sweep_step
+            tasks.append(asyncio.create_task(worker('citizen_sweep',lambda:sweep_step(actuator,store),300)))
         if mode!='mock': tasks.append(asyncio.create_task(worker('reconcile',lambda:reconcile_unknown_posts(actuator,store),30)))
         if mode!='mock':
             # In-universe news -> attributed, verified claims (policies/news-v1.json). Extraction needs the DeepSeek key.
@@ -218,6 +233,14 @@ async def serve(settings,*,mode=None,state_file=None,once=False):
             tasks.append(asyncio.create_task(worker('news',ingestor.step,60)))
             from .selfcheck import selfcheck_step
             tasks.append(asyncio.create_task(worker('selfcheck',lambda:selfcheck_step(actuator,store),60)))
+            if mode=='live' and settings.fleet.auto_replace:
+                # A suspended account still holds one of the 50 active-persona slots and used to need a
+                # human plus a restart. The actuator records 'account suspended' on the failed write;
+                # this worker parks the dead persona and registers a same-group replacement
+                # (policies/roster-v1.json). `refresh_accounts()` picks it up next cycle, no restart.
+                from .roster import roster_step
+                tasks.append(asyncio.create_task(worker('roster',lambda:roster_step(store,router.registry,actuator.client,
+                    password=settings.platform.bot_password,max_active=settings.fleet.bot_accounts),120)))
         stopper=asyncio.create_task(shutdown_after_signal())
         await asyncio.gather(*tasks)
     except asyncio.CancelledError:
