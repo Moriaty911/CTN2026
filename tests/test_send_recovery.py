@@ -290,6 +290,8 @@ class InitialiseRotationTests(unittest.IsolatedAsyncioTestCase):
         from tests.test_persona80 import bound_router
         store = StateStore(); self.addCleanup(store.close)
         router = bound_router(store, ('yes_001',))
+        # Exercise rejected initialisation attempts without the date-based climax waiver.
+        store.set_policy('phase_auto', False)
         store.set_policy('initialise_spread',{'window_seconds':0,'min_gap_seconds':0})
         account = router.registry.get('yes_001').account_id
         texts = []

@@ -269,6 +269,8 @@ class DiscordTests(unittest.TestCase):
 class AsyncIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_fifty_initialise_posts_complete_without_global_daily_limit(self):
         with closing(StateStore()) as store:
+            # Required initialisation belongs to shaping, even when CI runs after launch.
+            store.set_policy('phase_auto',False)
             ids=tuple(row['persona_id'] for row in fleet_plan(50))
             router=bound_router(store,ids);store.set_policy('daily_original_limit',0);store.set_policy('daily_warmup_limit',1);store.set_policy('initialise_spread',{'window_seconds':0,'min_gap_seconds':0})
             client=MockLegitClient(failure_rate=0,latency_ms=(0,0));act=actor(client,store)

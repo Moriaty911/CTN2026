@@ -230,6 +230,9 @@ if __name__ == '__main__':
 class LikePacingTests(unittest.TestCase):
     def setUp(self):
         self.store = StateStore(); self.addCleanup(self.store.close)
+        # Keep the initialisation requirement independent of the real campaign date.
+        self.store.set_policy('phase_auto', False)
+        self.store.set_policy('phase', 'shaping')
         self.store.set_policy('require_warmup', True)
         self.store.set_policy('like_pacing', {'per_hour': 4, 'per_day': 30, 'require_initialised': True})
 

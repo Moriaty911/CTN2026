@@ -1,6 +1,6 @@
 {
   "version": "daily-posts.v1",
-  "notes": "Extra everyday posts used for initialise posts, in addition to each persona's catalog daily examples. No referendum, vaccine or H2D2 content. Places and institutions come from the official setting; questions avoid asserting invented facts; yes_101-yes_120 added 2026-10-27 (persona pool 100 -> 120)",
+  "notes": "Extra everyday posts used for initialise posts, in addition to each persona's catalog daily examples. No referendum, vaccine or H2D2 content. Places and institutions come from the official setting; questions avoid asserting invented facts; yes_101-yes_120 added 2026-10-27 (persona pool 100 -> 120); yes_121-yes_130 added 2026-11-03 (persona pool 120 -> 130)",
   "posts": {
     "yes_001": [
       "Three drivers off at once this morning. The roster board looks like a crossword now.",
@@ -721,6 +721,66 @@
       "Two stalls at the market and the good one was mine by accident.",
       "The shed needs a new door and has needed one since spring.",
       "Forecast or sky? What do you all trust on a morning like this?"
+    ],
+    "yes_121": [
+      "Depot tea orders are harder to remember than the route numbers. Someone changed from milk to lemon today.",
+      "Netball bag packed before the early shift for once. The shoes are even a matching pair.",
+      "Plane-spotting with a flask of coffee beats sitting indoors on a clear afternoon.",
+      "Cake collapsed in the middle again. Does opening the oven too early really make that much difference?"
+    ],
+    "yes_122": [
+      "Dough scraper turned up in the cookbook drawer. Nobody in this bakery has an explanation.",
+      "Closing time smells like flour and warm trays. Best part of a very long day.",
+      "Dusk walk with the dog took twice as long because every tree needed a proper inspection.",
+      "Second-hand cookbook has handwritten notes beside every bun recipe. Which old baking book do you keep going back to?"
+    ],
+    "yes_123": [
+      "Front desk pen count at the start of the shift: six. At handover: one, tied to a string.",
+      "Hotel staircases are my favourite thing to photograph when the light catches the railings.",
+      "Ferry photo from my break came out mostly thumb and sky. Keeping it anyway.",
+      "Dim sum plans for a rare morning off. Would you order something familiar or try every unfamiliar dish?"
+    ],
+    "yes_124": [
+      "Training cones counted in: twenty. Counted out: nineteen and somebody's lunch container.",
+      "Running shoes finally dried after yesterday's session. Just in time for another wet oval.",
+      "Swimming goggles left a perfect outline on my face through the whole afternoon.",
+      "Relay practice tomorrow with a small squad. What games keep everyone moving while they wait for a turn?"
+    ],
+    "yes_125": [
+      "Corridor radio played the same song twice during my break. Nobody complained the second time either.",
+      "Soup for the night crew disappeared before the bread was sliced. Bigger pot next time.",
+      "Garden watering after handover is the quietest ten minutes of my day.",
+      "Card game on a short break needs rules everyone remembers. What would you bring to the table?"
+    ],
+    "yes_126": [
+      "Test terminal accepted the card, printed the receipt and then asked for the card again. An ambitious machine.",
+      "Charger bag has finally been sorted by connector. Give it two days.",
+      "Board game night ended with a discussion about whether the rulebook needed an index. Very on brand for us.",
+      "Cafe receipt printer keeps eating the last line. Has anyone found a paper roll that behaves in humid weather?"
+    ],
+    "yes_127": [
+      "Old screwdriver handle cleaned up nicely. Still fits my hand better than the new one.",
+      "Shed shelf is level now. Everything that was on it is still on the floor.",
+      "Fishing line tangled before the first cast. Packed up with dry boots and no dinner.",
+      "Toolbox latch needs replacing after years of being held shut with tape. Repair the old box or start again?"
+    ],
+    "yes_128": [
+      "Playgroup cupboard now has separate tubs for crayons and chalk. We will see how long that lasts.",
+      "Senior gardening class brought cuttings for the windowsill. The meeting room is turning green.",
+      "Hospitality homework involved folding napkins. My kitchen table looks ready for a very small wedding.",
+      "Local history afternoon needs a way to label borrowed photos without marking them. Any suggestions from scrapbook people?"
+    ],
+    "yes_129": [
+      "Clinic dog slept through the vacuum cleaner and woke instantly at the sound of a biscuit tin.",
+      "Coffee went cold while we rearranged the waiting-room chairs. The new layout does have more legroom.",
+      "Rugby bag unpacked at last. Found the missing towel and a lot of grass.",
+      "Exercise bands are taking over the desk drawer. How does everyone keep the different strengths sorted?"
+    ],
+    "yes_130": [
+      "Crossword clue defeated the whole lunch table. The answer was a word we had all used that morning.",
+      "Desk folders have new labels. The stack has not become any shorter.",
+      "Podcast paused at the interesting bit because the kettle was louder than the narrator.",
+      "Notebook pages keep coming loose in my bag. Any recommendations for a sturdy little notebook that opens flat?"
     ]
   }
 }
